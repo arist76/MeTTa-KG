@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use crate::model::Token;
 use crate::mork_api::{
     ExploreRequest, ImportRequest, MorkApiClient, ReadRequest, Request, TransformDetails, UploadRequest,
-    TransformRequest, StatusRequest,
+    TransformRequest, StatusRequest, ClearRequest,
 };
 
 #[derive(Default, Serialize, Deserialize, Clone)]
@@ -59,7 +59,7 @@ pub async fn transform(
                 .patterns(transformation.patterns.clone())
                 .templates(transformation.templates.clone()),
         );
-        
+
     match mork_api_client.dispatch(request).await {
         Ok(_) => Ok(Json(true)),
         Err(e) => Err(e),
@@ -158,6 +158,31 @@ pub async fn explore(
     let response = mork_api_client.dispatch(request).await.map(Json);
     println!("explore response: {:?}", response);
     response
+}
+
+#[get("/spaces/clear/<path..>")]
+pub async fn clear(token: Token, path: PathBuf) -> Result<Json<bool>, Status> {
+    let token_namespace = token.namespace.strip_prefix("/").unwrap();
+    if !path.starts_with(token_namespace) || !token.permission_write {
+        return Err(Status::Unauthorized);
+    }
+
+    let namespace = crate::mork_api::Namespace::from(path.clone());
+
+    // Check
+    if namespace.encoded().is_empty() {
+        return Err(Status::BadRequest);
+    }
+
+    let mork_api_client = MorkApiClient::new();
+    let request = ClearRequest::new()
+        .namespace(path)
+        .expr("$x".to_string());
+
+    match mork_api_client.dispatch(request).await {
+        Ok(_) => Ok(Json(true)),
+        Err(e) => Err(e),
+    }
 }
 
 #[get("/spaces/status/<path..>", rank = 1)]
