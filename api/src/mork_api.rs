@@ -476,6 +476,51 @@ impl Request for StatusRequest {
     }
 }
 
+#[derive(Default)]  
+pub struct ClearRequest {  
+    namespace: Namespace,  
+    expr: String,  
+}  
+  
+impl ClearRequest {  
+    pub fn new() -> Self {  
+        Self::default()  
+    }  
+  
+    pub fn namespace(mut self, ns: PathBuf) -> Self {  
+        self.namespace = Namespace::from(if ns.to_string_lossy().is_empty() {  
+            PathBuf::from("/")  
+        } else {  
+            ns.to_path_buf()  
+        });  
+        self  
+    }  
+  
+    pub fn expr(mut self, expr: String) -> Self {  
+        self.expr = expr;  
+        self  
+    }  
+}  
+  
+impl Request for ClearRequest {  
+    type Body = ();  
+  
+    fn method(&self) -> Method {  
+        Method::GET  
+    }  
+  
+    fn path(&self) -> String {  
+        format!(  
+            "/clear/{}",   
+            urlencoding::encode(&self.namespace.with_namespace(&self.expr))  
+        )  
+    }  
+  
+    fn body(&self) -> Option<Self::Body> {  
+        None  
+    }  
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
