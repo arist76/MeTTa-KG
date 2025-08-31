@@ -47,11 +47,22 @@ impl Namespace {
     }
 
     pub fn encoded(&self) -> String {
-        self.ns.to_string_lossy().replace("/", "|")
+        let path_str = self.ns.to_string_lossy();
+        let trimmed = path_str.trim_matches('/');
+        if trimmed.is_empty() {
+            String::new()
+        } else {
+            trimmed.replace('/', "|")
+        }
     }
 
     pub fn with_namespace(&self, value: &str) -> String {
-        format!("({} {})", self.encoded(), value)
+        let encoded_ns = self.encoded();
+        if encoded_ns.is_empty() {
+            value.to_string()
+        } else {
+            format!("({} {})", encoded_ns, value)
+        }
     }
 
     pub fn is_valid(&self) -> bool {
@@ -108,7 +119,7 @@ impl MorkApiClient {
         let url = format!("{}{}", self.base_url, request.path());
         let mut http_request = self.client.request(request.method(), &url);
 
-        if request.path().starts_with("/upload/") {
+        if request.path().starts_with("/upload/") || request.path() == "/transform" {
             if let Some(body) = request.body() {
                 if let Some(body_str) = (&body as &dyn Any).downcast_ref::<String>() {
                     http_request = http_request
@@ -207,20 +218,21 @@ impl TransformRequest {
 }
 
 impl Request for TransformRequest {
-    type Body = ();
+    type Body = String;
 
     fn method(&self) -> Method {
         Method::POST
     }
 
     fn path(&self) -> String {
-        format!("/transform/{}", &self.transform_code())
+        "/transform".to_string()
     }
 
     fn body(&self) -> Option<Self::Body> {
-        Some(())
+        Some(self.transform_code())
     }
 }
+
 
 #[derive(Default)]
 pub struct ImportRequest {
@@ -429,6 +441,38 @@ impl Request for UploadRequest {
 
     fn body(&self) -> Option<Self::Body> {
         Some(self.data.clone())
+    }
+}
+
+#[derive(Default)]
+pub struct StatusRequest {
+    expr: String,
+}
+
+impl StatusRequest {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn expr(mut self, expr: String) -> Self {
+        self.expr = expr;
+        self
+    }
+}
+
+impl Request for StatusRequest {
+    type Body = ();
+
+    fn method(&self) -> Method {
+        Method::GET
+    }
+
+    fn path(&self) -> String {
+        format!("/status/{}", urlencoding::encode(&self.expr))
+    }
+
+    fn body(&self) -> Option<Self::Body> {
+        None
     }
 }
 
