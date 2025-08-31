@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use crate::model::Token;
 use crate::mork_api::{
     ExploreRequest, ImportRequest, MorkApiClient, ReadRequest, Request, TransformDetails, UploadRequest,
-    TransformRequest,
+    TransformRequest, StatusRequest,
 };
 
 #[derive(Default, Serialize, Deserialize, Clone)]
@@ -59,7 +59,7 @@ pub async fn transform(
                 .patterns(transformation.patterns.clone())
                 .templates(transformation.templates.clone()),
         );
-
+        
     match mork_api_client.dispatch(request).await {
         Ok(_) => Ok(Json(true)),
         Err(e) => Err(e),
@@ -124,7 +124,7 @@ pub async fn import(token: Token, path: PathBuf, uri: String) -> Result<Json<boo
     }
 }
 
-#[get("/spaces/<path..>")]
+#[get("/spaces/<path..>", rank = 2)]
 pub async fn read(token: Token, path: PathBuf) -> Result<Json<String>, Status> {
     if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_read {
         return Err(Status::Unauthorized);
@@ -158,4 +158,38 @@ pub async fn explore(
     let response = mork_api_client.dispatch(request).await.map(Json);
     println!("explore response: {:?}", response);
     response
+}
+
+#[get("/spaces/status/<path..>", rank = 1)]
+pub async fn status(token: Token, path: PathBuf) -> Result<Json<bool>, Status> {
+    if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_read {
+        return Err(Status::Unauthorized);
+    }
+
+    let namespace_str = path.to_str().unwrap_or("").trim_matches('/');
+    let expr_to_check = if namespace_str.is_empty() {
+        "$x".to_string()
+    } else {
+        format!("({} $x)", namespace_str)
+    };
+
+    let mork_api_client = MorkApiClient::new();
+    let request = StatusRequest::new().expr(expr_to_check);
+
+    match mork_api_client.dispatch(request).await {
+        Ok(response_text) => {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response_text) {
+                let is_clear = json.get("status")
+                    .and_then(|s| s.as_str())
+                    .map(|s| s == "pathClear")
+                    .unwrap_or(false);
+                Ok(Json(is_clear))
+            } else {
+                Ok(Json(false))
+            }
+        },
+        Err(status) => {
+            Err(status)
+        }
+    }
 }
