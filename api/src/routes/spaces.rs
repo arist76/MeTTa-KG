@@ -167,13 +167,6 @@ pub async fn clear(token: Token, path: PathBuf) -> Result<Json<bool>, Status> {
         return Err(Status::Unauthorized);
     }
 
-    let namespace = crate::mork_api::Namespace::from(path.clone());
-
-    // Check
-    if namespace.encoded().is_empty() {
-        return Err(Status::BadRequest);
-    }
-
     let mork_api_client = MorkApiClient::new();
     let request = ClearRequest::new()
         .namespace(path)
