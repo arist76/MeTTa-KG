@@ -26,16 +26,16 @@ const ClearPage: Component = () => {
 
         const pathToClear = formatedNamespace();
 
-        // Check
-        if (pathToClear === "/") {
-             showToast({
-                title: "Operation Not Allowed",
-                description: "For safety, clearing the root namespace is disabled. Please select a sub-space.",
-                variant: "destructive",
-            });
-            setIsLoading(false);
-            return;
-        }
+        // // Check
+        // if (pathToClear === "/") {
+        //      showToast({
+        //         title: "Operation Not Allowed",
+        //         description: "For safety, clearing the root namespace is disabled. Please select a sub-space.",
+        //         variant: "destructive",
+        //     });
+        //     setIsLoading(false);
+        //     return;
+        // }
 
         try {
             const success = await clearSpace(pathToClear);
