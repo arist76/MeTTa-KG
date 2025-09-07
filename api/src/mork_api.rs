@@ -50,7 +50,7 @@ impl Namespace {
         let path_str = self.ns.to_string_lossy();
         let trimmed = path_str.trim_matches('/');
         if trimmed.is_empty() {
-            String::new()
+            "|".to_string()
         } else {
             trimmed.replace('/', "|")
         }
@@ -510,12 +510,97 @@ impl Request for ClearRequest {
     }  
   
     fn path(&self) -> String {      
-        let expr_to_use = self.namespace.with_namespace(&self.expr);   
-    
         format!(      
             "/clear/{}",       
-            urlencoding::encode(&expr_to_use)      
+            urlencoding::encode(&self.namespace.with_namespace(&self.expr))  
         )      
+    }  
+  
+    fn body(&self) -> Option<Self::Body> {  
+        None  
+    }  
+}
+
+#[derive(Default)]  
+pub struct ExportRequest {  
+    namespace: Namespace,  
+    pattern: String,  
+    template: String,  
+    format: Option<ExportFormat>,  
+    max_write: Option<usize>,  
+}  
+  
+impl ExportRequest {  
+    pub fn new() -> Self {  
+        Self::default()  
+    }  
+  
+    pub fn namespace(mut self, ns: PathBuf) -> Self {  
+        self.namespace = Namespace::from(if ns.to_string_lossy().is_empty() {  
+            PathBuf::from("/")  
+        } else {  
+            ns.to_path_buf()  
+        });  
+        self  
+    }  
+  
+    pub fn pattern(mut self, pattern: String) -> Self {  
+        self.pattern = pattern;  
+        self  
+    }  
+  
+    pub fn template(mut self, template: String) -> Self {  
+        self.template = template;  
+        self  
+    }  
+  
+    pub fn format(mut self, format: ExportFormat) -> Self {  
+        self.format = Some(format);  
+        self  
+    }  
+  
+    pub fn max_write(mut self, max_write: usize) -> Self {  
+        self.max_write = Some(max_write);  
+        self  
+    }  
+}  
+  
+impl Request for ExportRequest {  
+    type Body = ();  
+  
+    fn method(&self) -> Method {  
+        Method::GET  
+    }  
+  
+    fn path(&self) -> String {  
+        let mut path = format!(  
+            "/export/{}/{}",  
+            urlencoding::encode(&self.namespace.with_namespace(&self.pattern)),  
+            urlencoding::encode(&self.template)  
+        );  
+  
+        let mut query_params = Vec::new();  
+          
+        if let Some(format) = &self.format {  
+            let format_str = match format {  
+                ExportFormat::Metta => "metta",  
+                ExportFormat::Json => "json",   
+                ExportFormat::Csv => "csv",  
+                ExportFormat::Raw => "raw",  
+            };  
+            query_params.push(format!("format={}", format_str));  
+        }  
+  
+        if let Some(max_write) = self.max_write {  
+            query_params.push(format!("max_write={}", max_write));  
+        }  
+  
+        if !query_params.is_empty() {  
+            path.push_str("/?");  
+            path.push_str(&query_params.join("&"));  
+        }  
+  
+        path  
     }  
   
     fn body(&self) -> Option<Self::Body> {  
