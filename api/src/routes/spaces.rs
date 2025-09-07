@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use crate::model::Token;
 use crate::mork_api::{
     ExploreRequest, ImportRequest, MorkApiClient, ReadRequest, Request, TransformDetails, UploadRequest,
-    TransformRequest, StatusRequest, ClearRequest, ExportRequest, ExportFormat,
+    TransformRequest, StatusRequest, ClearRequest, ExportRequest, ExportFormat
 };
 
 #[derive(Default, Serialize, Deserialize, Clone)]
@@ -35,13 +35,11 @@ pub struct ExploreOutput {
     pub expr: String,
     pub token: String
 }
-
-#[derive(Serialize, Deserialize)]  
-pub struct ExportInput {  
-    pub pattern: String,  
-    pub template: String,  
-}  
-
+#[derive(Serialize, Deserialize)]
+pub struct ExportInput {
+    pub pattern: String,
+    pub template: String,
+}
 #[post("/spaces/<path..>", data = "<transformation>", rank = 2)]
 pub async fn transform(
     token: Token,
@@ -93,12 +91,12 @@ pub async fn upload(
     let namespace = crate::mork_api::Namespace::from(path.clone());
     let template = namespace.with_namespace("$x");
 
-    let mork_api_client = MorkApiClient::new();  
-    let request = UploadRequest::new()  
-        .namespace(path)  
-        .pattern(pattern.to_string())  
-        .template(template)  
-        .data(body); 
+    let mork_api_client = MorkApiClient::new();
+    let request = UploadRequest::new()
+        .namespace(path)
+        .pattern(pattern.to_string())
+        .template(template)
+        .data(body);
 
     match mork_api_client.dispatch(request).await {
         Ok(text) => Ok(Json(text)),
@@ -169,6 +167,13 @@ pub async fn clear(token: Token, path: PathBuf) -> Result<Json<bool>, Status> {
         return Err(Status::Unauthorized);
     }
 
+    let namespace = crate::mork_api::Namespace::from(path.clone());
+
+    // Check
+    if namespace.encoded().is_empty() {
+        return Err(Status::BadRequest);
+    }
+
     let mork_api_client = MorkApiClient::new();
     let request = ClearRequest::new()
         .namespace(path)
@@ -212,4 +217,32 @@ pub async fn status(token: Token, path: PathBuf) -> Result<Json<bool>, Status> {
             Err(status)
         }
     }
+}
+  
+#[post("/spaces/export/<path..>", data = "<export_input>")]    
+pub async fn export(    
+    token: Token,    
+    path: PathBuf,    
+    export_input: Json<ExportInput>,    
+) -> Result<Json<String>, Status> {    
+    if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_read {    
+        return Err(Status::Unauthorized);    
+    }    
+    
+    let mork_api_client = MorkApiClient::new();    
+    let request = ExportRequest::new()    
+        .namespace(path)    
+        .pattern(export_input.pattern.clone())    
+        .template(export_input.template.clone())    
+        .format(ExportFormat::Metta);
+    
+    println!("Dispatching export request to Mork: {}", request.path());    
+    
+    match mork_api_client.dispatch(request).await {    
+        Ok(data) => {    
+            println!("Received export response from Mork: {:?}", data);    
+            Ok(Json(data))    
+        },    
+        Err(e) => Err(e),    
+    }    
 }
