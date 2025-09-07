@@ -8,7 +8,7 @@ import UploadPage from "./Upload";
 import TransformPage from "./Transform";
 import TokensPage from "./Tokens";
 import ClearPage from "./Clear";
-// import ExportPage from "./Export";
+import ExportPage from "./Export";
 import NameSpace from "~/components/common/nameSpace";
 import { createSignal } from "solid-js";
 import Sidebar from "~/components/common/sidebar";
@@ -33,7 +33,16 @@ const sidebarSections = [
             description: "",
             to: "/",
             component: LoadPage
-        }],
+        },
+        { 
+            id: "clear",
+            label: "Clear", 
+            icon: Trash2, 
+            to: "/clear", 
+            component: ClearPage 
+        },
+    
+    ],
     },
     {
         title: "Set and Algebraic Operations",
@@ -95,8 +104,7 @@ const sidebarSections = [
         title: "Utility",
         items: [
             { id: "upload", label: "Import", icon: Upload, to: "/upload", component: UploadPage },
-            { id: "export", label: "Export", icon: Download, to: "/export" },
-            { id: "clear", label: "Clear", icon: Trash2, to: "/clear", component: ClearPage },
+            { id: "export", label: "Export", icon: Download, to: "/export", component: ExportPage },
             { 
                 id: "tokens",
                 label: "Tokens",
