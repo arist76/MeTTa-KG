@@ -1,31 +1,33 @@
-import { TextFieldTextArea, TextFieldLabel } from "~/components/ui/text-field"
+import { TextField, TextFieldLabel, TextFieldTextArea } from "~/components/ui/text-field"
 
-interface CodeEditorProps {
-	label: string
-	value: string
-	onChange: (value: string) => void
-	placeholder?: string
-	syntax?: string
-	rows?: number
+interface CodeInputFieldProps {
+    label: string
+    value: string
+    onChange: (value: string) => void
+    placeholder?: string
+    rows?: number
+    syntax?: string
 }
- 
-export function CodeInputField({ label, value, onChange, placeholder, syntax = "metta", rows = 4 }: CodeEditorProps) {
-  return (
-	  <div class="space-y-2">
-      <TextFieldLabel for={label.toLowerCase().replace(/\s+/g, "-")}>{label}</TextFieldLabel>
-      <TextFieldTextArea
-        id={label.toLowerCase().replace(/\s+/g, "-")}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        rows={rows}
-        class="font-mono text-sm"
-        aria-describedby={`${label.toLowerCase().replace(/\s+/g, "-")}-description`}
-      />
-      <p id={`${label.toLowerCase().replace(/\s+/g, "-")}-description`} class="text-xs text-muted-foreground">
-        {syntax === "metta" ? "MeTTa S-Expression syntax" : `${syntax} format`}
-      </p>
-    </div>
-  )
+
+export const CodeInputField = (props: CodeInputFieldProps) => {
+    return (
+        <div class="space-y-2">
+            <TextField>
+                <TextFieldLabel for={props.label.toLowerCase().replace(/\s+/g, "-")}>{props.label}</TextFieldLabel>
+                <TextFieldTextArea
+                    id={props.label.toLowerCase().replace(/\s+/g, "-")}
+                    value={props.value}
+                    onChange={(e) => props.onChange(e.target.value)}
+                    placeholder={props.placeholder}
+                    rows={props.rows || 4}
+                    class="font-mono text-sm"
+                    aria-describedby={`${props.label.toLowerCase().replace(/\s+/g, "-")}-description`}
+                />
+                <p id={`${props.label.toLowerCase().replace(/\s+/g, "-")}-description`} class="text-xs text-muted-foreground">
+                    {props.syntax === "metta" ? "MeTTa S-Expression syntax" : `${props.syntax} format`}
+                </p>
+            </TextField>
+        </div>
+    )
 }
- 
+
