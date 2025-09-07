@@ -509,11 +509,13 @@ impl Request for ClearRequest {
         Method::GET  
     }  
   
-    fn path(&self) -> String {  
-        format!(  
-            "/clear/{}",   
-            urlencoding::encode(&self.namespace.with_namespace(&self.expr))  
-        )  
+    fn path(&self) -> String {      
+        let expr_to_use = self.namespace.with_namespace(&self.expr);   
+    
+        format!(      
+            "/clear/{}",       
+            urlencoding::encode(&expr_to_use)      
+        )      
     }  
   
     fn body(&self) -> Option<Self::Body> {  
