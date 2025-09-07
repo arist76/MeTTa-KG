@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use crate::model::Token;
 use crate::mork_api::{
     ExploreRequest, ImportRequest, MorkApiClient, ReadRequest, Request, TransformDetails, UploadRequest,
-    TransformRequest, StatusRequest, ClearRequest,
+    TransformRequest, StatusRequest, ClearRequest, ExportRequest, ExportFormat,
 };
 
 #[derive(Default, Serialize, Deserialize, Clone)]
@@ -35,6 +35,12 @@ pub struct ExploreOutput {
     pub expr: String,
     pub token: String
 }
+
+#[derive(Serialize, Deserialize)]  
+pub struct ExportInput {  
+    pub pattern: String,  
+    pub template: String,  
+}  
 
 #[post("/spaces/<path..>", data = "<transformation>", rank = 2)]
 pub async fn transform(
@@ -84,19 +90,15 @@ pub async fn upload(
     }
 
     let pattern = "$x";
-    let namespace_str = path.to_str().unwrap_or("").trim_matches('/');
-    let template = if namespace_str.is_empty() {
-        "$x".to_string()
-    } else {
-        format!("({} $x)", namespace_str)
-    };
+    let namespace = crate::mork_api::Namespace::from(path.clone());
+    let template = namespace.with_namespace("$x");
 
-    let mork_api_client = MorkApiClient::new();
-    let request = UploadRequest::new()
-        .namespace(path)
-        .pattern(pattern.to_string())
-        .template(template)
-        .data(body);
+    let mork_api_client = MorkApiClient::new();  
+    let request = UploadRequest::new()  
+        .namespace(path)  
+        .pattern(pattern.to_string())  
+        .template(template)  
+        .data(body); 
 
     match mork_api_client.dispatch(request).await {
         Ok(text) => Ok(Json(text)),
@@ -165,13 +167,6 @@ pub async fn clear(token: Token, path: PathBuf) -> Result<Json<bool>, Status> {
     let token_namespace = token.namespace.strip_prefix("/").unwrap();
     if !path.starts_with(token_namespace) || !token.permission_write {
         return Err(Status::Unauthorized);
-    }
-
-    let namespace = crate::mork_api::Namespace::from(path.clone());
-
-    // Check
-    if namespace.encoded().is_empty() {
-        return Err(Status::BadRequest);
     }
 
     let mork_api_client = MorkApiClient::new();
