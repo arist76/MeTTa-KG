@@ -7,18 +7,19 @@ import LoadPage from "./Load";
 import UploadPage from "./Upload";
 import TransformPage from "./Transform";
 import TokensPage from "./Tokens";
+import ClearPage from "./Clear";
+// import ExportPage from "./Export";
 import NameSpace from "~/components/common/nameSpace";
 import { createSignal } from "solid-js";
 import Sidebar from "~/components/common/sidebar";
 import Header from "~/components/common/header";
-import {
-	Upload,
-	Database,
-	X,
-	RotateCcw,
-	Download,
-	Key,
-} from "lucide-solid"
+import Upload from "lucide-solid/icons/upload";
+import Database from "lucide-solid/icons/database";
+import X from "lucide-solid/icons/x";
+import RotateCcw from "lucide-solid/icons/rotate-ccw";
+import Download from "lucide-solid/icons/download";
+import Key from "lucide-solid/icons/key";
+import Trash2 from "lucide-solid/icons/trash-2";
 import NotImplemented from "~/components/common/NotImplemented";
 
 
@@ -95,6 +96,7 @@ const sidebarSections = [
         items: [
             { id: "upload", label: "Import", icon: Upload, to: "/upload", component: UploadPage },
             { id: "export", label: "Export", icon: Download, to: "/export" },
+            { id: "clear", label: "Clear", icon: Trash2, to: "/clear", component: ClearPage },
             { 
                 id: "tokens",
                 label: "Tokens",
