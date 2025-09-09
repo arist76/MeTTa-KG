@@ -65,15 +65,13 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 }
 
 
-export const transform = (transformation: Transformation) => {    
-    return request<boolean>('/spaces', {
+export const transform = (transformation: Transformation) => {
+    const url = `/spaces${transformation.space}`;
+    
+    return request<boolean>(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(transformation),
-    }).then(result => {
-        return result;
-    }).catch(error => {
-        throw error;
     });
 };
 
@@ -227,33 +225,14 @@ export const createFromN3 = (file: File) => {
 
 export async function isPathClear(path: string): Promise<boolean> {
     try {
-        
-        // Clean the path properly
-        const cleanPath = path.replace(/^\/+|\/+$/g, ''); // Remove leading/trailing slashes
-        
-        const requestBody = {
-            pattern: "$x",
-            token: ""
-        };
-        
-        const response = await fetch(`${API_URL}/explore/spaces/${cleanPath}`, {
-            method: "POST",
-            headers: { 
-                "Content-Type": "application/json",
-                'Authorization': `200003ee-c651-4069-8b7f-2ad9fb46c3ab`,
-            },
-            body: JSON.stringify(requestBody)
-        });
-        
-        const result = response.status !== 503;
-        
-        return result;
-
+        const isClear = await request<boolean>(`/spaces/status${path}`);
+        return isClear;
     } catch (error) {
-        // Assume clear to avoid getting stuck
+        console.error("Failed to check path status:", error);
         return true;
     }
 }
+
 
 export interface ImportDataResponse {
     status: "success" | "error";
