@@ -49,6 +49,10 @@ export interface ExploreDetail {
 	token: Uint8Array;
 }
 
+export interface ExportInput {
+    pattern: string;
+    template: string;
+}
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 	const headers = {
 		...options.headers,
@@ -355,5 +359,13 @@ export const uploadTextToSpace = (path: string, data: string): Promise<string> =
 export const clearSpace = (path: string) => {
     return request<boolean>(`/spaces/clear${path}`, {
         method: 'GET',
+    });
+};
+
+export const exportSpace = async (path: string, exportInput: ExportInput): Promise<string> => {
+    return request<string>(`/spaces/export${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(exportInput),
     });
 };

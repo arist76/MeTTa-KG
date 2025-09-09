@@ -4,7 +4,7 @@ import UploadPage from "./Upload";
 import TransformPage from "./Transform";
 import TokensPage from "./Tokens";
 import ClearPage from "./Clear";
-// import ExportPage from "./Export";
+import ExportPage from "./Export";
 import NameSpace from "~/components/common/nameSpace";
 import { createSignal } from "solid-js";
 import Sidebar from "~/components/common/sidebar";
