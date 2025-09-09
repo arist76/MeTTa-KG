@@ -351,3 +351,9 @@ export const uploadTextToSpace = (path: string, data: string): Promise<string> =
         body: data,
     });
 };
+
+export const clearSpace = (path: string) => {
+    return request<boolean>(`/spaces/clear${path}`, {
+        method: 'GET',
+    });
+};

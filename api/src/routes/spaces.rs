@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use crate::model::Token;
 use crate::mork_api::{
     ExploreRequest, ImportRequest, MorkApiClient, ReadRequest, Request, TransformDetails, UploadRequest,
-    TransformRequest, StatusRequest,
+    TransformRequest, StatusRequest, ClearRequest, ExportRequest, ExportFormat,
 };
 
 #[derive(Default, Serialize, Deserialize, Clone)]
@@ -35,6 +35,12 @@ pub struct ExploreOutput {
     pub expr: String,
     pub token: String
 }
+
+#[derive(Serialize, Deserialize)]  
+pub struct ExportInput {  
+    pub pattern: String,  
+    pub template: String,  
+}  
 
 #[post("/spaces/<path..>", data = "<transformation>", rank = 2)]
 pub async fn transform(
@@ -59,7 +65,7 @@ pub async fn transform(
                 .patterns(transformation.patterns.clone())
                 .templates(transformation.templates.clone()),
         );
-        
+
     match mork_api_client.dispatch(request).await {
         Ok(_) => Ok(Json(true)),
         Err(e) => Err(e),
@@ -84,19 +90,15 @@ pub async fn upload(
     }
 
     let pattern = "$x";
-    let namespace_str = path.to_str().unwrap_or("").trim_matches('/');
-    let template = if namespace_str.is_empty() {
-        "$x".to_string()
-    } else {
-        format!("({} $x)", namespace_str)
-    };
+    let namespace = crate::mork_api::Namespace::from(path.clone());
+    let template = namespace.with_namespace("$x");
 
-    let mork_api_client = MorkApiClient::new();
-    let request = UploadRequest::new()
-        .namespace(path)
-        .pattern(pattern.to_string())
-        .template(template)
-        .data(body);
+    let mork_api_client = MorkApiClient::new();  
+    let request = UploadRequest::new()  
+        .namespace(path)  
+        .pattern(pattern.to_string())  
+        .template(template)  
+        .data(body); 
 
     match mork_api_client.dispatch(request).await {
         Ok(text) => Ok(Json(text)),
@@ -158,6 +160,24 @@ pub async fn explore(
     let response = mork_api_client.dispatch(request).await.map(Json);
     println!("explore response: {:?}", response);
     response
+}
+
+#[get("/spaces/clear/<path..>")]
+pub async fn clear(token: Token, path: PathBuf) -> Result<Json<bool>, Status> {
+    let token_namespace = token.namespace.strip_prefix("/").unwrap();
+    if !path.starts_with(token_namespace) || !token.permission_write {
+        return Err(Status::Unauthorized);
+    }
+
+    let mork_api_client = MorkApiClient::new();
+    let request = ClearRequest::new()
+        .namespace(path)
+        .expr("$x".to_string());
+
+    match mork_api_client.dispatch(request).await {
+        Ok(_) => Ok(Json(true)),
+        Err(e) => Err(e),
+    }
 }
 
 #[get("/spaces/status/<path..>", rank = 1)]

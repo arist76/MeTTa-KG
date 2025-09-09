@@ -3,15 +3,19 @@ import LoadPage from "./Load";
 import UploadPage from "./Upload";
 import TransformPage from "./Transform";
 import TokensPage from "./Tokens";
+import ClearPage from "./Clear";
+// import ExportPage from "./Export";
+import NameSpace from "~/components/common/nameSpace";
 import { createSignal } from "solid-js";
 import Sidebar from "~/components/common/sidebar";
 import Header from "~/components/common/header";
-import Upload from "lucide-solid/icons/upload"
-import Database from "lucide-solid/icons/database"
-import X from "lucide-solid/icons/x"
-import RotateCcw from "lucide-solid/icons/rotate-ccw"
-import Download from "lucide-solid/icons/download"
-import Key from "lucide-solid/icons/key"
+import Upload from "lucide-solid/icons/upload";
+import Database from "lucide-solid/icons/database";
+import X from "lucide-solid/icons/x";
+import RotateCcw from "lucide-solid/icons/rotate-ccw";
+import Download from "lucide-solid/icons/download";
+import Key from "lucide-solid/icons/key";
+import Trash2 from "lucide-solid/icons/trash-2";
 import NotImplemented from "~/components/common/NotImplemented";
 
 
