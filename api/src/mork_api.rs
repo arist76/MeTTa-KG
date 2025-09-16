@@ -47,11 +47,22 @@ impl Namespace {
     }
 
     pub fn encoded(&self) -> String {
-        self.ns.to_string_lossy().replace("/", "|")
+        let path_str = self.ns.to_string_lossy();
+        let trimmed = path_str.trim_matches('/');
+        if trimmed.is_empty() {
+            "|".to_string()
+        } else {
+            trimmed.replace('/', "|")
+        }
     }
 
     pub fn with_namespace(&self, value: &str) -> String {
-        format!("({} {})", self.encoded(), value)
+        let encoded_ns = self.encoded();
+        if encoded_ns.is_empty() {
+            value.to_string()
+        } else {
+            format!("({} {})", encoded_ns, value)
+        }
     }
 
     pub fn is_valid(&self) -> bool {
@@ -108,7 +119,7 @@ impl MorkApiClient {
         let url = format!("{}{}", self.base_url, request.path());
         let mut http_request = self.client.request(request.method(), &url);
 
-        if request.path().starts_with("/upload/") {
+        if request.path().starts_with("/upload/") || request.path() == "/transform" {
             if let Some(body) = request.body() {
                 if let Some(body_str) = (&body as &dyn Any).downcast_ref::<String>() {
                     http_request = http_request
@@ -207,20 +218,21 @@ impl TransformRequest {
 }
 
 impl Request for TransformRequest {
-    type Body = ();
+    type Body = String;
 
     fn method(&self) -> Method {
         Method::POST
     }
 
     fn path(&self) -> String {
-        format!("/transform/{}", &self.transform_code())
+        "/transform".to_string()
     }
 
     fn body(&self) -> Option<Self::Body> {
-        Some(())
+        Some(self.transform_code())
     }
 }
+
 
 #[derive(Default)]
 pub struct ImportRequest {
@@ -430,6 +442,170 @@ impl Request for UploadRequest {
     fn body(&self) -> Option<Self::Body> {
         Some(self.data.clone())
     }
+}
+
+#[derive(Default)]
+pub struct StatusRequest {
+    expr: String,
+}
+
+impl StatusRequest {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn expr(mut self, expr: String) -> Self {
+        self.expr = expr;
+        self
+    }
+}
+
+impl Request for StatusRequest {
+    type Body = ();
+
+    fn method(&self) -> Method {
+        Method::GET
+    }
+
+    fn path(&self) -> String {
+        format!("/status/{}", urlencoding::encode(&self.expr))
+    }
+
+    fn body(&self) -> Option<Self::Body> {
+        None
+    }
+}
+
+#[derive(Default)]  
+pub struct ClearRequest {  
+    namespace: Namespace,  
+    expr: String,  
+}  
+  
+impl ClearRequest {  
+    pub fn new() -> Self {  
+        Self::default()  
+    }  
+  
+    pub fn namespace(mut self, ns: PathBuf) -> Self {  
+        self.namespace = Namespace::from(if ns.to_string_lossy().is_empty() {  
+            PathBuf::from("/")  
+        } else {  
+            ns.to_path_buf()  
+        });  
+        self  
+    }  
+  
+    pub fn expr(mut self, expr: String) -> Self {  
+        self.expr = expr;  
+        self  
+    }  
+}  
+  
+impl Request for ClearRequest {  
+    type Body = ();  
+  
+    fn method(&self) -> Method {  
+        Method::GET  
+    }  
+  
+    fn path(&self) -> String {      
+        format!(      
+            "/clear/{}",       
+            urlencoding::encode(&self.namespace.with_namespace(&self.expr))  
+        )      
+    }  
+  
+    fn body(&self) -> Option<Self::Body> {  
+        None  
+    }  
+}
+
+#[derive(Default)]  
+pub struct ExportRequest {  
+    namespace: Namespace,  
+    pattern: String,  
+    template: String,  
+    format: Option<ExportFormat>,  
+    max_write: Option<usize>,  
+}  
+  
+impl ExportRequest {  
+    pub fn new() -> Self {  
+        Self::default()  
+    }  
+  
+    pub fn namespace(mut self, ns: PathBuf) -> Self {  
+        self.namespace = Namespace::from(if ns.to_string_lossy().is_empty() {  
+            PathBuf::from("/")  
+        } else {  
+            ns.to_path_buf()  
+        });  
+        self  
+    }  
+  
+    pub fn pattern(mut self, pattern: String) -> Self {  
+        self.pattern = pattern;  
+        self  
+    }  
+  
+    pub fn template(mut self, template: String) -> Self {  
+        self.template = template;  
+        self  
+    }  
+  
+    pub fn format(mut self, format: ExportFormat) -> Self {  
+        self.format = Some(format);  
+        self  
+    }  
+  
+    pub fn max_write(mut self, max_write: usize) -> Self {  
+        self.max_write = Some(max_write);  
+        self  
+    }  
+}  
+  
+impl Request for ExportRequest {  
+    type Body = ();  
+  
+    fn method(&self) -> Method {  
+        Method::GET  
+    }  
+  
+    fn path(&self) -> String {  
+        let mut path = format!(  
+            "/export/{}/{}",  
+            urlencoding::encode(&self.namespace.with_namespace(&self.pattern)),  
+            urlencoding::encode(&self.template)  
+        );  
+  
+        let mut query_params = Vec::new();  
+          
+        if let Some(format) = &self.format {  
+            let format_str = match format {  
+                ExportFormat::Metta => "metta",  
+                ExportFormat::Json => "json",   
+                ExportFormat::Csv => "csv",  
+                ExportFormat::Raw => "raw",  
+            };  
+            query_params.push(format!("format={}", format_str));  
+        }  
+  
+        if let Some(max_write) = self.max_write {  
+            query_params.push(format!("max_write={}", max_write));  
+        }  
+  
+        if !query_params.is_empty() {  
+            path.push_str("/?");  
+            path.push_str(&query_params.join("&"));  
+        }  
+  
+        path  
+    }  
+  
+    fn body(&self) -> Option<Self::Body> {  
+        None  
+    }  
 }
 
 #[cfg(test)]
