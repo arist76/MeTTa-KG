@@ -106,7 +106,7 @@ pub struct MorkApiClient {
 
 impl MorkApiClient {
     pub fn new() -> Self {
-        let mork_url = env::var("METTA_KG_MORK_URL").expect("METTA_KG_MORK_URL must be set");
+        let mork_url = env::var("METTA_KG_MORK_URL").unwrap_or_else(|_| "http://127.0.0.1:8000".into());
         Self {
             base_url: mork_url,
             client: Client::new(),
