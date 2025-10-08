@@ -1,0 +1,336 @@
+name: MORK Post-Release
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+
+permissions:
+  contents: write
+
+jobs:
+  detect-release-tag:
+    runs-on: ubuntu-22.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      tag: ${{ steps.detect-tag.outputs.release_tag }}
+      should_run: ${{ steps.check.outputs.ok }}
+    steps:
+      - name: Check Release workflow result
+        id: check
+        run: |
+          if [ "${{ github.event.workflow_run.conclusion }}" = "success" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Detect and validate release tag
+        id: detect-tag
+        run: |
+          set -euo pipefail
+          echo "🔍 Detecting release tag from workflow run..."
+          
+          # Read the workflow_run event payload
+          EVENT_PAYLOAD=$(cat "$GITHUB_EVENT_PATH")
+          echo "Event payload loaded"
+          
+          # Extract possible tag candidates
+          CANDIDATES=()
+          
+          # 1. Try workflow_run.tag_name (direct tag)
+          TAG_NAME=$(echo "$EVENT_PAYLOAD" | jq -r '.workflow_run.tag_name // ""')
+          if [ -n "$TAG_NAME" ] && [ "$TAG_NAME" != "null" ]; then
+            CANDIDATES+=("$TAG_NAME")
+            echo "Candidate 1: tag_name='$TAG_NAME'"
+          fi
+          
+          # 2. Try head_branch (fallback for older GH versions)
+          HEAD_BRANCH=$(echo "$EVENT_PAYLOAD" | jq -r '.workflow_run.head_branch // ""')
+          if [ -n "$HEAD_BRANCH" ] && [ "$HEAD_BRANCH" != "null" ]; then
+            CANDIDATES+=("$HEAD_BRANCH")
+            echo "Candidate 2: head_branch='$HEAD_BRANCH'"
+          fi
+          
+          # 3. Try display_title parsing (e.g., "Release v1.0.0")
+          DISPLAY_TITLE=$(echo "$EVENT_PAYLOAD" | jq -r '.workflow_run.display_title // ""')
+          if [ -n "$DISPLAY_TITLE" ] && [ "$DISPLAY_TITLE" != "null" ]; then
+            # Extract version-like patterns
+            if [[ "$DISPLAY_TITLE" =~ (v?[0-9]+\.[0-9]+\.[0-9]+) ]]; then
+              TAG_CANDIDATE="${BASH_REMATCH[1]}"
+              # Ensure it starts with 'v'
+              if [[ ! "$TAG_CANDIDATE" =~ ^v ]]; then
+                TAG_CANDIDATE="v$TAG_CANDIDATE"
+              fi
+              CANDIDATES+=("$TAG_CANDIDATE")
+              echo "Candidate 3: display_title='$DISPLAY_TITLE' -> '$TAG_CANDIDATE'"
+            fi
+          fi
+          
+          # 4. Try head_commit.ref (git ref)
+          HEAD_REF=$(echo "$EVENT_PAYLOAD" | jq -r '.workflow_run.head_commit.ref // ""')
+          if [ -n "$HEAD_REF" ] && [ "$HEAD_REF" != "null" ]; then
+            # Extract tag from refs/tags/v1.0.0
+            if [[ "$HEAD_REF" =~ refs/tags/(.+) ]]; then
+              TAG_CANDIDATE="${BASH_REMATCH[1]}"
+              CANDIDATES+=("$TAG_CANDIDATE")
+              echo "Candidate 4: head_ref='$HEAD_REF' -> '$TAG_CANDIDATE'"
+            fi
+          fi
+          
+          echo "All candidates: ${CANDIDATES[*]}"
+          
+          # Validate each candidate with exponential backoff
+          MAX_ATTEMPTS=5
+          WAIT_SECONDS=5
+          VALID_TAG=""
+          
+          for attempt in $(seq 1 $MAX_ATTEMPTS); do
+            echo "Attempt $attempt/$MAX_ATTEMPTS to find valid release..."
+            
+            for candidate in "${CANDIDATES[@]}"; do
+              echo "Checking candidate: '$candidate'"
+              
+              # Use gh release view to check if release exists and is published
+              if gh release view "$candidate" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+                echo "✅ Found valid release: $candidate"
+                VALID_TAG="$candidate"
+                break 2
+              else
+                echo "❌ Candidate '$candidate' not found or not published"
+              fi
+            done
+            
+            if [ -z "$VALID_TAG" ]; then
+              if [ $attempt -lt $MAX_ATTEMPTS ]; then
+                echo "No valid release found. Waiting ${WAIT_SECONDS}s..."
+                sleep $WAIT_SECONDS
+                WAIT_SECONDS=$((WAIT_SECONDS * 2)) # Exponential backoff
+              fi
+            fi
+          done
+          
+          if [ -z "$VALID_TAG" ]; then
+            echo "❌ ERROR: No valid release tag found after $MAX_ATTEMPTS attempts"
+            echo "Candidates tried: ${CANDIDATES[*]}"
+            echo "Available releases:"
+            gh release list --repo "$GITHUB_REPOSITORY" --limit 10 || true
+            exit 1
+          fi
+          
+          echo "release_tag=$VALID_TAG" >> "$GITHUB_OUTPUT"
+
+  build-mork:
+    needs: detect-release-tag
+    if: needs.detect-release-tag.outputs.should_run == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: macos-13
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PATHMAP_DIR: ${{ github.workspace }}/PathMap
+    steps:
+      - name: Debug - Show validated tag
+        run: |
+          echo "✅ Using validated release tag: ${{ needs.detect-release-tag.outputs.tag }}"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: trueagi-io/MORK
+          ref: server
+          path: MORK
+
+      # --- Rust / Cargo caching ---
+      - name: Cache Cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: cargo-registry-${{ matrix.target }}-${{ runner.os }}-${{ hashFiles('MORK/Cargo.lock') }}
+          restore-keys: cargo-registry-${{ matrix.target }}-${{ runner.os }}-
+
+      - name: Cache Cargo git dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: cargo-git-${{ matrix.target }}-${{ runner.os }}-${{ hashFiles('MORK/Cargo.lock') }}
+          restore-keys: cargo-git-${{ matrix.target }}-${{ runner.os }}-
+
+      - name: Cache target build dir
+        uses: actions/cache@v3
+        with:
+          path: MORK/target/${{ matrix.target }}
+          key: cargo-target-${{ matrix.target }}-${{ runner.os }}-${{ hashFiles('MORK/Cargo.lock') }}
+          restore-keys: cargo-target-${{ matrix.target }}-${{ runner.os }}-
+
+      # --- PathMap setup ---
+      - name: Prepare PathMap dependency
+        run: |
+          set -euo pipefail
+          echo "📥 Cloning PathMap to workspace directory..."
+          rm -rf "$PATHMAP_DIR"
+          git clone --branch master https://github.com/Adam-Vandervorst/PathMap.git "$PATHMAP_DIR"
+          echo "✅ PathMap ready at: $PATHMAP_DIR"
+
+      # --- Rust build ---
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          override: true
+          profile: minimal
+          components: rustfmt, clippy
+
+      - name: Build mork-server
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "🔨 Building MORK for target: ${{ matrix.target }}"
+          cd MORK
+          cargo update -w
+          cargo build --locked --release --target "${{ matrix.target }}" -p mork-server --bin mork-server
+          echo "✅ MORK build completed"
+
+      - name: Stage mork artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "📦 Staging MORK artifacts..."
+          mkdir -p mork-dist
+          
+          # Consistent naming: mork-server-<target> and mork-server-update-<target>
+          if [ "${{ matrix.target }}" = "x86_64-pc-windows-msvc" ]; then
+            cp "MORK/target/${{ matrix.target }}/release/mork-server.exe" "mork-dist/mork-server-${{ matrix.target }}.exe"
+            test -f "MORK/target/${{ matrix.target }}/release/mork-server-update.exe" && \
+              cp "MORK/target/${{ matrix.target }}/release/mork-server-update.exe" "mork-dist/mork-server-update-${{ matrix.target }}.exe" || true
+          else
+            cp "MORK/target/${{ matrix.target }}/release/mork-server" "mork-dist/mork-server-${{ matrix.target }}"
+            test -f "MORK/target/${{ matrix.target }}/release/mork-server-update" && \
+              cp "MORK/target/${{ matrix.target }}/release/mork-server-update" "mork-dist/mork-server-update-${{ matrix.target }}" || true
+          fi
+          
+          echo "📁 Artifacts staged:"
+          ls -la mork-dist/
+
+      - name: Upload MORK artifacts to GitHub Release
+        run: |
+          set -euo pipefail
+          echo "⬆️ Uploading MORK artifacts to release: ${{ needs.detect-release-tag.outputs.tag }}"
+          gh release upload "${{ needs.detect-release-tag.outputs.tag }}" mork-dist/* --repo "$GITHUB_REPOSITORY" --clobber
+          echo "✅ MORK artifacts uploaded successfully"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  patch-installers:
+    needs: [detect-release-tag, build-mork]
+    if: needs.detect-release-tag.outputs.should_run == 'true'
+    runs-on: ubuntu-22.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      TAG: ${{ needs.detect-release-tag.outputs.tag }}
+    steps:
+      - name: Debug - Show release info
+        run: |
+          echo "🎯 Patching installers for release: $TAG"
+          echo "📋 Release assets:"
+          gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name' || echo "No assets yet"
+
+      - name: Download Release assets
+        run: |
+          set -euo pipefail
+          echo "📥 Downloading release assets..."
+          mkdir -p assets
+          gh release download "$TAG" --repo "$REPO" --dir assets
+          echo "📁 Downloaded assets:"
+          ls -la assets/ || echo "No assets downloaded"
+
+      - name: Patch metta-kg-installer.sh
+        run: |
+          set -euo pipefail
+          echo "🔧 Patching shell installer..."
+          
+          # Find the installer script
+          f=$(find assets -name "metta-kg-installer.sh" -type f | head -1 || true)
+          if [ -z "$f" ]; then
+            echo "❌ No metta-kg-installer.sh found in assets"
+            echo "Available files:"
+            ls -la assets/ || true
+            exit 1
+          fi
+          
+          file="$f"
+          echo "Patching: $file"
+          echo "Original file size: $(wc -c < "$file") bytes"
+
+          # Create patched version - insert MORK download INSIDE the install function
+          awk -v tag="$TAG" -v repo="$REPO" '
+          { print }
+          /for _bin_name in \$_bins/ && !p {
+              print "    # === BEGIN custom: fetch mork artifacts alongside metta-kg ==="
+              print "    # Using validated release tag: " tag
+              print "    _mork_base=\"https://github.com/" repo "/releases/download/" tag "\""
+              print "    case \"${_arch}\" in"
+              print "      x86_64-apple-darwin|aarch64-apple-darwin)"
+              print "        _mork_asset=\"mork-server-${_arch}\""
+              print "        ;;"
+              print "      x86_64-unknown-linux-gnu|aarch64-unknown-linux-gnu)"
+              print "        _mork_asset=\"mork-server-${_arch}\""
+              print "        ;;"
+              print "      x86_64-pc-windows-msvc)"
+              print "        _mork_asset=\"mork-server-${_arch}.exe\""
+              print "        ;;"
+              print "      *)"
+              print "        echo \"Warning: Unsupported architecture for MORK: ${_arch}\""
+              print "        _mork_asset=\"\""
+              print "        ;;"
+              print "    esac"
+              print "    "
+              print "    if [ -n \"${_mork_asset}\" ] && [ \"${_bin_name}\" = \"metta-kg\" ]; then"
+              print "      # Download with retries and backoff"
+              print "      for i in 1 2 3; do"
+              print "        echo \"Downloading Metta-KG and MORK (attempt $i)...\""
+              print "        if downloader \"${_mork_base}/${_mork_asset}\" \"${_install_dir}/mork-server\"; then"
+              print "          ensure chmod +x \"${_install_dir}/mork-server\""
+              print "          echo \"  mork-server\""
+              print "          _bins=\"${_bins} mork-server\""
+              print "          break"
+              print "        else"
+              print "          echo \"Download failed, retrying in ${i}s...\""
+              print "          sleep $i"
+              print "        fi"
+              print "      done"
+              print "    fi"
+              print "    # === END custom ==="
+              p=1
+          }
+          ' "$file" > "$file.patched"
+          
+          echo "Patched file size: $(wc -c < "$file.patched") bytes"
+          
+          # Verify patching worked
+          if grep -q "BEGIN custom" "$file.patched"; then
+            echo "✅ Patching successful - MORK code found in patched file"
+          else
+            echo "❌ Patching FAILED - MORK code not found in patched file"
+            echo "Diff between files:"
+            diff "$file" "$file.patched" | head -20 || true
+            exit 1
+          fi
+          
+          mv "$file.patched" "$file"
+          chmod +x "$file"
+          echo "✅ Shell installer patched successfully"
+
+      - name: Upload patched installer back to release
+        run: |
+          set -euo pipefail
+          echo "⬆️ Uploading patched installer back to release..."
+          gh release upload "$TAG" assets/metta-kg-installer.sh --clobber --repo "$REPO"
+          echo "✅ Patched installer uploaded successfully"
