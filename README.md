@@ -4,6 +4,81 @@ https://deepfunding.ai/proposal/scalable-metta-knowledge-graphs/
 
 This README is WIP and is subject to change.
 
+## Quick Start (Single Binary)
+
+MeTTa-KG now ships as a single binary that embeds the web UI and provides a fast, portable runtime.
+
+### Installation
+
+**macOS/Linux:**
+```bash
+curl -LSfs https://github.com/arist76/MeTTa-KG/releases/latest/download/install.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+iwr https://github.com/arist76/MeTTa-KG/releases/latest/download/install.ps1 -useb | iex
+```
+
+The installer places `metta-kg` in `~/.cargo/bin` or a platform-appropriate location.
+
+### Running the Server
+
+```bash
+metta-kg --address 127.0.0.1 --port 3030
+```
+
+By default, a browser window opens at `http://127.0.0.1:3030`. Use `--no-browser` to disable this.
+
+#### Command Line Options
+- `--address <ip>` (default: 127.0.0.1)
+- `--port <port>` (default: 3030) 
+- `--base-path <path>` (default: /)
+- `--no-browser` - disable auto-opening browser
+
+#### Subcommands
+- `run` (default) - start the server
+- `import` (reserved for future use)
+- `query` (reserved for future use)
+
+#### Environment Variables
+- `METTA_KG_DATABASE_URL` - database connection string
+- `METTA_KG_SECRET` - application secret
+- `METTA_KG_MORK_URL` - MORK API server URL
+
+### Database Configuration
+
+**Local Binary:**
+- Uses `METTA_KG_DATABASE_URL` if set
+- Default: `postgresql://metta-kg-admin:password123@localhost:5432/metta-kg`
+
+**Docker:**
+- Auto-detected via `DOCKER=1` or `/.dockerenv`
+- Default: `postgresql://metta-kg-admin:password123@db:5432/metta-kg`
+- Override with `METTA_KG_DATABASE_URL`
+
+## Development & Deployment Options
+
+### Single Binary (Recommended)
+```bash
+cd api && cargo run --release -- --address 127.0.0.1 --port 3030
+```
+
+### Docker Development
+```bash
+docker build -t metta-kg:dev .
+docker compose up
+```
+
+The runtime container ships only the binary (plus translations venv where needed).
+
+
+## Release Packaging
+
+- `cargo-dist` builds binaries for macOS, Linux, Windows
+- Includes installers and auto-updater functionality
+- Tag releases as `vX.Y.Z` to trigger automated builds via GitHub Actions
+
 ## Spaces
 
 A Knowledge Graph (KG) corresponds to a hierarchy of spaces. Each space has a name, which we refer to as its namespace. The root space is identified by the "/" namespace, while its direct subspaces (spaces on the second level of the hierachy) are identified by namespaces such as "/subspace1/", and so on.
