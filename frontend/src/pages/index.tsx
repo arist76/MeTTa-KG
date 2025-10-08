@@ -138,23 +138,27 @@ const AppLayout = (props: any) => {
 };
 
 const App = () => {
-	return (
-		<div class="flex">
-			<div class="flex-1 flex flex-col">
-				<Router>
-					<Route path="*" component={AppLayout}>
-						{sidebarSections.map(section => {
-							{
-								return section.items.map(item => {
-									return <Route path={item.to} component={item.component ? <item.component /> : <NotImplemented name={item.label} />} />
-								})
-							}
-						})}
-					</Route>
-				</Router>
-			</div>
-		</div>
-	);
+  return (
+    <div class="flex">
+      <div class="flex-1 flex flex-col">
+        <Router>
+          <Route path="*" component={AppLayout}>
+            {sidebarSections.map((section) => 
+              section.items.map((item) => (
+                <Route
+                  path={item.to}
+                  component={
+                    item.component || (() => <NotImplemented name={item.label} />)
+                  }
+                />
+              ))
+            )}
+          </Route>
+        </Router>
+      </div>
+    </div>
+  );
 };
+
 
 export default App;
