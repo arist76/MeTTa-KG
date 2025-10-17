@@ -1,9 +1,9 @@
-use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::tokio::io::AsyncReadExt;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+use rocket::http::{ContentType, Status};
 use rocket::response::status::Custom;
 use rocket::{get, post, Data};
 use std::path::PathBuf;
@@ -145,12 +145,13 @@ pub async fn import(token: Token, path: PathBuf, uri: String) -> Result<Json<boo
 
 /// Performs an explore operation on the `<path..>` space. Get the result that
 /// matches the `<pattern>` by incrementally traversing the resulting space.
+
 #[post("/spaces/explore/<path..>", data = "<explore_input>")]
 pub async fn explore(
     token: Token,
     path: PathBuf,
     explore_input: Json<ExploreInput>,
-) -> Result<Json<String>, Status> {
+) -> Result<(ContentType, String), Status> {
     if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_read {
         return Err(Status::Unauthorized);
     }
@@ -161,13 +162,10 @@ pub async fn explore(
         .pattern(explore_input.pattern.clone())
         .token(explore_input.token.clone());
 
-    println!("explore path: {:?}", request.path());
+    let response_text = mork_api_client.dispatch(request).await?;
 
-    let response = mork_api_client.dispatch(request).await.map(Json);
-    println!("explore response: {response:?}");
-    response
+    Ok((ContentType::JSON, response_text))
 }
-
 /// Performs an export operation on the `<path..>` space. Get the result that
 /// matches the `<pattern>` by incrementally traversing the resulting space.
 #[post("/spaces/export/<path..>", data = "<export_input>")]
