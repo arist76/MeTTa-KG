@@ -26,17 +26,18 @@ export enum CSVParseDirection {
 
 export async function request<T>(
   url: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  authOverride?: string | null
 ): Promise<T> {
   const auth = rootToken();
 
-  if (!auth) {
+  if (!auth && !authOverride) {
     throw new Error("noRootToken");
   }
 
   const headers = {
     ...options.headers,
-    Authorization: auth,
+    Authorization: authOverride || auth,
   };
 
   const finalUrl = new URL(url, API_URL);
@@ -87,14 +88,6 @@ export const transform = (path: string, transformation: Mm2Input) => {
 
 export const readSpace = (path: string) => {
   return request<string>(`/spaces${path}`);
-};
-
-export const getAllTokens = () => {
-  return request<Token[]>("/tokens");
-};
-
-export const getToken = () => {
-  return request<Token>("/token");
 };
 
 export const createFromCSV = (file: File, params: CSVParserParameters) => {
@@ -235,16 +228,30 @@ export const importSpace = (path: string, uri: string) => {
   });
 };
 
+export const getAllTokens = () => {
+  return request<Token[]>("/tokens");
+};
+
+export const getToken = async (token: string | null): Promise<Token> => {
+  if (!token) return Promise.reject("No token provided");
+  return request<Token>(
+    "/token",
+    {
+      method: "GET",
+    },
+    token
+  );
+};
+
 export const fetchTokens = async (token: string | null): Promise<Token[]> => {
   if (!token) return [];
   return request<Token[]>("/tokens", {
     method: "GET",
-    headers: { Authorization: token },
   });
 };
 
 export const createToken = async (
-  root: string | null,
+  token: string | null,
   description: string,
   namespace: string,
   read: boolean,
@@ -253,7 +260,7 @@ export const createToken = async (
   shareWrite: boolean,
   shareShare: boolean
 ): Promise<Token> => {
-  if (!root) throw new Error("No root token");
+  if (!token) throw new Error("No root token");
 
   const newToken: Token = {
     id: 0,
@@ -269,14 +276,17 @@ export const createToken = async (
     parent: 0,
   };
 
-  return request<Token>("/tokens", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: root,
+  return request<Token>(
+    "/tokens",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(newToken),
     },
-    body: JSON.stringify(newToken),
-  });
+    token
+  );
 };
 
 export const refreshCodes = async (
@@ -287,7 +297,6 @@ export const refreshCodes = async (
   const promises = tokenIds.map((id) =>
     request<Token>(`/tokens/${id}`, {
       method: "POST",
-      headers: { Authorization: root },
     })
   );
   return Promise.all(promises);
@@ -297,7 +306,6 @@ export const deleteToken = (root: string | null, token_id: number) => {
   if (!root) throw new Error("No root token");
   return request(`/tokens/${token_id}`, {
     method: "DELETE",
-    headers: { Authorization: root },
   });
 };
 
@@ -307,13 +315,12 @@ export const deleteTokens = (root: string | null, token_ids: number[]) => {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
-      Authorization: root,
     },
     body: JSON.stringify(token_ids),
   });
 };
 
-export const exploreSpace = (
+export const exploreSpace = async (
   path: string,
   pattern: string,
   token: Uint8Array | Array<number>
@@ -321,8 +328,8 @@ export const exploreSpace = (
   if (token instanceof Array) {
     token = Uint8Array.from(token);
   }
-  console.log("exploring: ", path, pattern, token);
-  return request<ExploreDetail[]>(`/spaces/explore${path}`, {
+
+  const response = await request<string>(`/spaces/explore${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -330,6 +337,7 @@ export const exploreSpace = (
       token: quoteFromBytes(token),
     }),
   });
+  return JSON.parse(response);
 };
 
 export const exportSpace = async (
