@@ -2,7 +2,7 @@
 cd ./frontend
 pnpm prettier:check
 pnpm lint
-
+pnpm test
 
 # rust api
 cd ../api
