@@ -1,7 +1,9 @@
 import Network from "lucide-solid/icons/network";
-import { Accessor } from "solid-js";
+import Activity from "lucide-solid/icons/activity";
+import { Accessor, createSignal } from "solid-js";
 import { Button } from "~/components/ui/Button";
 import { A } from "@solidjs/router";
+import { ResourceMonitor } from "~/components/common/ResourceMonitor";
 
 interface SidbarProps {
   activeTab: Accessor<string>;
@@ -14,12 +16,12 @@ export default function Sidebar({
   setActiveTab,
   sidebarSections,
 }: SidbarProps) {
-  // const [activeTab, setActiveTab] = createSignal("explore")
+  const [resourceMonitorOpen, setResourceMonitorOpen] = createSignal(false);
 
   return (
     <>
-      <div class="relative w-80 bg-neutral-900 border-r border-neutral-700">
-        <div class="p-3">
+      <div class="relative w-80 bg-neutral-900 border-r border-neutral-700 flex flex-col">
+        <div class="p-3 flex-1">
           <div class="flex items-center gap-2 mb-8">
             <Network class="h-8 w-8 text-primary" />
             <div>
@@ -89,7 +91,32 @@ export default function Sidebar({
           </nav>
           {/* </ScrollArea> */}
         </div>
+
+        {/* Resource Monitor Button at Bottom */}
+        <div class="p-3 border-t border-neutral-700">
+          <Button
+            variant="ghost"
+            class="w-full gap-3 h-auto py-2 px-3 justify-start text-neutral-400 hover:text-white hover:bg-neutral-800"
+            onClick={() => setResourceMonitorOpen(true)}
+          >
+            <div class="flex items-center justify-center w-4 h-4">
+              <Activity class="h-4 w-4" />
+            </div>
+            <div class="flex-1 text-left">
+              <div class="flex items-center gap-2 uppercase">Resources</div>
+              <div class="text-xs text-neutral-500 mt-0.5">
+                Monitor system usage
+              </div>
+            </div>
+          </Button>
+        </div>
       </div>
+
+      {/* Resource Monitor Dialog */}
+      <ResourceMonitor
+        open={resourceMonitorOpen()}
+        onOpenChange={setResourceMonitorOpen}
+      />
     </>
   );
 }
