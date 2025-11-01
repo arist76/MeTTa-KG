@@ -11,6 +11,8 @@ use rocket::http::Method;
 use rocket::{routes, Build, Rocket};
 use rocket_cors::AllowedOrigins;
 
+use routes::system::SpaceDataSizes;
+
 pub fn rocket() -> Rocket<Build> {
     // TODO: move hardcoded allowed origins to database,
     // or get backend and frontend hosted under same domain
@@ -37,6 +39,7 @@ pub fn rocket() -> Rocket<Build> {
     .unwrap();
 
     rocket::build()
+        .manage(SpaceDataSizes::new())
         .mount(
             "/",
             routes![
@@ -57,6 +60,8 @@ pub fn rocket() -> Rocket<Build> {
                 routes::spaces::explore,
                 routes::spaces::export,
                 routes::spaces::clear,
+                routes::system::get_system_resources,
+                routes::system::get_space_resources,
             ],
         )
         // .mount("/public", FileServer::from("static"))
