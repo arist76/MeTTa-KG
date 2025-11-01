@@ -10,6 +10,7 @@ use rocket::{
 use serde::{Deserialize, Serialize};
 
 pub mod spaces;
+pub mod system;
 pub mod tokens;
 pub mod translations;
 
