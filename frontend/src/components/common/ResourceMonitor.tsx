@@ -7,8 +7,24 @@ import {
   CardHeader,
   CardTitle,
 } from "../ui/Card";
-import { Button } from "../ui/Button";
 import { Badge } from "../ui/Badge";
+
+// Define the shape of the non-standard `performance.memory` object
+interface PerformanceWithMemory extends Performance {
+  memory?: {
+    usedJSHeapSize: number;
+    totalJSHeapSize: number;
+    jsHeapSizeLimit: number;
+  };
+}
+
+interface ApiProcessInfo {
+  id: string;
+  name: string;
+  cpu_usage: number;
+  memory_usage: number;
+  status: "running" | "idle";
+}
 
 interface ProcessInfo {
   id: string;
@@ -39,73 +55,44 @@ export function ResourceMonitor(props: ResourceMonitorProps) {
     processes: [],
     dataSize: 0,
   });
+  const [browserMemory, setBrowserMemory] = createSignal(0);
 
   createEffect(() => {
     if (!props.open) return;
 
-    // Fetch resource data
     const fetchResources = async () => {
       try {
-        // TODO: Replace with actual API endpoint
-        // const response = await fetch('/api/system/resources');
-        // const data = await response.json();
+        const response = await fetch("http://localhost:8000/system/resources");
+        const data = await response.json();
 
-        const mockData: SystemResources = {
-          totalMemory: 16384,
-          usedMemory: 8192,
-          cpuUsage: 45.2,
-          dataSize: 512,
-          processes: [
-            {
-              id: "1",
-              name: "Transform Operation",
-              cpuUsage: 23.5,
-              memoryUsage: 256,
-              status: "running",
-            },
-            {
-              id: "2",
-              name: "Explore Query",
-              cpuUsage: 15.2,
-              memoryUsage: 128,
-              status: "running",
-            },
-            {
-              id: "3",
-              name: "Upload Process",
-              cpuUsage: 6.5,
-              memoryUsage: 64,
-              status: "idle",
-            },
-          ],
-        };
-        setResources(mockData);
+        setResources({
+          totalMemory: data.total_memory,
+          usedMemory: data.used_memory,
+          cpuUsage: data.cpu_usage,
+          dataSize: data.data_size,
+          processes: data.processes.map((p: ApiProcessInfo) => ({
+            id: p.id,
+            name: p.name,
+            cpuUsage: p.cpu_usage,
+            memoryUsage: p.memory_usage,
+            status: p.status,
+          })),
+        });
       } catch (error) {
         console.error("Failed to fetch system resources:", error);
+      }
+
+      const perf = performance as PerformanceWithMemory;
+      if (perf.memory) {
+        setBrowserMemory(perf.memory.usedJSHeapSize / 1024 / 1024);
       }
     };
 
     fetchResources();
-    const interval = setInterval(fetchResources, 2000); // Update every 2 seconds
+    const interval = setInterval(fetchResources, 500);
 
     onCleanup(() => clearInterval(interval));
   });
-
-  const handleKillProcess = async (processId: string) => {
-    try {
-      // TODO: Replace with actual API endpoint
-      // await fetch(`/api/system/processes/${processId}`, { method: 'DELETE' });
-      console.log(`Killing process ${processId}`);
-
-      // Remove from local state
-      setResources((prev) => ({
-        ...prev,
-        processes: prev.processes.filter((p) => p.id !== processId),
-      }));
-    } catch (error) {
-      console.error("Failed to kill process:", error);
-    }
-  };
 
   const memoryPercentage = () =>
     (resources().usedMemory / resources().totalMemory) * 100;
@@ -159,12 +146,30 @@ export function ResourceMonitor(props: ResourceMonitorProps) {
                 <CardTitle class="text-sm">Data in RAM</CardTitle>
               </CardHeader>
               <CardContent>
-                <div class="text-2xl font-bold">{resources().dataSize} MB</div>
+                <div class="text-2xl font-bold">
+                  {resources().dataSize.toFixed(1)} MB
+                </div>
                 <div class="text-xs text-gray-500 mt-2">
                   Current workspace data
                 </div>
               </CardContent>
             </Card>
+
+            <Show when={browserMemory() > 0}>
+              <Card>
+                <CardHeader>
+                  <CardTitle class="text-sm">Browser Tab Memory</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div class="text-2xl font-bold">
+                    {browserMemory().toFixed(1)} MB
+                  </div>
+                  <div class="text-xs text-gray-500 mt-2">
+                    Memory used by this tab
+                  </div>
+                </CardContent>
+              </Card>
+            </Show>
           </div>
 
           {/* Active Processes */}
@@ -186,31 +191,32 @@ export function ResourceMonitor(props: ResourceMonitorProps) {
                   <For each={resources().processes}>
                     {(process) => (
                       <div class="flex items-center justify-between p-3 border rounded-lg">
-                        <div class="flex-1">
-                          <div class="flex items-center gap-2">
-                            <span class="font-medium">{process.name}</span>
-                            <Badge
-                              variant={
-                                process.status === "running"
-                                  ? "default"
-                                  : "secondary"
-                              }
-                            >
-                              {process.status}
-                            </Badge>
+                        <div class="flex items-center gap-2">
+                          <span class="font-medium">{process.name}</span>
+                          <Badge
+                            variant={
+                              process.status === "running"
+                                ? "default"
+                                : "secondary"
+                            }
+                          >
+                            {process.status}
+                          </Badge>
+                        </div>
+                        <div class="flex items-center gap-4 text-sm">
+                          <div class="text-right">
+                            <div class="font-semibold">
+                              {process.cpuUsage.toFixed(1)}%
+                            </div>
+                            <div class="text-xs text-gray-500">CPU</div>
                           </div>
-                          <div class="text-sm text-gray-500 mt-1">
-                            CPU: {process.cpuUsage.toFixed(1)}% | Memory:{" "}
-                            {process.memoryUsage} MB
+                          <div class="text-right">
+                            <div class="font-semibold">
+                              {process.memoryUsage} MB
+                            </div>
+                            <div class="text-xs text-gray-500">Memory</div>
                           </div>
                         </div>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleKillProcess(process.id)}
-                        >
-                          Kill Process
-                        </Button>
                       </div>
                     )}
                   </For>
