@@ -11,6 +11,253 @@ import parse from "s-expression";
 import { formatedNamespace } from "~/lib/state";
 import { showToast } from "~/components/ui/Toast";
 
+// ============================================================================
+// Window TinyLFU Cache Implementation
+// ============================================================================
+
+class CountMinSketch {
+  private width: number;
+  private depth: number;
+  private table: number[][];
+  private size: number;
+
+  constructor(width: number = 64, depth: number = 4) {
+    this.width = width;
+    this.depth = depth;
+    this.table = Array(depth)
+      .fill(0)
+      .map(() => Array(width).fill(0));
+    this.size = 0;
+  }
+
+  private hash(key: string, seed: number): number {
+    let hash = seed;
+    for (let i = 0; i < key.length; i++) {
+      hash = (hash * 31 + key.charCodeAt(i)) | 0;
+    }
+    return Math.abs(hash % this.width);
+  }
+
+  increment(key: string): void {
+    for (let i = 0; i < this.depth; i++) {
+      const index = this.hash(key, i);
+      this.table[i][index] = Math.min(15, this.table[i][index] + 1); // Cap at 15
+    }
+    this.size++;
+  }
+
+  estimate(key: string): number {
+    let min = Infinity;
+    for (let i = 0; i < this.depth; i++) {
+      const index = this.hash(key, i);
+      min = Math.min(min, this.table[i][index]);
+    }
+    return min;
+  }
+
+  reset(): void {
+    // Aging: halve all counts
+    for (let i = 0; i < this.depth; i++) {
+      for (let j = 0; j < this.width; j++) {
+        this.table[i][j] = Math.floor(this.table[i][j] / 2);
+      }
+    }
+    this.size = 0;
+    console.log("[TinyLFU] Count-Min Sketch reset (aging applied)");
+  }
+
+  getSize(): number {
+    return this.size;
+  }
+}
+
+class WindowTinyLFU {
+  private windowCache: Map<string, D3Node[]>;
+  private probationaryCache: Map<string, D3Node[]>;
+  private protectedCache: Map<string, D3Node[]>;
+  private sketch: CountMinSketch;
+  private maxSize: number;
+  private windowSize: number;
+  private probationarySize: number;
+  private protectedSize: number;
+  private sampleSize: number;
+
+  constructor(maxSize: number = 100) {
+    this.maxSize = maxSize;
+    this.windowSize = Math.max(1, Math.floor(maxSize * 0.01)); // 1%
+    const mainCacheSize = maxSize - this.windowSize; // 99
+    this.probationarySize = Math.floor(mainCacheSize * 0.2); // 20% of main = ~20
+    this.protectedSize = mainCacheSize - this.probationarySize; // 80% of main = ~79
+
+    this.windowCache = new Map();
+    this.probationaryCache = new Map();
+    this.protectedCache = new Map();
+    this.sketch = new CountMinSketch();
+    this.sampleSize = 0;
+
+    console.log(
+      `[WindowTinyLFU] Initialized - Total: ${maxSize}, Window: ${this.windowSize}, Probationary: ${this.probationarySize}, Protected: ${this.protectedSize}`
+    );
+  }
+
+  get(key: string): D3Node[] | undefined {
+    this.sketch.increment(key);
+    this.sampleSize++;
+
+    if (this.sampleSize >= this.maxSize * 10) {
+      this.sketch.reset();
+      this.sampleSize = 0;
+    }
+
+    let value = this.windowCache.get(key);
+    if (value) {
+      console.log(`[WindowTinyLFU] HIT in Window: ${key}`);
+      this.windowCache.delete(key);
+      this.windowCache.set(key, value);
+      return value;
+    }
+
+    value = this.probationaryCache.get(key);
+    if (value) {
+      console.log(
+        `[WindowTinyLFU] HIT in Probationary: ${key} → Promoting to Protected`
+      );
+      this.probationaryCache.delete(key);
+      this.addToProtected(key, value);
+      return value;
+    }
+
+    value = this.protectedCache.get(key);
+    if (value) {
+      console.log(`[WindowTinyLFU] HIT in Protected: ${key}`);
+      this.protectedCache.delete(key);
+      this.protectedCache.set(key, value);
+      return value;
+    }
+
+    console.log(`[WindowTinyLFU] MISS: ${key}`);
+    return undefined;
+  }
+
+  set(key: string, value: D3Node[]): void {
+    this.windowCache.delete(key);
+    this.probationaryCache.delete(key);
+    this.protectedCache.delete(key);
+
+    if (this.windowCache.size >= this.windowSize) {
+      const victimKey = this.windowCache.keys().next().value;
+      const victimValue = this.windowCache.get(victimKey)!;
+      this.windowCache.delete(victimKey);
+
+      console.log(`[WindowTinyLFU] Window full, evicting: ${victimKey}`);
+      this.tryAdmitToProbationary(victimKey, victimValue);
+    }
+
+    this.windowCache.set(key, value);
+    console.log(
+      `[WindowTinyLFU] Added to Window: ${key} | Sizes → W:${this.windowCache.size}/${this.windowSize}, P:${this.probationaryCache.size}/${this.probationarySize}, Pr:${this.protectedCache.size}/${this.protectedSize}`
+    );
+  }
+
+  private tryAdmitToProbationary(key: string, value: D3Node[]): void {
+    const candidateFreq = this.sketch.estimate(key);
+
+    // FIX: Check probationary size specifically, not total main cache
+    if (this.probationaryCache.size < this.probationarySize) {
+      this.probationaryCache.set(key, value);
+      console.log(
+        `[WindowTinyLFU] Admitted to Probationary: ${key} (freq: ${candidateFreq})`
+      );
+      return;
+    }
+
+    // Probationary is full - compare frequencies
+    const victimKey = this.probationaryCache.keys().next().value;
+    const victimFreq = this.sketch.estimate(victimKey);
+
+    if (candidateFreq > victimFreq) {
+      console.log(
+        `[WindowTinyLFU] EVICTING from Probationary: ${victimKey} (freq ${victimFreq}) ← REPLACING with ${key} (freq ${candidateFreq})`
+      );
+      this.probationaryCache.delete(victimKey);
+      this.probationaryCache.set(key, value);
+    } else {
+      console.log(
+        `[WindowTinyLFU] REJECTED: ${key} (freq ${candidateFreq}) vs ${victimKey} (freq ${victimFreq})`
+      );
+    }
+  }
+
+  private addToProtected(key: string, value: D3Node[]): void {
+    if (this.protectedCache.size >= this.protectedSize) {
+      const demoteKey = this.protectedCache.keys().next().value;
+      const demoteValue = this.protectedCache.get(demoteKey)!;
+      this.protectedCache.delete(demoteKey);
+      console.log(
+        `[WindowTinyLFU] Protected full, demoting: ${demoteKey} → Probationary`
+      );
+
+      this.tryAdmitToProbationary(demoteKey, demoteValue);
+    }
+
+    this.protectedCache.set(key, value);
+    console.log(`[WindowTinyLFU] PROMOTED to Protected: ${key}`);
+  }
+  update(key: string, value: D3Node[]): boolean {
+    if (this.windowCache.has(key)) {
+      this.windowCache.set(key, value);
+      console.log(`[WindowTinyLFU] Updated in Window: ${key}`);
+      return true;
+    }
+    if (this.probationaryCache.has(key)) {
+      this.probationaryCache.set(key, value);
+      console.log(`[WindowTinyLFU] Updated in Probationary: ${key}`);
+      return true;
+    }
+    if (this.protectedCache.has(key)) {
+      this.protectedCache.set(key, value);
+      console.log(`[WindowTinyLFU] Updated in Protected: ${key}`);
+      return true;
+    }
+    return false;
+  }
+  delete(key: string): void {
+    const wasInWindow = this.windowCache.delete(key);
+    const wasInProbationary = this.probationaryCache.delete(key);
+    const wasInProtected = this.protectedCache.delete(key);
+
+    if (wasInWindow || wasInProbationary || wasInProtected) {
+      const location = wasInWindow
+        ? "Window"
+        : wasInProbationary
+          ? "Probationary"
+          : "Protected";
+      console.log(`[WindowTinyLFU] DELETED: ${key} (from ${location})`);
+    }
+  }
+
+  has(key: string): boolean {
+    return (
+      this.windowCache.has(key) ||
+      this.probationaryCache.has(key) ||
+      this.protectedCache.has(key)
+    );
+  }
+
+  clear(): void {
+    this.windowCache.clear();
+    this.probationaryCache.clear();
+    this.protectedCache.clear();
+    this.sketch.reset();
+    this.sampleSize = 0;
+    console.log("[WindowTinyLFU] Cache cleared");
+  }
+}
+
+// ============================================================================
+// D3 Tree Graph Component
+// ============================================================================
+
 interface D3HierarchyNodeData {
   name: string;
   id: string;
@@ -24,7 +271,6 @@ interface D3HierarchyNodeData {
 type D3Node = d3.HierarchyNode<D3HierarchyNodeData> & {
   x0?: number;
   y0?: number;
-  _children?: D3Node[];
   _isLeaf?: boolean;
 };
 
@@ -44,29 +290,22 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
   let svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
   let g: d3.Selection<SVGGElement, unknown, null, undefined>;
   let root: D3Node;
-  let i = 0;
 
-  const expand = (d: D3Node) => {
-    if (d._children) {
-      d.children = d._children;
-      d._children = null;
-    }
-    if (d.children) {
-      d.children.forEach(expand);
-    }
-  };
+  const cache = new WindowTinyLFU(100); // Adjust size based on your needs
 
   const expandAll = () => {
-    if (!root) return;
-    expand(root);
-    update(root);
+    showToast({
+      title: "Info",
+      description:
+        "Full expand disabled to prevent excessive API calls with caching.",
+    });
   };
 
   const collapseAll = () => {
     if (!root) return;
     root.descendants().forEach((d: D3Node) => {
       if (d.children) {
-        d._children = d.children;
+        cache.set(d.data.id, d.children);
         d.children = null;
       }
     });
@@ -76,8 +315,12 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
   const collapseToRoot = () => {
     if (!root) return;
     root.children?.forEach((child: D3Node) => {
+      // Evict grandchildren data when collapsing to root
       if (child.children) {
-        child._children = child.children;
+        child.children.forEach((grandchild) => {
+          cache.delete(grandchild.data.id);
+        });
+        cache.set(child.data.id, child.children);
         child.children = null;
       }
     });
@@ -106,7 +349,7 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
 
   const isExpandable = (d: D3Node) => {
     if (d._isLeaf) return false;
-    if (d.children || d._children) return true;
+    if (d.children || cache.has(d.data.id)) return true;
 
     if (
       d.data.token &&
@@ -158,6 +401,14 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
       .duration(duration)
       .attr("height", contentHeight);
 
+    // Ensure all nodes have valid coordinates
+    allNodes.forEach((n: D3Node) => {
+      if (n.parent) {
+        n.x = n.parent.x ?? 0;
+        n.y = n.parent.y ?? 0;
+      }
+    });
+
     visibleNodes.forEach((n: D3Node, idx: number) => {
       n.x = idx * nodeHeight;
       n.y = n.depth * indentSize;
@@ -167,13 +418,13 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
 
     const node = g
       .selectAll<SVGGElement, D3Node>("g.node")
-      .data(allNodes, (d: D3Node) => d.id);
+      .data(allNodes, (d: D3Node) => d.data.id);
 
     const nodeEnter = node
       .enter()
       .append("g")
       .attr("class", "node")
-      .attr("transform", `translate(${source.y0},${source.x0})`)
+      .attr("transform", `translate(${source.y0 ?? 0},${source.x0 ?? 0})`)
       .style("opacity", 0)
       .style("cursor", "pointer")
       .on("click", (event: PointerEvent, d: D3Node) => handleClick(event, d))
@@ -206,7 +457,6 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
           .style("opacity", 1);
       });
 
-    // Background rect
     nodeEnter
       .append("rect")
       .attr("class", "node-bg")
@@ -217,7 +467,6 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
       .attr("rx", 8)
       .style("fill", "transparent");
 
-    // Border rect
     nodeEnter
       .append("rect")
       .attr("class", "node-border")
@@ -230,7 +479,6 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
       .style("stroke", "transparent")
       .style("stroke-width", "2px");
 
-    // Connection line to parent
     nodeEnter
       .append("line")
       .attr("class", "parent-line")
@@ -246,7 +494,7 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
       .append("g")
       .attr("class", "toggle-group")
       .style("opacity", (d: D3Node) =>
-        d.children || d._children || isExpandable(d) ? 1 : 0
+        d.children || cache.has(d.data.id) || isExpandable(d) ? 1 : 0
       );
 
     toggleGroup
@@ -275,7 +523,7 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
       .style("user-select", "none")
       .text((d: D3Node) => {
         if (d.children) return "−";
-        if (d._children) return "+";
+        if (cache.has(d.data.id)) return "+";
         return isExpandable(d) ? "+" : "";
       });
 
@@ -287,7 +535,7 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
       .attr("r", 3)
       .style("fill", "hsl(var(--muted-foreground))")
       .style("opacity", (d: D3Node) =>
-        d.children || d._children || isExpandable(d) ? 0 : 0.6
+        d.children || cache.has(d.data.id) || isExpandable(d) ? 0 : 0.6
       );
 
     nodeEnter
@@ -316,20 +564,20 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
       .transition()
       .duration(duration)
       .style("opacity", 1)
-      .attr("transform", (d: D3Node) => `translate(${d.y},${d.x})`);
+      .attr("transform", (d: D3Node) => `translate(${d.y ?? 0},${d.x ?? 0})`);
 
     nodeUpdate.select(".toggle-icon").text((d: D3Node) => {
       if (d.children) return "−";
-      if (d._children) return "+";
+      if (cache.has(d.data.id)) return "+";
       return isExpandable(d) ? "+" : "";
     });
 
     nodeUpdate.select(".toggle-group").style("opacity", (d: D3Node) => {
-      return d.children || d._children || isExpandable(d) ? 1 : 0;
+      return d.children || cache.has(d.data.id) || isExpandable(d) ? 1 : 0;
     });
 
     nodeUpdate.select(".node-icon").style("opacity", (d: D3Node) => {
-      return d.children || d._children || isExpandable(d) ? 0 : 0.6;
+      return d.children || cache.has(d.data.id) || isExpandable(d) ? 0 : 0.6;
     });
 
     node
@@ -337,12 +585,12 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
       .transition()
       .duration(duration)
       .style("opacity", 0)
-      .attr("transform", `translate(${source.y},${source.x})`)
+      .attr("transform", `translate(${source.y ?? 0},${source.x ?? 0})`)
       .remove();
 
     const link = g
       .selectAll<SVGPathElement, d3.HierarchyLink<D3Node>>("path.link")
-      .data(links, (d: d3.HierarchyLink<D3Node>) => d.target.id);
+      .data(links, (d: d3.HierarchyLink<D3Node>) => d.target.data.id);
 
     link
       .enter()
@@ -354,8 +602,8 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
       .style("opacity", 0)
       .attr("d", () =>
         connector({
-          source: { x: source.x0, y: source.y0 },
-          target: { x: source.x0, y: source.y0 },
+          source: { x: source.x0 ?? 0, y: source.y0 ?? 0 },
+          target: { x: source.x0 ?? 0, y: source.y0 ?? 0 },
         } as d3.HierarchyPointLink<D3Node>)
       )
       .merge(link)
@@ -371,8 +619,8 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
       .style("opacity", 0)
       .attr("d", () =>
         connector({
-          source: { x: source.x, y: source.y },
-          target: { x: source.x, y: source.y },
+          source: { x: source.x ?? 0, y: source.y ?? 0 },
+          target: { x: source.x ?? 0, y: source.y ?? 0 },
         } as d3.HierarchyPointLink<D3Node>)
       )
       .remove();
@@ -386,27 +634,56 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
   const handleClick = async (event: PointerEvent, d: D3Node) => {
     event.stopPropagation();
 
+    console.log(`\n========== NODE CLICK: ${d.data.name} ==========`);
+    console.log(`Has children currently: ${!!d.children}`);
+    console.log(`Is in cache: ${cache.has(d.data.id)}`);
+
+    // Collapse
     if (d.children) {
-      d._children = d.children;
+      console.log(`[COLLAPSE ACTION] Collapsing node: ${d.data.name}`);
+      console.log(`Number of direct children: ${d.children.length}`);
+
+      // Evict data for expanded children when collapsing
+      let evictedCount = 0;
+      d.children.forEach((child) => {
+        if (child.children) {
+          console.log(`  → Evicting grandchild cache for: ${child.data.name}`);
+          cache.delete(child.data.id);
+          evictedCount++;
+        }
+      });
+      console.log(`Total grandchildren evicted: ${evictedCount}`);
+
+      cache.set(d.data.id, d.children);
       d.children = null;
+      console.log(`[COLLAPSE COMPLETE] Node collapsed and children cached\n`);
       update(d);
       return;
     }
 
-    if (d._children) {
-      d.children = d._children;
-      d._children = null;
+    // Expand from cache
+    const cachedChildren = cache.get(d.data.id);
+    if (cachedChildren) {
+      console.log(
+        `[EXPAND FROM CACHE] Restoring ${cachedChildren.length} children from cache`
+      );
+      d.children = cachedChildren;
+      console.log(`[EXPAND COMPLETE] Children restored from cache\n`);
       update(d);
       return;
     }
 
     if (!isExpandable(d)) {
+      console.log(`[NOT EXPANDABLE] Node cannot be expanded\n`);
       return;
     }
 
     if (d.data.token && Array.from(d.data.token).join(",") === "-1") {
+      console.log(`[INVALID TOKEN] Node has invalid token (-1)\n`);
       return;
     }
+
+    console.log(`[API FETCH] Fetching children from backend...`);
 
     try {
       const spaceNode: SpaceNode = {
@@ -419,10 +696,12 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
       };
 
       if (d.data.token && d.data.token.length === 1 && d.data.token[0] === -1) {
+        console.log(`[INVALID TOKEN] Token check failed\n`);
         return;
       }
 
       if (!d.data.token || d.data.token.length === 0) {
+        console.log(`[NO TOKEN] No token available\n`);
         return;
       }
 
@@ -431,23 +710,18 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
         props.pattern,
         spaceNode.remoteData.token
       );
-
-      const parsedChildren = JSON.parse(
-        children as any /* eslint-disable-line @typescript-eslint/no-explicit-any */
-      );
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+      const parsedChildren = JSON.parse(children as any);
 
       if (parsedChildren && parsedChildren.length > 0) {
         const newNodesData = initNodesFromApiResponse(parsedChildren);
         const newNodes = newNodesData.nodes;
-        const prefix = newNodesData.prefix;
 
-        let currentPath = d.data.id;
+        console.log(
+          `[API SUCCESS] Received ${newNodes.length} children from backend`
+        );
 
-        if (prefix.length > 0) {
-          prefix.forEach((prefixPart) => {
-            currentPath += `/${prefixPart}`;
-          });
-        }
+        const currentPath = d.data.id;
 
         const childrenData = newNodes.map((node: SpaceNode) => ({
           name: node.label,
@@ -462,18 +736,22 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
           const childNode = d3.hierarchy(childData) as D3Node;
           childNode.depth = d.depth + 1;
           childNode.parent = d;
-          childNode.id = ++i;
           childNode.x0 = d.x;
           childNode.y0 = d.y;
           return childNode;
         });
 
+        cache.set(d.data.id, childHierarchyNodes);
         d.children = childHierarchyNodes;
+        console.log(`[EXPAND COMPLETE] Children added and cached\n`);
         update(d);
       } else if (
         spaceNode.remoteData.expr &&
         spaceNode.remoteData.expr.trim() !== ""
       ) {
+        console.log(
+          `[EXPR PARSING] Parsing expression: ${spaceNode.remoteData.expr.substring(0, 50)}...`
+        );
         try {
           const flatNodes = flattenNodes(parse(spaceNode.remoteData.expr));
 
@@ -484,7 +762,7 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
               (node.startsWith('"') && node.endsWith('"')) ||
               (node.startsWith("'") && node.endsWith("'"))
             ) {
-              finalValue = node.slice(1, -1); // Remove quotes
+              finalValue = node.slice(1, -1);
               break;
             }
           }
@@ -502,14 +780,15 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
               d.data.name === `'${finalValue}'` ||
               d.data.name === `"${finalValue}"`)
           ) {
+            console.log(`[LEAF NODE] Value matches name, marking as leaf\n`);
             d.children = null;
-            d._children = null;
             d._isLeaf = true;
             update(d);
             return;
           }
 
           if (finalValue && finalValue !== d.data.name) {
+            console.log(`[EXPR VALUE] Creating value child: ${finalValue}`);
             const childData = {
               name: finalValue,
               id: `${d.data.id}/value`,
@@ -522,29 +801,32 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
             const childNode = d3.hierarchy(childData) as D3Node;
             childNode.depth = d.depth + 1;
             childNode.parent = d;
-            childNode.id = ++i;
             childNode.x0 = d.x;
             childNode.y0 = d.y;
 
-            d.children = [childNode];
+            const childNodes = [childNode];
+            cache.set(d.data.id, childNodes);
+            d.children = childNodes;
+            console.log(`[EXPAND COMPLETE] Expression value child added\n`);
             update(d);
           } else {
+            console.log(`[LEAF NODE] No expandable value found\n`);
             d.children = null;
-            d._children = null;
             d._isLeaf = true;
             update(d);
           }
-        } catch {
+        } catch (error) {
+          console.log(`[EXPR ERROR] Failed to parse expression:`, error);
           d.children = null;
-          d._children = null;
         }
       } else {
+        console.log(`[LEAF NODE] No children or expression\n`);
         d._isLeaf = true;
         d.children = null;
-        d._children = null;
         update(d);
       }
     } catch (error) {
+      console.log(`[API ERROR] Failed to fetch children:`, error);
       if (error instanceof Error && error.message === "noRootToken") {
         showToast({
           title: "Token Not Set",
@@ -560,7 +842,6 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
       }
       d._isLeaf = true;
       d.children = null;
-      d._children = null;
       update(d);
     }
   };
@@ -586,10 +867,6 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
     root = d3.hierarchy(treeData) as D3Node;
     root.x0 = 0;
     root.y0 = 0;
-    root.descendants().forEach((d: D3Node, index: number) => {
-      d.id = index;
-      i = index;
-    });
   });
 
   createEffect(() => {
@@ -603,13 +880,12 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
     root.x0 = 0;
     root.y0 = 0;
 
-    root.descendants().forEach((d: D3Node, index: number) => {
-      d.id = index;
-      i = index;
+    root.descendants().forEach((d: D3Node) => {
+      d.x = d.depth * indentSize;
       d.y = d.depth * indentSize;
 
       if (d.depth && d.children) {
-        d._children = d.children;
+        cache.set(d.data.id, d.children);
         d.children = null;
       }
     });
@@ -619,6 +895,7 @@ export default function D3TreeGraph(props: D3TreeGraphProps) {
 
   onCleanup(() => {
     if (containerRef) d3.select(containerRef).selectAll("*").remove();
+    cache.clear();
   });
 
   return (
