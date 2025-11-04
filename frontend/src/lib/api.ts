@@ -303,7 +303,7 @@ export const deleteToken = (root: string | null, token_id: number) => {
 
 export const deleteTokens = (root: string | null, token_ids: number[]) => {
   if (!root) throw new Error("No root token");
-  return request<number>("/tokens", {
+  return request<number>("/tokens?cascade=true", {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",

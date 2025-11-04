@@ -110,16 +110,16 @@ pub fn create(token: Token, new_token: Json<Token>) -> Result<Json<Token>, Statu
     }
 }
 
-#[delete("/tokens?<cascading>", data = "<token_ids>")]
+#[delete("/tokens?<cascade>", data = "<token_ids>")]
 pub fn delete_batch(
     token: Token,
-    cascading: Option<bool>,
+    cascade: Option<bool>,
     token_ids: Json<Vec<i32>>,
 ) -> Result<Json<i32>, Status> {
     use crate::schema::tokens::dsl::*;
     let conn = &mut establish_connection();
 
-    let result = if cascading.unwrap_or(false) {
+    let result = if cascade.unwrap_or(false) {
         // Cascading delete - delete selected tokens and all their descendants
         diesel::sql_query(
             "WITH RECURSIVE rectree AS (
