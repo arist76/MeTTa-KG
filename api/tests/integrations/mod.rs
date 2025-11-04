@@ -4,6 +4,7 @@ mod test_explore;
 mod test_export;
 mod test_import;
 mod test_read;
+mod test_tokens;
 mod test_transform;
 mod test_upload;
 

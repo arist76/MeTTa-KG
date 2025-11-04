@@ -110,22 +110,51 @@ pub fn create(token: Token, new_token: Json<Token>) -> Result<Json<Token>, Statu
     }
 }
 
-#[delete("/tokens", data = "<token_ids>")]
-pub fn delete_batch(token: Token, token_ids: Json<Vec<i32>>) -> Result<Json<i32>, Status> {
+#[delete("/tokens?<cascading>", data = "<token_ids>")]
+pub fn delete_batch(
+    token: Token,
+    cascading: Option<bool>,
+    token_ids: Json<Vec<i32>>,
+) -> Result<Json<i32>, Status> {
     use crate::schema::tokens::dsl::*;
     let conn = &mut establish_connection();
 
-    // filtering by parent ID prevents root token from being deleted
-
-    let result = diesel::delete(
-        tokens
-            .filter(id.eq_any(token_ids.iter()))
-            .filter(parent.eq(&token.id)),
-    )
-    .execute(conn);
+    let result = if cascading.unwrap_or(false) {
+        // Cascading delete - delete selected tokens and all their descendants
+        diesel::sql_query(
+            "WITH RECURSIVE rectree AS (
+                SELECT * 
+                FROM tokens 
+                WHERE id = ANY($1) AND parent = $2
+                UNION ALL 
+                SELECT t.* 
+                FROM tokens t 
+                JOIN rectree
+                ON t.parent = rectree.id
+            ) 
+            DELETE FROM tokens WHERE id IN (SELECT id FROM rectree)",
+        )
+        .bind::<diesel::sql_types::Array<Integer>, _>(&*token_ids)
+        .bind::<Integer, _>(token.id)
+        .execute(conn)
+    } else {
+        // Non-cascading delete - only delete the selected tokens
+        diesel::delete(
+            tokens
+                .filter(id.eq_any(&*token_ids))
+                .filter(parent.eq(&token.id)),
+        )
+        .execute(conn)
+    };
 
     match result {
         Ok(rows_affected) => Ok(Json(rows_affected as i32)),
+        Err(diesel::result::Error::DatabaseError(
+            diesel::result::DatabaseErrorKind::ForeignKeyViolation,
+            _,
+        )) => {
+            Err(Status::Conflict) // Cannot delete token with children without cascading
+        }
         Err(_) => Err(Status::NotFound),
     }
 }
