@@ -65,6 +65,7 @@ export async function request<T>(
 }
 
 export const transform = (path: string, transformation: Mm2Input) => {
+  console.log("Transform called with:", path, transformation);
   const patterns = Array.isArray(transformation.pattern)
     ? transformation.pattern
     : [transformation.pattern];
@@ -157,17 +158,15 @@ export async function isPathClear(path: string): Promise<boolean> {
   try {
     const cleanPath = path.replace(/^\/+|\/+$/g, "");
 
-    const requestBody = {
-      pattern: "$x",
-      token: "",
-    };
-
-    // TODO: use requests function and return value from it
-    const _response = await fetch(`${API_URL}/spaces/explore${cleanPath}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody),
-    });
+    // The explore endpoint expects: /explore/{pattern}/{token}/
+    // Use a trailing slash to indicate an empty token (root exploration)
+    await request<ExploreDetail[]>(
+      `/spaces/explore${encodeURIComponent(cleanPath)}`,
+      {
+        method: "GET", // Changed from POST to GET
+        headers: { "Content-Type": "application/json" },
+      }
+    );
 
     return true;
   } catch {
@@ -321,7 +320,7 @@ export const exploreSpace = (
   if (token instanceof Array) {
     token = Uint8Array.from(token);
   }
-  console.log("exploring: ", path, pattern, token);
+  // console.log("exploring: ", path, pattern, token);
   return request<ExploreDetail[]>(`/spaces/explore${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
