@@ -3,12 +3,7 @@ import { formatedNamespace } from "~/lib/state";
 import { ParseError } from "~/types";
 import { exploreSpace } from "~/lib/api";
 import { showToast } from "~/components/ui/Toast";
-
-type ExploreResponse = {
-  id: string;
-  name: string;
-  children: ExploreResponse[];
-};
+import type { ExploreResponse } from "~/lib/space";
 
 let graphApi: {
   expandAll?: () => void;
@@ -29,7 +24,9 @@ export const [subSpace, { refetch: refetchSubSpace }] = createResource(
   async ({ path, expr, token }) => {
     try {
       const responseString = await exploreSpace(path, expr, token);
-      const data: ExploreResponse[] = JSON.parse(responseString);
+      const data: ExploreResponse[] = JSON.parse(
+        responseString as any /* eslint-disable-line @typescript-eslint/no-explicit-any */
+      );
       showToast({
         title: "Success",
         description: `Loaded ${data.length} nodes.`,
