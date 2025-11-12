@@ -1,4 +1,4 @@
-import { For, createSignal, Show, createMemo, onMount, onCleanup, createEffect } from "solid-js";
+import { For, createSignal, Show, createMemo, onMount, onCleanup, createEffect, batch } from "solid-js";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import type { ExploreResponse, SpaceNode } from "~/lib/space";
 import { exploreSpace } from "~/lib/api";
@@ -405,10 +405,12 @@ export default function ExpressionList(props: ExpressionListProps) {
         const processedData = initNodesFromApiResponse(parsed);
 
         if (processedData.nodes.length > 0) {
-          setChildrenMap(
-            new Map(childrenMap()).set(nodePath, processedData.nodes)
-          );
-          setExpandedNodes(new Set(expanded).add(nodePath));
+          batch(() => {
+            setChildrenMap(
+              new Map(childrenMap()).set(nodePath, processedData.nodes)
+            );
+            setExpandedNodes(new Set(expanded).add(nodePath));
+          });
           debug.log('✅ Node expanded', { nodePath, childCount: processedData.nodes.length });
         } else {
           setChildrenMap(new Map(childrenMap()).set(nodePath, []));
@@ -483,7 +485,7 @@ export default function ExpressionList(props: ExpressionListProps) {
               ✅ Worker
               <Show when={stats().tasksProcessed > 0}>
                 <span class="ml-1 opacity-40">
-                  ({stats().tasksProcessed} tasks, avg {(stats().totalTime / stats().tasksProcessed).toFixed(1)}ms)
+                  ({stats().tasksProcessed} tasks, avg {(stats().totalTime / stats.tasksProcessed).toFixed(1)}ms)
                 </span>
               </Show>
             </span>
