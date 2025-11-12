@@ -1,4 +1,4 @@
-import { For, createSignal, Show, createMemo, onMount, onCleanup } from "solid-js";
+import { For, createSignal, Show, createMemo, onMount, onCleanup, createEffect } from "solid-js";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import type { ExploreResponse, SpaceNode } from "~/lib/space";
 import { exploreSpace } from "~/lib/api";
@@ -58,6 +58,13 @@ export default function ExpressionList(props: ExpressionListProps) {
     lastTaskTime: 0,
     totalTime: 0
   });
+  
+  // Changed from memo to signal for async updates
+  const [flattenedNodes, setFlattenedNodes] = createSignal<FlatNode[]>([]);
+  const [isFlattening, setIsFlattening] = createSignal<boolean>(false);
+
+  // Add a signal for scroll restoration callback
+  const [onFlattenComplete, setOnFlattenComplete] = createSignal<(() => void) | null>(null);
 
   let savedScrollTop = 0;
 
@@ -108,7 +115,6 @@ export default function ExpressionList(props: ExpressionListProps) {
       worker.onerror = (error) => {
         debug.error('💥 Worker error', error);
         setWorkerReady(false);
-        // Reject all pending messages
         pendingMessages.forEach(({ reject }) => {
           reject(new Error('Worker error'));
         });
@@ -215,6 +221,57 @@ export default function ExpressionList(props: ExpressionListProps) {
     return result;
   };
 
+  // Effect to flatten nodes
+  createEffect(async () => {
+    const nodes = props.data.nodes;
+    const expanded = expandedNodes();
+    const children = childrenMap();
+
+    // Track dependencies
+    nodes.length;
+    expanded.size;
+    children.size;
+
+    setIsFlattening(true);
+
+    try {
+      if (workerReady()) {
+        debug.log('⚙️ Using worker to flatten nodes');
+        try {
+          const result = await sendWorkerMessage<FlatNode[]>(
+            'FLATTEN_NODES',
+            {
+              nodes: nodes,
+              expandedNodeIds: Array.from(expanded),
+              childrenMap: Array.from(children.entries())
+            }
+          );
+          setFlattenedNodes(result);
+          debug.log('✅ Worker flattened successfully', { count: result.length });
+        } catch (workerError) {
+          debug.error('❌ Worker flatten failed, using main thread', workerError);
+          const result = flattenNodesMainThread(nodes, expanded, children);
+          setFlattenedNodes(result);
+        }
+      } else {
+        debug.log('🔧 Worker not ready, flattening on main thread');
+        const result = flattenNodesMainThread(nodes, expanded, children);
+        setFlattenedNodes(result);
+      }
+    } finally {
+      setIsFlattening(false);
+      
+      // ✅ Execute callback after flattening completes
+      const callback = onFlattenComplete();
+      if (callback) {
+        queueMicrotask(() => {
+          callback();
+          setOnFlattenComplete(null);
+        });
+      }
+    }
+  });
+
   const expandAll = () => {
     debug.log('🔽 Expanding all nodes');
     const allExpandableIds = new Set<string>();
@@ -260,17 +317,6 @@ export default function ExpressionList(props: ExpressionListProps) {
     return true;
   };
 
-  // Flattened nodes - always use main thread (memo must be synchronous)
-  const flattenedNodes = createMemo<FlatNode[]>(() => {
-    const nodes = props.data.nodes;
-    const expanded = expandedNodes();
-    const children = childrenMap();
-
-    // Note: createMemo must be synchronous, so we always use main thread here
-    // Worker would only be beneficial for async operations like API responses
-    return flattenNodesMainThread(nodes, expanded, children);
-  });
-
   const virtualizer = createMemo(() =>
     createVirtualizer({
       get count() {
@@ -295,8 +341,17 @@ export default function ExpressionList(props: ExpressionListProps) {
       debug.log('➖ Collapsing node', { nodePath });
       const newExpanded = new Set(expanded);
       newExpanded.delete(nodePath);
+      
+      // ✅ Set callback BEFORE collapsing (not after return)
+      setOnFlattenComplete(() => () => {
+        if (scrollRef) {
+          scrollRef.scrollTop = savedScrollTop;
+          debug.log('📍 Scroll position restored (collapse)', { scrollTop: savedScrollTop });
+        }
+      });
+      
       setExpandedNodes(newExpanded);
-      return;
+      return; // ← This returns early, but callback is already set
     }
 
     if (!isExpandable(node)) {
@@ -321,7 +376,6 @@ export default function ExpressionList(props: ExpressionListProps) {
         workerReady: workerReady()
       });
 
-      // Always use worker if available, fallback to main thread only on error
       let parsed: ExploreResponse[];
       
       if (workerReady()) {
@@ -384,9 +438,11 @@ export default function ExpressionList(props: ExpressionListProps) {
       setIsProcessing(false);
       debug.timeEnd('⚡ Toggle node');
       
-      queueMicrotask(() => {
+      // ✅ Set callback for expansion (after async work completes)
+      setOnFlattenComplete(() => () => {
         if (scrollRef) {
           scrollRef.scrollTop = savedScrollTop;
+          debug.log('📍 Scroll position restored (expand)', { scrollTop: savedScrollTop });
         }
       });
     }
@@ -416,7 +472,7 @@ export default function ExpressionList(props: ExpressionListProps) {
         }}
       >
         <span class="opacity-60">Code Explorer</span>
-        <Show when={isProcessing()}>
+        <Show when={isProcessing() || isFlattening()}>
           <span class="ml-2 opacity-40">⏳ Processing...</span>
         </Show>
         
@@ -434,7 +490,7 @@ export default function ExpressionList(props: ExpressionListProps) {
           </Show>
           <Show when={!workerReady()}>
             <span class="opacity-40">
-              {hasWorkerSupport ? '⏳ Worker: Initializing...' : '⚠️ Fallback Mode'}
+              {hasWorkerSupport ? '⏳ Initializing...' : '⚠️ Fallback'}
             </span>
           </Show>
           
