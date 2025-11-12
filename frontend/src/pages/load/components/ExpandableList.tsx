@@ -7,6 +7,7 @@ import {
   onCleanup,
   createEffect,
   batch,
+  on,
 } from "solid-js";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import type { ExploreResponse, SpaceNode } from "~/lib/space";
@@ -15,6 +16,14 @@ import { formatedNamespace } from "~/lib/state";
 import { showToast } from "~/components/ui/Toast";
 import { initNodesFromApiResponse } from "~/lib/space";
 import ExpressionListItem, { type FlatNode } from "./ExpressionListItem";
+
+// Define the shape of the data sent to the worker
+interface WorkerMessageData {
+  nodes?: SpaceNode[];
+  expandedNodeIds?: string[];
+  childrenMap?: [string, SpaceNode[]][];
+  rawResponse?: string;
+}
 
 interface ExpressionListProps {
   data: { nodes: SpaceNode[]; prefix: string[] };
@@ -35,7 +44,10 @@ export default function ExpressionList(props: ExpressionListProps) {
   let messageIdCounter = 0;
   const pendingMessages = new Map<
     string,
-    { resolve: Function; reject: Function }
+    {
+      resolve: (value: unknown) => void;
+      reject: (reason?: unknown) => void;
+    }
   >();
 
   const [expandedNodes, setExpandedNodes] = createSignal<Set<string>>(
@@ -97,14 +109,14 @@ export default function ExpressionList(props: ExpressionListProps) {
         }
       };
 
-      worker.onerror = (error) => {
+      worker.onerror = () => {
         setWorkerReady(false);
         pendingMessages.forEach(({ reject }) => {
           reject(new Error("Worker error"));
         });
         pendingMessages.clear();
       };
-    } catch (error) {
+    } catch {
       worker = null;
     }
   }
@@ -122,7 +134,11 @@ export default function ExpressionList(props: ExpressionListProps) {
     pendingMessages.clear();
   });
 
-  const sendWorkerMessage = <T,>(type: string, data: any): Promise<T> => {
+  const sendWorkerMessage = <T,>(
+    type: string,
+    data: WorkerMessageData,
+    sharedBuffer?: SharedArrayBuffer
+  ): Promise<T> => {
     return new Promise((resolve, reject) => {
       if (!worker || !workerReady()) {
         reject(new Error("Worker not available"));
@@ -130,13 +146,18 @@ export default function ExpressionList(props: ExpressionListProps) {
       }
 
       const id = `msg_${++messageIdCounter}`;
-      pendingMessages.set(id, { resolve, reject });
+
+      pendingMessages.set(id, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+      });
 
       worker.postMessage({
         type,
         id,
         data,
         useSharedMemory: hasSharedArrayBuffer,
+        sharedBuffer: sharedBuffer,
       });
 
       setTimeout(() => {
@@ -179,46 +200,51 @@ export default function ExpressionList(props: ExpressionListProps) {
     return result;
   };
 
-  createEffect(async () => {
-    const nodes = props.data.nodes;
-    const expanded = expandedNodes();
-    const children = childrenMap();
+  createEffect(
+    on(
+      () =>
+        [props.data.nodes, expandedNodes(), childrenMap()] as [
+          SpaceNode[],
+          Set<string>,
+          Map<string, SpaceNode[]>,
+        ],
+      async ([nodes, expanded, children]) => {
+        setIsFlattening(true);
 
-    nodes.length;
-    expanded.size;
-    children.size;
-
-    setIsFlattening(true);
-
-    try {
-      if (workerReady()) {
         try {
-          const result = await sendWorkerMessage<FlatNode[]>("FLATTEN_NODES", {
-            nodes: nodes,
-            expandedNodeIds: Array.from(expanded),
-            childrenMap: Array.from(children.entries()),
-          });
-          setFlattenedNodes(result);
-        } catch (workerError) {
-          const result = flattenNodesMainThread(nodes, expanded, children);
-          setFlattenedNodes(result);
-        }
-      } else {
-        const result = flattenNodesMainThread(nodes, expanded, children);
-        setFlattenedNodes(result);
-      }
-    } finally {
-      setIsFlattening(false);
+          if (workerReady()) {
+            try {
+              const result = await sendWorkerMessage<FlatNode[]>(
+                "FLATTEN_NODES",
+                {
+                  nodes: nodes,
+                  expandedNodeIds: Array.from(expanded),
+                  childrenMap: Array.from(children.entries()),
+                }
+              );
+              setFlattenedNodes(result);
+            } catch {
+              const result = flattenNodesMainThread(nodes, expanded, children);
+              setFlattenedNodes(result);
+            }
+          } else {
+            const result = flattenNodesMainThread(nodes, expanded, children);
+            setFlattenedNodes(result);
+          }
+        } finally {
+          setIsFlattening(false);
 
-      const callback = onFlattenComplete();
-      if (callback) {
-        queueMicrotask(() => {
-          callback();
-          setOnFlattenComplete(null);
-        });
+          const callback = onFlattenComplete();
+          if (callback) {
+            queueMicrotask(() => {
+              callback();
+              setOnFlattenComplete(null);
+            });
+          }
+        }
       }
-    }
-  });
+    )
+  );
 
   const expandAll = () => {
     const allExpandableIds = new Set<string>();
@@ -322,12 +348,31 @@ export default function ExpressionList(props: ExpressionListProps) {
 
       if (workerReady()) {
         try {
-          const result = await sendWorkerMessage<{ parsed: ExploreResponse[] }>(
-            "PROCESS_NODES",
-            { rawResponse: response }
-          );
+          let result: { parsed: ExploreResponse[] };
+
+          if (hasSharedArrayBuffer) {
+            // If SAB is supported, encode and send the buffer
+            const encoder = new TextEncoder();
+            const encodedString = encoder.encode(response);
+            const buffer = new SharedArrayBuffer(encodedString.length);
+            const view = new Uint8Array(buffer);
+            view.set(encodedString);
+
+            // Pass the buffer as the third argument
+            result = await sendWorkerMessage<{ parsed: ExploreResponse[] }>(
+              "PROCESS_NODES",
+              {}, // Data object can be empty now
+              buffer
+            );
+          } else {
+            // Fallback for browsers without SAB support
+            result = await sendWorkerMessage<{ parsed: ExploreResponse[] }>(
+              "PROCESS_NODES",
+              { rawResponse: response }
+            );
+          }
           parsed = result.parsed;
-        } catch (workerError) {
+        } catch {
           parsed = JSON.parse(response) as ExploreResponse[];
         }
       } else {

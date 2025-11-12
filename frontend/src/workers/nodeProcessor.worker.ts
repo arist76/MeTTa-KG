@@ -5,13 +5,32 @@ interface SpaceNode {
   };
 }
 
+// A representation of the flattened node structure for the worker
+interface FlatNode {
+  node: SpaceNode;
+  id: string;
+  depth: number;
+}
+
+// A representation of a single item from the API response
+interface ExploreResponseItem {
+  token: number[];
+  expr: string;
+}
+
+// The shape of the object returned by processApiResponse
+interface ProcessedResponse {
+  parsed: ExploreResponseItem[];
+  timestamp: number;
+}
+
 interface WorkerMessage {
   type: "FLATTEN_NODES" | "PROCESS_NODES";
   id: string;
   data: {
-    nodes?: any[];
+    nodes?: SpaceNode[];
     expandedNodeIds?: string[];
-    childrenMap?: [string, any[]][];
+    childrenMap?: [string, SpaceNode[]][];
     rawResponse?: string;
   };
   useSharedMemory?: boolean;
@@ -21,13 +40,10 @@ interface WorkerMessage {
 interface WorkerResponse {
   type: "READY" | "FLATTEN_RESULT" | "PROCESS_RESULT" | "ERROR";
   id?: string;
-  data?: any;
+  data?: FlatNode[] | ProcessedResponse;
   error?: string;
   timing?: number;
 }
-
-// Check if SharedArrayBuffer is available
-const hasSharedArrayBuffer = typeof SharedArrayBuffer !== "undefined";
 
 // Helper function to get node ID
 function getNodeId(node: SpaceNode): string {
@@ -38,14 +54,14 @@ function getNodeId(node: SpaceNode): string {
 
 // Flatten nodes computation (expensive operation)
 function flattenNodes(
-  rootNodes: any[],
+  rootNodes: SpaceNode[],
   expandedNodeIds: Set<string>,
-  childrenMap: Map<string, any[]>
-): any[] {
-  const result: any[] = [];
+  childrenMap: Map<string, SpaceNode[]>
+): FlatNode[] {
+  const result: FlatNode[] = [];
   const visited = new Set<string>();
 
-  const addNode = (node: any, depth: number, path: string) => {
+  const addNode = (node: SpaceNode, depth: number, path: string) => {
     if (visited.has(path)) {
       return;
     }
@@ -56,7 +72,7 @@ function flattenNodes(
     if (expandedNodeIds.has(path) && childrenMap.has(path)) {
       const nodeChildren = childrenMap.get(path)!;
 
-      nodeChildren.forEach((child: any, index: number) => {
+      nodeChildren.forEach((child: SpaceNode, index: number) => {
         const childPath = `${path}/${getNodeId(child)}#${index}`;
         addNode(child, depth + 1, childPath);
       });
@@ -72,20 +88,16 @@ function flattenNodes(
 }
 
 // Process API response (expensive JSON parsing and processing)
-function processApiResponse(rawResponse: string): any {
-  try {
-    const parsed = JSON.parse(rawResponse);
+function processApiResponse(rawResponse: string): ProcessedResponse {
+  const parsed = JSON.parse(rawResponse) as ExploreResponseItem[];
 
-    // Add any expensive processing here
-    const result = {
-      parsed,
-      timestamp: Date.now(),
-    };
+  // Add any expensive processing here
+  const result = {
+    parsed,
+    timestamp: Date.now(),
+  };
 
-    return result;
-  } catch (error) {
-    throw error;
-  }
+  return result;
 }
 
 // Send ready signal
@@ -93,6 +105,7 @@ self.postMessage({ type: "READY" });
 
 // Handle incoming messages
 self.onmessage = (event: MessageEvent<WorkerMessage>) => {
+  // Destructure sharedBuffer from the top level of event.data
   const { type, id, data, useSharedMemory, sharedBuffer } = event.data;
 
   const startTime = performance.now();
@@ -121,7 +134,19 @@ self.onmessage = (event: MessageEvent<WorkerMessage>) => {
       }
 
       case "PROCESS_NODES": {
-        const processed = processApiResponse(data.rawResponse || "");
+        let rawResponse: string;
+
+        // Use the sharedBuffer if it exists, otherwise fall back to rawResponse from data
+        if (useSharedMemory && sharedBuffer) {
+          const view = new Uint8Array(sharedBuffer);
+          rawResponse = new TextDecoder().decode(view);
+        } else if (data.rawResponse) {
+          rawResponse = data.rawResponse;
+        } else {
+          throw new Error("No data provided for PROCESS_NODES");
+        }
+
+        const processed = processApiResponse(rawResponse);
 
         response = {
           type: "PROCESS_RESULT",
