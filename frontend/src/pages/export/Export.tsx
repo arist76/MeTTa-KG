@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/Select";
+import { MaxWriteForm } from "./components/MaxWriteForm";
 import { OutputViewer } from "./components/OutputViewer";
 import Loader2 from "lucide-solid/icons/loader-2";
 import Download from "lucide-solid/icons/download";
@@ -25,6 +26,8 @@ import {
   result,
   exportError,
   handleExport,
+  maxWrite,
+  setMaxWrite,
 } from "./lib";
 
 const ExportPage: Component = () => {
@@ -69,7 +72,8 @@ const ExportPage: Component = () => {
           {/*     disabled={isLoading()} */}
           {/*   /> */}
           {/* </TextField> */}
-
+          <div class="flex items-end gap-4">
+          <div class="flex-grow">
           <TextField class="space-y-2">
             <TextFieldLabel for="export-format">Format</TextFieldLabel>
             <Select
@@ -92,6 +96,13 @@ const ExportPage: Component = () => {
               <SelectContent />
             </Select>
           </TextField>
+        </div>
+            <MaxWriteForm
+              max_write={maxWrite()}
+              setMaxWrite={setMaxWrite}
+              isLoading={isLoading()}
+            />
+          </div>
         </div>
 
         <div class="mt-4">

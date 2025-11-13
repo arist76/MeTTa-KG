@@ -10,11 +10,13 @@ export const [pattern, setPattern] = createSignal("$x\n\n\n");
 export const [template, setTemplate] = createSignal("$x\n\n\n");
 export const [result, setResult] = createSignal<string | null>(null);
 export const [exportError, setExportError] = createSignal<Error | null>(null);
+export const [maxWrite, setMaxWrite] = createSignal<number | null>(null);
 
 export const handleExport = async (spacePath: string) => {
   const exportInput: Mm2Input = {
     pattern: pattern().trim() || "$x",
     template: template().trim() || "$x",
+    max_write: maxWrite(),
   };
 
   setIsLoading(true);
@@ -31,11 +33,14 @@ export const handleExport = async (spacePath: string) => {
       return;
     }
     const exportResponse = await exportSpace(spacePath, exportInput);
-    setResult(exportResponse || "()");
-    showToast({
-      title: "Export Complete",
-      description: `Exported data with pattern: ${exportInput.pattern}`,
-    });
+    if(exportInput.max_write <= 0){
+      setResult(null);
+    }else{
+        setResult(exportResponse || "()");
+        showToast({
+          title: "Export Complete",
+          description: `Exported data with pattern: ${exportInput.pattern}`,
+        })};
   } catch (e) {
     const error = e instanceof Error ? e : new Error("Failed to export data");
     setExportError(error);
