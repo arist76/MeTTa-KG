@@ -26,6 +26,7 @@ pub struct Mm2InputMulti {
 pub struct Mm2Input {
     pub pattern: String,
     pub template: String,
+    pub max_write: Option<usize>,
 }
 
 #[derive(Default, Serialize, Deserialize, Clone)]
@@ -185,7 +186,8 @@ pub async fn export(
         .namespace(path)
         .pattern(export_input.pattern.clone())
         .template(export_input.template.clone())
-        .format(ExportFormat::Metta);
+        .format(ExportFormat::Metta)
+        .max_write(export_input.max_write.clone());
 
     println!("Dispatching export request to Mork: {}", request.path());
 
