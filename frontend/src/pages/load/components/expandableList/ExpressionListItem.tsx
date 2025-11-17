@@ -72,7 +72,7 @@ export default function ExpressionListItem(props: ExpressionListItemProps) {
           "padding-left": props.isIndented ? `${depth * 16 + 8}px` : "8px",
         }}
       >
-        {/* Indentation guides */}
+        {/* Indentation guides for indented mode */}
         <Show when={props.isIndented}>
           <For each={Array.from({ length: depth })}>
             {(_, i) => (
@@ -85,6 +85,40 @@ export default function ExpressionListItem(props: ExpressionListItemProps) {
                 }}
               />
             )}
+          </For>
+        </Show>
+
+        {/* Depth indicators on the right for non-indented mode */}
+        <Show when={!props.isIndented}>
+          <For each={Array.from({ length: depth + 1 })}>
+            {(_, i) => {
+              const depthLevel = i();
+              const colors = [
+                "#4ec9b0", // cyan
+                "#c586c0", // purple
+                "#4fc1ff", // blue
+                "#dcdcaa", // yellow
+                "#ce9178", // orange
+                "#569cd6", // light blue
+                "#d16969", // red
+                "#6a9955", // green
+              ];
+              const color = colors[depthLevel % colors.length];
+              const barWidth = 15;
+              const spacing = 2;
+
+              return (
+                <div
+                  class="absolute h-full "
+                  style={{
+                    right: `${depthLevel * (barWidth + spacing)}px`,
+                    width: `${barWidth}px`,
+                    "background-color": color,
+                    opacity: "0.5",
+                  }}
+                />
+              );
+            }}
           </For>
         </Show>
 
