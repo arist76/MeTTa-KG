@@ -3,12 +3,17 @@ import MettaEditor from "../../components/common/MettaEditor";
 import { CommandCard } from "~/components/common/CommandCard";
 import { formatedNamespace } from "~/lib/state";
 import { isLoading, isPolling, executeTransform, stopPolling } from "./lib";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/Tabs";
+import Code from "lucide-solid/icons/code";
+import Layout from "lucide-solid/icons/layout";
+import { TransformBuilder } from "./components/TransformBuilder";
 
 const TransformPage: Component = () => {
   const [sExpr, setSExpr] = createSignal(`(transform 
   (, $x)
   (, $x)
 )`);
+  const [activeTab, setActiveTab] = createSignal("builder");
 
   onCleanup(stopPolling);
 
@@ -24,15 +29,32 @@ const TransformPage: Component = () => {
         title="Transform Data"
         description="Apply templates to matched patterns. Input S-Expression like: (transform (, (pattern)) (, (template)))"
       >
-        <div class="space-y-4">
-          <MettaEditor
-            initialText={sExpr()}
-            onTextChange={setSExpr}
-            onFileUpload={handleFileUpload}
-            parseErrors={[]}
-            showActionButtons={false}
-          />
-        </div>
+        <Tabs value={activeTab()} onChange={setActiveTab} class="w-full">
+          <TabsList class="grid w-full grid-cols-2">
+            <TabsTrigger value="builder" class="flex items-center gap-2">
+              <Layout class="h-4 w-4" /> UI Builder
+            </TabsTrigger>
+            <TabsTrigger value="code" class="flex items-center gap-2">
+              <Code class="h-4 w-4" /> Code Input
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="builder">
+            <TransformBuilder onCodeChange={setSExpr} />
+          </TabsContent>
+
+          <TabsContent value="code">
+            <div class="space-y-4 mt-4">
+              <MettaEditor
+                initialText={sExpr()}
+                onTextChange={setSExpr}
+                onFileUpload={handleFileUpload}
+                parseErrors={[]}
+                showActionButtons={false}
+              />
+            </div>
+          </TabsContent>
+        </Tabs>
 
         <button
           onClick={handleTransform}
