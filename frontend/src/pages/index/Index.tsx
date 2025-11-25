@@ -17,6 +17,7 @@ import Key from "lucide-solid/icons/key";
 import NotImplemented from "~/components/common/NotImplemented";
 import Trash2 from "lucide-solid/icons/trash-2";
 import UnionPage from "../union/Union";
+import RestrictPage from "../restrict/Restrict";
 
 const sidebarSections = [
   {
@@ -79,6 +80,7 @@ const sidebarSections = [
         label: "Restrict",
         icon: () => <span class="text-xl font-bold">◁</span>,
         to: "/restrict",
+        component: RestrictPage,
       },
       {
         id: "decapitate",
