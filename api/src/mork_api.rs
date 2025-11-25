@@ -153,7 +153,6 @@ impl Namespace {
 
         result
     }
-
 }
 
 impl From<PathBuf> for Namespace {
@@ -511,7 +510,7 @@ impl Default for UploadRequest {
             pattern: String::new(),
             template: String::new(),
             data: String::new(),
-            data_tag: true,         // ← your desired default
+            data_tag: true, // ← your desired default
         }
     }
 }
@@ -541,11 +540,10 @@ impl UploadRequest {
         self
     }
 
-    pub fn data_tag(mut self, val:bool) -> Self {
+    pub fn data_tag(mut self, val: bool) -> Self {
         self.data_tag = val;
         self
     }
-
 }
 
 impl Request for UploadRequest {
@@ -703,7 +701,7 @@ impl ExecRequest {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     pub fn set_exec_input(mut self, exec_input: String) -> Self {
         self.exec_input = exec_input;
         self
@@ -713,12 +711,11 @@ impl ExecRequest {
         self.location = location;
         self
     }
-    
+
     pub fn set_temp_ns(mut self, temp_ns: Vec<String>) -> Self {
         self.temp_ns = Some(temp_ns);
         self
     }
-
 }
 
 impl Request for ExecRequest {
@@ -735,8 +732,6 @@ impl Request for ExecRequest {
     fn body(&self) -> Option<Self::Body> {
         None
     }
-
-
 }
 
 #[cfg(test)]
