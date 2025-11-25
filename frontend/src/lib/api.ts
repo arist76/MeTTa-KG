@@ -106,6 +106,27 @@ export const union = (unification: Mm2Input) => {
     });
 };
 
+export const restrict = (restriction: Mm2Input) => {
+  const patterns = Array.isArray(restriction.pattern)
+    ? restriction.pattern
+    : [restriction.pattern];
+  const templates = Array.isArray(restriction.template)
+    ? restriction.template
+    : [restriction.template];
+
+  return request<boolean>(`/spaces/restriction`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source: patterns, target: templates, steps: 12 }),
+  })
+    .then((result) => {
+      return result;
+    })
+    .catch((error) => {
+      throw error;
+    });
+};
+
 export const composition = (compositionInput: {
   source: string[];
   target: string[];
