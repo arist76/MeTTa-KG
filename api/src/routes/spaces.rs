@@ -4,14 +4,17 @@ use rocket::serde::json::Json;
 use rocket::tokio::io::AsyncReadExt;
 use serde::{Deserialize, Serialize};
 use url::Url;
+use std::thread;
+use std::time::Duration;
 
 use rocket::response::status::Custom;
 use rocket::{get, post, Data};
+use uuid::Uuid;
 use std::path::PathBuf;
 
 use crate::model::Token;
 use crate::mork_api::{
-    ClearRequest, ExploreRequest, ExportFormat, ExportRequest, ImportRequest, Mm2Cell,
+    ClearRequest, ExecRequest, ExploreRequest, ExportFormat, ExportRequest, ImportRequest, Mm2Cell,
     MorkApiClient, Namespace, ReadRequest, Request, TransformDetails, TransformRequest,
     UploadRequest,
 };
@@ -90,6 +93,13 @@ pub struct ExploreInput {
 pub struct SetOperationInput {
     pub source: Vec<String>,
     pub target: Vec<String>,
+}
+
+#[derive(Default, Serialize, Deserialize, Clone)]
+pub struct ExecOperationInput {
+    #[serde(flatten)]
+    pub base: SetOperationInput,
+    pub steps: i32,
 }
 
 impl SourceTargetPermissions for SetOperationInput {
@@ -367,6 +377,139 @@ pub async fn union(
     Ok(Json(true))
 }
 
+#[post("/spaces/restriction", data = "<operation_input>")]
+pub async fn restriction(
+    token: Token,
+    operation_input: Json<ExecOperationInput>
+) -> Result<Json<bool>, Status> {
+
+    if !operation_input.base.source_target_permissions(token) {
+        return Err(Status::Unauthorized);
+    }
+
+    if operation_input.base.source.len() < 2 {  
+        return Err(Status::BadRequest);  
+    }  
+      
+    if operation_input.base.target.is_empty() {  
+        return Err(Status::BadRequest);  
+    }
+
+    if operation_input.steps == 0 {
+        return Err(Status::BadRequest);
+    }
+
+    let l_pattern = 
+            Mm2Cell::new_pattern(
+                "$data".to_string(), 
+                Namespace::from_path_string(&operation_input.base.source[0]))
+            .build();
+    
+    let r_pattern = 
+            Mm2Cell::new_pattern(
+                "$pattern".to_string(), 
+                Namespace::from_path_string(&operation_input.base.source[1]))
+            .build();
+
+    let template = 
+            Mm2Cell::new_pattern(
+                "$full_data".to_string(), 
+                Namespace::from_path_string(&operation_input.base.target[0]))
+            .build();
+
+    let data_tag = "a727d4f9-836a-4e4c-9480";
+    let location = "restrict".to_string();
+    let prefix_ns = Uuid::new_v4(); 
+    let steps_ns = Uuid::new_v4().to_string();
+    
+    let exec_template = format!(
+"
+(exec ({location} (IC 0 1 {}))
+    (, (exec ({location} (IC $x $y (S $c))) $sp $st) ({steps_ns} ({steps_ns}{data_tag} ((step $x) $p $t))) )
+    (, 
+        (exec ({location} (IC 1 0 $c)) $sp $st)
+        (exec ({location} (R $x)) $p $t)
+    )
+)
+",
+        peano(operation_input.steps),
+);
+    let step_template = format!(
+"
+((step 0)  
+    (, {l_pattern} {r_pattern})  
+    (, ({prefix_ns} ({prefix_ns}{data_tag} ($data $pattern $data))) )
+)  
+((step 1)  
+    (, ({prefix_ns} ({prefix_ns}{data_tag} (($x $y) ($x $z) $full_data))))
+    (, ({prefix_ns} ({prefix_ns}{data_tag} ($y $z $full_data))))
+)  
+((step 1)  
+    (, ({prefix_ns} ({prefix_ns}{data_tag} (($x $z) ($x) $full_data))) )
+    (, {template} )
+)
+((step 1)  
+    (, ({prefix_ns} ({prefix_ns}{data_tag} (($x) ($x) $full_data))))
+    (, {template} )
+)"
+);
+
+    let mork_api_client = MorkApiClient::new();
+    let su_request = UploadRequest::new()
+        .namespace(PathBuf::from(format!("/{}", steps_ns)))
+        .pattern("$x".to_string())
+        .template("$x".to_string())
+        .data(step_template);
+
+    match mork_api_client.dispatch(su_request).await {
+        Ok(_) => {}
+        Err(_) => return Err(Status::InternalServerError)
+    };
+
+    let eu_request = UploadRequest::new()
+        .namespace(PathBuf::new())
+        .pattern("$x".to_string())
+        .template("$x".to_string())
+        .data_tag(false)
+        .data(exec_template);
+
+    match mork_api_client.dispatch(eu_request).await {
+        Ok(_) => {}
+        Err(_) => return Err(Status::InternalServerError)
+    };
+
+
+    let e_request = ExecRequest::new()
+        .set_location(location);
+
+    match mork_api_client.dispatch(e_request).await {
+        Ok(_) => {}
+        Err(_) => return Err(Status::InternalServerError)
+    };
+
+    thread::sleep(Duration::from_secs(1)); 
+    let step_del_request = ClearRequest::new()
+        .namespace(PathBuf::from(format!("/{}", steps_ns)))
+        .expr("$x".to_string());
+
+    match mork_api_client.dispatch(step_del_request).await {
+        Ok(_) => {}
+        Err(_) => return Err(Status::InternalServerError)
+    };
+
+
+    let exec_del_request = ClearRequest::new()
+        .namespace(PathBuf::from(format!("/{}", prefix_ns)))
+        .expr("$x".to_string());
+
+    match mork_api_client.dispatch(exec_del_request).await {
+        Ok(_) => {}
+        Err(_) => return Err(Status::InternalServerError)
+    };
+
+    Ok(Json(true))
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////// HELPER FUNCTIONS ////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -381,6 +524,10 @@ fn int_to_lower(n: u8) -> Option<char> {
     };
 
     Some((BASE + n) as char)
+}
+
+fn peano(depth: i32) -> String {
+    "(S ".repeat(depth as usize) + "Z" + &")".repeat(depth as usize)
 }
 
 fn composition_transform(input: SetOperationInput) -> Result<TransformDetails, Status> {

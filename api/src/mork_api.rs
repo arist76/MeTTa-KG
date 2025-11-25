@@ -143,6 +143,17 @@ impl Namespace {
 
         result
     }
+
+    pub fn with_root_namespace(&self, value: &str) -> String {
+        let mut result = value.to_string();
+
+        for name in self.path.iter().rev() {
+            result = format!("({name} {result})");
+        }
+
+        result
+    }
+
 }
 
 impl From<PathBuf> for Namespace {
@@ -210,6 +221,7 @@ impl MorkApiClient {
 
     pub async fn dispatch<R: Request>(&self, request: R) -> Result<String, Status> {
         let url = format!("{}{}", self.base_url, request.path());
+        println!("url {url}");
         let mut http_request = self.client.request(request.method(), &url);
 
         if request.path().starts_with("/upload/") || request.path() == "/transform" {
@@ -484,12 +496,24 @@ impl Request for ExploreRequest {
     }
 }
 
-#[derive(Default)]
 pub struct UploadRequest {
     namespace: Namespace,
     pattern: String,
     template: String,
     data: String,
+    data_tag: bool,
+}
+
+impl Default for UploadRequest {
+    fn default() -> Self {
+        Self {
+            namespace: Namespace::default(), // assuming Namespace has Default
+            pattern: String::new(),
+            template: String::new(),
+            data: String::new(),
+            data_tag: true,         // ← your desired default
+        }
+    }
 }
 
 impl UploadRequest {
@@ -516,6 +540,12 @@ impl UploadRequest {
         self.data = data;
         self
     }
+
+    pub fn data_tag(mut self, val:bool) -> Self {
+        self.data_tag = val;
+        self
+    }
+
 }
 
 impl Request for UploadRequest {
@@ -526,6 +556,13 @@ impl Request for UploadRequest {
     }
 
     fn path(&self) -> String {
+        if !self.data_tag {
+            return format!(
+                "/upload/{}/{}",
+                urlencoding::encode(&self.pattern),
+                urlencoding::encode(&self.namespace.with_root_namespace(&self.template))
+            );
+        }
         format!(
             "/upload/{}/{}",
             urlencoding::encode(&self.pattern),
@@ -653,6 +690,53 @@ impl Request for ClearRequest {
     fn body(&self) -> Option<Self::Body> {
         None
     }
+}
+
+#[derive(Default)]
+pub struct ExecRequest {
+    location: String,
+    exec_input: String,
+    temp_ns: Option<Vec<String>>,
+}
+
+impl ExecRequest {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    
+    pub fn set_exec_input(mut self, exec_input: String) -> Self {
+        self.exec_input = exec_input;
+        self
+    }
+
+    pub fn set_location(mut self, location: String) -> Self {
+        self.location = location;
+        self
+    }
+    
+    pub fn set_temp_ns(mut self, temp_ns: Vec<String>) -> Self {
+        self.temp_ns = Some(temp_ns);
+        self
+    }
+
+}
+
+impl Request for ExecRequest {
+    type Body = ();
+
+    fn method(&self) -> Method {
+        Method::GET
+    }
+
+    fn path(&self) -> String {
+        format!("/metta_thread/?location={}", self.location)
+    }
+
+    fn body(&self) -> Option<Self::Body> {
+        None
+    }
+
+
 }
 
 #[cfg(test)]
