@@ -27,3 +27,8 @@ export interface Mm2Input {
   pattern: string[] | string;
   template: string[] | string;
 }
+
+export type setOperationInput = {
+  pattern: string[];
+  template: string[];
+};

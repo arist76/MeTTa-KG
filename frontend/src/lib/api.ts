@@ -106,6 +106,27 @@ export const union = (unification: Mm2Input) => {
     });
 };
 
+export const subsumption = (subsumption: Mm2Input) => {
+  const patterns = Array.isArray(subsumption.pattern)
+    ? subsumption.pattern
+    : [subsumption.pattern];
+  const templates = Array.isArray(subsumption.template)
+    ? subsumption.template
+    : [subsumption.template];
+
+  return request<boolean>(`/spaces/subsumption`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source: patterns, target: templates }),
+  })
+    .then((result) => {
+      return result;
+    })
+    .catch((error) => {
+      throw error;
+    });
+};
+
 export const composition = (compositionInput: {
   source: string[];
   target: string[];

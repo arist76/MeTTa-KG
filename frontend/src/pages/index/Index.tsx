@@ -17,6 +17,7 @@ import Key from "lucide-solid/icons/key";
 import NotImplemented from "~/components/common/NotImplemented";
 import Trash2 from "lucide-solid/icons/trash-2";
 import UnionPage from "../union/Union";
+import SubsumptionPage from "../subsumption/Subsumption";
 
 const sidebarSections = [
   {
@@ -97,6 +98,13 @@ const sidebarSections = [
         label: "Cartesian",
         icon: () => <span class="text-xl">X</span>,
         to: "/cartesian",
+      },
+      {
+        id: "subsumption",
+        label: "Subsumption",
+        icon: () => <span class="text-xl">^</span>,
+        to: "/subsumtion",
+        component: SubsumptionPage,
       },
     ],
   },
