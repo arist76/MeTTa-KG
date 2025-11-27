@@ -1,4 +1,3 @@
-use rocket::futures::future::join_all;
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::tokio::io::AsyncReadExt;
@@ -8,6 +7,8 @@ use url::Url;
 use rocket::response::status::Custom;
 use rocket::{get, post, Data};
 use std::path::PathBuf;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use crate::model::Token;
 use crate::mork_api::{
@@ -344,24 +345,18 @@ pub async fn union(
 
     // create a vector of queries
     let transform_inputs = union_transform(operation_input.into_inner())?;
+    let mork_api_client = MorkApiClient::new();
 
-    let futures = transform_inputs
-        .iter()
-        .map(async |transform_input| {
-            let request = TransformRequest::new().transform_input(transform_input.clone());
-            let mork_api_client = MorkApiClient::new();
+    for transform_input in transform_inputs {
+        let template_path = PathBuf::from(transform_input.templates[0].build());
+        let request = TransformRequest::new().transform_input(transform_input);
 
-            mork_api_client.dispatch(request).await
-        })
-        .collect::<Vec<_>>();
+        match mork_api_client.dispatch(request).await {
+            Ok(_) => {}
+            Err(e) => return Err(e),
+        };
 
-    let results = join_all(futures).await;
-
-    // Check if any requests failed
-    for result in results {
-        if let Err(e) = result {
-            Err(e)?
-        }
+        poll(template_path, &mork_api_client).await?;
     }
 
     Ok(Json(true))
@@ -381,6 +376,32 @@ fn int_to_lower(n: u8) -> Option<char> {
     };
 
     Some((BASE + n) as char)
+}
+
+async fn poll(path: PathBuf, mork_api_client: &MorkApiClient) -> Result<bool, Status> {
+    let start_time = Instant::now();
+    let timeout_duration = Duration::from_secs(30);
+
+    loop {
+        if start_time.elapsed() > timeout_duration {
+            return Err(Status::RequestTimeout);
+        }
+        thread::sleep(Duration::from_millis(500));
+
+        // Check if space is clear by exploring it
+        let check_request = ExploreRequest::new()
+            .namespace(path.clone())
+            .pattern("$x".to_string())
+            .token("".to_string());
+
+        match mork_api_client.dispatch(check_request).await {
+            Ok(result) if result.trim().is_empty() || result == "[]" => {
+                return Ok(true); // Space is clear, operation complete
+            }
+            Ok(_) => continue, // Still processing
+            Err(_) => return Err(Status::RequestTimeout),
+        }
+    }
 }
 
 fn composition_transform(input: SetOperationInput) -> Result<TransformDetails, Status> {
