@@ -60,6 +60,7 @@ pub fn rocket() -> Rocket<Build> {
                 routes::spaces::clear,
                 routes::spaces::composition,
                 routes::spaces::union,
+                routes::spaces::subsumption,
             ],
         )
         .attach(cors.clone())

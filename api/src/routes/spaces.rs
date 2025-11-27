@@ -367,6 +367,26 @@ pub async fn union(
     Ok(Json(true))
 }
 
+#[post("/spaces/subsumption", data = "<operation_input>")]
+pub async fn subsumption(
+    token: Token,
+    operation_input: Json<SetOperationInput>,
+) -> Result<Json<bool>, Status> {
+    if !operation_input.source_target_permissions(token) {
+        return Err(Status::Unauthorized);
+    }
+
+    let subsumption_inputs = subsumption_transform(operation_input.into_inner())?;
+
+    let request = TransformRequest::new().transform_input(subsumption_inputs.clone());
+    let mork_api_client = MorkApiClient::new();
+
+    match mork_api_client.dispatch(request).await {
+        Ok(_) => Ok(Json(true)),
+        Err(e) => Err(e),
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////// HELPER FUNCTIONS ////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -445,6 +465,27 @@ fn union_transform(input: SetOperationInput) -> Result<Vec<TransformDetails>, St
     Ok(union_query)
 }
 
+fn subsumption_transform(input: SetOperationInput) -> Result<TransformDetails, Status> {
+    let Some(source) = input.source.first() else {
+        return Err(Status::BadRequest);
+    };
+
+    let Some(target) = input.target.first() else {
+        return Err(Status::BadRequest);
+    };
+
+    let subsumtion_query = TransformDetails::new()
+        .patterns(vec![Mm2Cell::new_pattern(
+            "($x $y)".to_string(),
+            Namespace::from_path_string(source),
+        )])
+        .templates(vec![Mm2Cell::new_template(
+            "$x".to_string(),
+            Namespace::from_path_string(target),
+        )]);
+
+    Ok(subsumtion_query)
+}
 // unit tests
 #[cfg(test)]
 mod tests {
