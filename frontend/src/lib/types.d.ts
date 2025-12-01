@@ -28,3 +28,26 @@ export interface Mm2Input {
   template: string[] | string;
   max_write?: number | null;
 }
+export interface Mm2CellValue {
+  value: string;
+  namespace: string[];
+}
+
+interface Mm2CellPattern extends Mm2CellValue {
+  kind: "pattern";
+}
+
+interface Mm2CellTemplate extends Mm2CellValue {
+  kind: "template";
+}
+
+type Mm2Cell = Mm2CellPattern | Mm2CellTemplate;
+
+export interface Item extends Mm2CellValue {
+  id: string;
+}
+
+interface Mm2InputMultiWithNamespace {
+  patterns: Mm2Cell[];
+  templates: Mm2Cell[];
+}
