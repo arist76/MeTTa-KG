@@ -28,6 +28,7 @@ import {
   handleExport,
   maxWrite,
   setMaxWrite,
+  isInputValid,
 } from "./lib";
 
 const ExportPage: Component = () => {
@@ -108,7 +109,7 @@ const ExportPage: Component = () => {
         <div class="mt-4">
           <Button
             onClick={() => handleExport(formatedNamespace())}
-            disabled={isLoading() || !pattern().trim() || !template().trim()}
+            disabled={isLoading() || !pattern().trim() || !template().trim() || !isInputValid(maxWrite())}
             class="w-36"
           >
             <Show

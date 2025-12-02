@@ -4,7 +4,7 @@ import {
   TextFieldInput,
   TextFieldLabel,
 } from "~/components/ui/TextField";
-import { showToast } from "~/components/ui/Toast";
+import { handleInput } from "../lib";
 
 interface ExportFormProps {
   max_write?: number | null;
@@ -13,21 +13,6 @@ interface ExportFormProps {
 }
 
 export const MaxWriteForm: Component<ExportFormProps> = (props) => {
-
-  const handleMaxWriteInput = (e: InputEvent) => {
-    let val = Number(e.currentTarget.value);
-
-    if (val<0){ 
-      showToast({ 
-        title: "only positive numbers allowed", 
-        variant: "destructive", 
-      }) 
-      props.setMaxWrite(0)
-    }else{
-      props.setMaxWrite(val) 
-    }
-  };
-
   return (
     <TextField class="space-y-2">
       <TextFieldLabel for="max-write">Max Records</TextFieldLabel>
@@ -35,7 +20,7 @@ export const MaxWriteForm: Component<ExportFormProps> = (props) => {
         id="max-write"
         type="number"
         value={props.max_write ?? props.setMaxWrite(15)}
-        onInput={handleMaxWriteInput}
+        onInput={handleInput}
         disabled={props.isLoading}
       />
     </TextField>

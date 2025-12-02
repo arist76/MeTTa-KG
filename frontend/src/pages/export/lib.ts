@@ -33,14 +33,11 @@ export const handleExport = async (spacePath: string) => {
       return;
     }
     const exportResponse = await exportSpace(spacePath, exportInput);
-    if(exportInput.max_write <= 0){
-      setResult(null);
-    }else{
-        setResult(exportResponse || "()");
-        showToast({
-          title: "Export Complete",
-          description: `Exported data with pattern: ${exportInput.pattern}`,
-        })};
+      setResult(exportResponse || "()");
+      showToast({
+        title: "Export Complete",
+        description: `Exported data with pattern: ${exportInput.pattern}`,
+      });
   } catch (e) {
     const error = e instanceof Error ? e : new Error("Failed to export data");
     setExportError(error);
@@ -54,3 +51,13 @@ export const handleExport = async (spacePath: string) => {
     setIsLoading(false);
   }
 };
+
+export const isInputValid = (val: number | null) => {
+  return val !== null && val >= 1;
+  };
+
+export const handleInput = (e: InputEvent) => {
+    const raw = (e.currentTarget as HTMLInputElement).value;
+    const val = Number(raw);
+    setMaxWrite(val);
+  };
