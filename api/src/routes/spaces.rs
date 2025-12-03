@@ -5,16 +5,16 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use rocket::response::status::Custom;
+use rocket::serde::json;
 use rocket::{get, post, Data};
 use std::path::PathBuf;
-use std::thread;
-use std::time::{Duration, Instant};
+use tokio::time::{sleep, Duration, Instant};
 
 use crate::model::Token;
 use crate::mork_api::{
     ClearRequest, ExploreRequest, ExportFormat, ExportRequest, ImportRequest, Mm2Cell,
-    MorkApiClient, Namespace, ReadRequest, Request, TransformDetails, TransformRequest,
-    UploadRequest,
+    MorkApiClient, Namespace, ReadRequest, Request, StatusRequest, StatusResponse,
+    TransformDetails, TransformRequest, UploadRequest,
 };
 
 trait SourceTargetPermissions {
@@ -343,12 +343,17 @@ pub async fn union(
         return Err(Status::Unauthorized);
     }
 
+    // path to be used for polling
+    let request_path = match operation_input.clone().into_inner().target.first() {
+        Some(value) => value.clone(),
+        None => return Err(Status::BadRequest),
+    };
+
     // create a vector of queries
     let transform_inputs = union_transform(operation_input.into_inner())?;
     let mork_api_client = MorkApiClient::new();
 
     for transform_input in transform_inputs {
-        let template_path = PathBuf::from(transform_input.templates[0].build());
         let request = TransformRequest::new().transform_input(transform_input);
 
         match mork_api_client.dispatch(request).await {
@@ -356,7 +361,8 @@ pub async fn union(
             Err(e) => return Err(e),
         };
 
-        poll(template_path, &mork_api_client).await?;
+        // poll status endpoint
+        poll(PathBuf::from(&request_path), &mork_api_client).await?;
     }
 
     Ok(Json(true))
@@ -380,28 +386,37 @@ fn int_to_lower(n: u8) -> Option<char> {
 
 async fn poll(path: PathBuf, mork_api_client: &MorkApiClient) -> Result<bool, Status> {
     let start_time = Instant::now();
-    let timeout_duration = Duration::from_secs(30);
+    let timeout_duration = Duration::from_secs(40);
+
+    // Check if space is clear by using status endpoint
+    let check_request = StatusRequest::new()
+        .namespace(path.clone())
+        .pattern("$x".to_string());
 
     loop {
+        // exit condition stop polling after some second
         if start_time.elapsed() > timeout_duration {
             return Err(Status::RequestTimeout);
         }
-        thread::sleep(Duration::from_millis(500));
 
-        // Check if space is clear by exploring it
-        let check_request = ExploreRequest::new()
-            .namespace(path.clone())
-            .pattern("$x".to_string())
-            .token("".to_string());
+        // wait 1 second between each status request
+        sleep(Duration::from_millis(1000)).await;
 
-        match mork_api_client.dispatch(check_request).await {
-            Ok(result) if result.trim().is_empty() || result == "[]" => {
-                return Ok(true); // Space is clear, operation complete
-            }
-            Ok(_) => continue, // Still processing
-            Err(_) => return Err(Status::RequestTimeout),
+        // destructure status endpoint json response
+        let status_response: StatusResponse =
+            match mork_api_client.dispatch(check_request.clone()).await {
+                Ok(result) => match json::from_str::<StatusResponse>(&result) {
+                    Ok(c) => c,
+                    Err(_) => return Err(Status::RequestTimeout),
+                },
+                Err(_) => return Err(Status::RequestTimeout),
+            };
+
+        if status_response.status == "pathClear" {
+            break;
         }
     }
+    Ok(true)
 }
 
 fn composition_transform(input: SetOperationInput) -> Result<TransformDetails, Status> {
