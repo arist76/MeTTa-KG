@@ -460,11 +460,6 @@ pub async fn restriction(
         .template("$x".to_string())
         .data(step_template);
 
-    match mork_api_client.dispatch(su_request).await {
-        Ok(_) => {}
-        Err(_) => return Err(Status::InternalServerError),
-    };
-
     let eu_request = UploadRequest::new()
         .namespace(PathBuf::new())
         .pattern("$x".to_string())
@@ -472,12 +467,31 @@ pub async fn restriction(
         .data_tag(false)
         .data(exec_template);
 
-    match mork_api_client.dispatch(eu_request).await {
+    let e_request = ExecRequest::new().set_location(location);
+
+    let step_del_request = ClearRequest::new()
+        .namespace(PathBuf::from(format!("/{}", steps_ns)))
+        .expr("$x".to_string());
+
+    let exec_del_request = ClearRequest::new()
+        .namespace(PathBuf::from(format!("/{}", prefix_ns)))
+        .expr("$x".to_string());
+
+    match mork_api_client.dispatch(su_request).await {
         Ok(_) => {}
         Err(_) => return Err(Status::InternalServerError),
     };
 
-    let e_request = ExecRequest::new().set_location(location);
+    match mork_api_client.dispatch(eu_request).await {
+        Ok(_) => {}
+        Err(_) => {
+            match mork_api_client.dispatch(step_del_request).await {
+                Ok(_) => {}
+                Err(_) => return Err(Status::InternalServerError),
+            };
+            return Err(Status::InternalServerError);
+        }
+    };
 
     match mork_api_client.dispatch(e_request).await {
         Ok(_) => {}
@@ -485,18 +499,11 @@ pub async fn restriction(
     };
 
     thread::sleep(Duration::from_secs(1));
-    let step_del_request = ClearRequest::new()
-        .namespace(PathBuf::from(format!("/{}", steps_ns)))
-        .expr("$x".to_string());
 
     match mork_api_client.dispatch(step_del_request).await {
         Ok(_) => {}
         Err(_) => return Err(Status::InternalServerError),
     };
-
-    let exec_del_request = ClearRequest::new()
-        .namespace(PathBuf::from(format!("/{}", prefix_ns)))
-        .expr("$x".to_string());
 
     match mork_api_client.dispatch(exec_del_request).await {
         Ok(_) => {}
