@@ -1,7 +1,7 @@
 import { Show, Component } from "solid-js";
 import { Button } from "~/components/ui/Button";
 import { CommandCard } from "~/components/common/CommandCard";
-import { TextField, TextFieldLabel } from "~/components/ui/TextField";
+import { TextField, TextFieldLabel, TextFieldInput } from "~/components/ui/TextField";
 import {
   Select,
   SelectContent,
@@ -9,7 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/Select";
-import { MaxWriteForm } from "./components/MaxWriteForm";
 import { OutputViewer } from "./components/OutputViewer";
 import Loader2 from "lucide-solid/icons/loader-2";
 import Download from "lucide-solid/icons/download";
@@ -29,6 +28,7 @@ import {
   maxWrite,
   setMaxWrite,
   isInputValid,
+  handleInput,
 } from "./lib";
 
 const ExportPage: Component = () => {
@@ -98,11 +98,17 @@ const ExportPage: Component = () => {
             </Select>
           </TextField>
         </div>
-            <MaxWriteForm
-              max_write={maxWrite()}
-              setMaxWrite={setMaxWrite}
-              isLoading={isLoading()}
-            />
+          <TextField class="space-y-2">
+            <TextFieldLabel for="max-write">Max Records</TextFieldLabel>
+              <TextFieldInput
+                id="max-write"
+                type="number"
+                value={maxWrite() ?? setMaxWrite(15)}
+                onInput={handleInput}
+                disabled={isLoading()}
+              />
+          </TextField>
+
           </div>
         </div>
 
