@@ -53,7 +53,7 @@ pub struct Mm2InputMulti {
     pub templates: Vec<String>,
 }
 
-#[derive(Default, Serialize, Deserialize, Clone)]
+#[derive(Default, Serialize, Deserialize, Clone, Debug)]
 pub struct Mm2InputMultiWithNamespace {
     pub patterns: Vec<Mm2Cell>,
     pub templates: Vec<Mm2Cell>,
@@ -164,7 +164,6 @@ pub async fn upload(
         .read_to_string(&mut body)
         .await
     {
-        eprintln!("Failed to read body: {e}");
         return Err(Custom(
             Status::BadRequest,
             format!("Failed to read body: {e}"),
@@ -230,10 +229,7 @@ pub async fn explore(
         .pattern(explore_input.pattern.clone())
         .token(explore_input.token.clone());
 
-    println!("explore path: {:?}", request.path());
-
     let response = mork_api_client.dispatch(request).await.map(Json);
-    println!("explore response: {response:?}");
     response
 }
 
@@ -256,13 +252,8 @@ pub async fn export(
         .template(export_input.template.clone())
         .format(ExportFormat::Metta);
 
-    println!("Dispatching export request to Mork: {}", request.path());
-
     match mork_api_client.dispatch(request).await {
-        Ok(data) => {
-            println!("Received export response from Mork: {data:?}");
-            Ok(Json(data))
-        }
+        Ok(data) => Ok(Json(data)),
         Err(e) => Err(e),
     }
 }

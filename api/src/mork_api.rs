@@ -121,15 +121,19 @@ impl Namespace {
         Namespace { path: components }
     }
 
-    fn current_name(&self) -> String {
-        self.path
-            .last()
-            .cloned()
-            .unwrap_or_else(|| "root".to_string())
+    fn root_name(&self) -> String {
+        "root".to_string()
+    }
+
+    fn current_name(&self) -> Option<String> {
+        self.path.last().cloned()
     }
 
     fn data_tag(&self) -> String {
-        format!("{}a727d4f9-836a-4e4c-9480", self.current_name())
+        format!(
+            "__{}data__",
+            self.current_name().unwrap_or(self.root_name())
+        )
     }
 
     pub fn with_namespace(&self, value: &str) -> String {
@@ -140,6 +144,9 @@ impl Namespace {
         for name in self.path.iter().rev() {
             result = format!("({name} {result})");
         }
+
+        // add root namespace
+        result = format!("(__{}__ {})", self.root_name(), result);
 
         result
     }
@@ -230,7 +237,6 @@ impl MorkApiClient {
                         .header("Content-Type", "text/plain")
                         .body(body_str.clone());
                 } else {
-                    eprintln!("Upload endpoint called with non-string body type");
                     return Err(Status::InternalServerError);
                 }
             }
@@ -242,15 +248,9 @@ impl MorkApiClient {
         match http_request.send().await {
             Ok(resp) => match resp.text().await {
                 Ok(text) => Ok(text),
-                Err(e) => {
-                    eprintln!("Error reading Mork API response text: {e}");
-                    Err(Status::InternalServerError)
-                }
+                Err(_) => Err(Status::InternalServerError),
             },
-            Err(e) => {
-                eprintln!("Error sending request to Mork API: {e}");
-                Err(Status::InternalServerError)
-            }
+            Err(_) => Err(Status::InternalServerError),
         }
     }
 }
