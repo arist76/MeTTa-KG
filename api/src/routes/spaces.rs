@@ -24,7 +24,10 @@ trait SourceTargetPermissions {
     fn target(&self) -> Vec<Self::Ns>;
 
     fn source_target_permissions(&self, token: Token) -> bool {
-        let token_namespace = token.namespace.strip_prefix("/").unwrap();
+        let token_namespace = token
+            .namespace
+            .trim_start_matches("/")
+            .trim_end_matches("/");
 
         // check `permission read`
         let has_read_permission = self
