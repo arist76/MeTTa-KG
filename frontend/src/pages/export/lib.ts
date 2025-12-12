@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { exportSpace } from "~/lib/api";
 import { Mm2Input } from "~/lib/types";
+import { addToHistory } from "../history/lib";
 
 export const [uri, setUri] = createSignal("");
 export const [format, setFormat] = createSignal("metta");
@@ -31,6 +32,14 @@ export const handleExport = async (spacePath: string) => {
       return;
     }
     const exportResponse = await exportSpace(spacePath, exportInput);
+
+    addToHistory({
+      command: "Export",
+      pattern: exportInput.pattern,
+      template: exportInput.template,
+      details: `Space: ${spacePath}`,
+    });
+
     setResult(exportResponse || "()");
     showToast({
       title: "Export Complete",

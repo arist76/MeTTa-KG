@@ -3,6 +3,7 @@ import { transform, isPathClear } from "~/lib/api";
 import { Mm2InputMultiWithNamespace, Item } from "~/lib/types";
 import { showToast } from "~/components/ui/Toast";
 import { refreshSpace } from "../load/lib";
+import { addToHistory } from "../history/lib";
 
 export const [isLoading, setIsLoading] = createSignal(false);
 export const [isPolling, setIsPolling] = createSignal(false);
@@ -85,6 +86,13 @@ export const executeTransform = async (
     const success = await transform(input);
 
     if (success) {
+      addToHistory({
+        command: "Transform",
+        pattern: patterns.map((p) => p.value).join("\n\n"),
+        template: templates.map((t) => t.value).join("\n\n"),
+        details: `Space: ${spacePath}`,
+      });
+
       showToast({
         title: "Transform Initiated",
         description: "Waiting for results...",

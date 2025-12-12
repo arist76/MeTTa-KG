@@ -19,11 +19,14 @@ import {
   stopPolling,
   setOperationInput,
 } from "./lib";
-import { Copy, Check } from "lucide-solid";
+// import { Copy, Check } from "lucide-solid";
+import Copy from "lucide-solid/icons/copy";
+import Check from "lucide-solid/icons/check";
 import {
   Item,
   UnionInput as UnionInputComponent,
 } from "./components/UnionInput";
+import { addToHistory } from "../history/lib";
 
 interface AppState {
   patterns: Item[];
@@ -77,6 +80,14 @@ const UnionPage: Component = () => {
 
   const handleUnion = () => {
     const unionQueryInput: setOperationInput = buildUnionSetInput(state);
+
+    addToHistory({
+      command: "Union",
+      pattern: state.patterns.map((p) => p.namespace.join("/")).join("\n"),
+      template: state.templates.map((t) => t.namespace.join("/")).join("\n"),
+      details: `Space: ${formatedNamespace()}`,
+    });
+
     executeUnion(unionQueryInput, formatedNamespace());
   };
 

@@ -17,6 +17,8 @@ import Key from "lucide-solid/icons/key";
 import NotImplemented from "~/components/common/NotImplemented";
 import Trash2 from "lucide-solid/icons/trash-2";
 import UnionPage from "../union/Union";
+import HistoryPage from "../history/History";
+import History from "lucide-solid/icons/history";
 
 const sidebarSections = [
   {
@@ -123,6 +125,18 @@ const sidebarSections = [
         icon: Key,
         to: "/tokens",
         component: TokensPage,
+      },
+    ],
+  },
+  {
+    title: "Activity",
+    items: [
+      {
+        id: "history",
+        label: "History",
+        icon: History,
+        to: "/history",
+        component: HistoryPage,
       },
     ],
   },

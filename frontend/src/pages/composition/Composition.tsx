@@ -19,11 +19,14 @@ import {
   stopPolling,
   setOperationInput,
 } from "./lib";
-import { Copy, Check } from "lucide-solid";
+// import { Copy, Check } from "lucide-solid";
+import Copy from "lucide-solid/icons/copy";
+import Check from "lucide-solid/icons/check";
 import {
   Item,
   CompositionInput as CompositionInputComponent,
 } from "./components/CompositionInput";
+import { addToHistory } from "../history/lib";
 
 interface AppState {
   sources: Item[];
@@ -79,6 +82,14 @@ const CompositionPage: Component = () => {
   const handleComposition = () => {
     const compositionQueryInput: setOperationInput =
       buildCompositionSetInput(state);
+
+    addToHistory({
+      command: "Composition",
+      pattern: state.sources.map((s) => s.namespace.join("/")).join("\n"),
+      template: state.target.map((t) => t.namespace.join("/")).join("\n"),
+      details: `Space: ${formatedNamespace()}`,
+    });
+
     executeComposition(compositionQueryInput, formatedNamespace());
   };
 
