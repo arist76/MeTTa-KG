@@ -22,6 +22,8 @@ export default function Header() {
         <div class="flex items-center gap-4">
           <a
             href="https://github.com/trueagi-io/MORK"
+            target="_blank"
+            rel="noopener noreferrer"
             class="uppercase text-neutral-400 hover:text-primary hover:underline"
           >
             MORK
@@ -29,6 +31,8 @@ export default function Header() {
           <span class="text-primary">·</span>
           <a
             href="https://github.com/trueagi-io/MORK/wiki"
+            target="_blank"
+            rel="noopener noreferrer"
             class="uppercase text-neutral-400 hover:text-primary hover:underline"
           >
             DOCS
@@ -36,6 +40,8 @@ export default function Header() {
           <span class="text-primary">·</span>
           <a
             href="https://chat.singularitynet.io/chat/channels/mork"
+            target="_blank"
+            rel="noopener noreferrer"
             class="uppercase text-neutral-400 hover:text-primary hover:underline"
           >
             COMMUNITY
