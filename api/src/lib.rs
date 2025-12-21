@@ -6,6 +6,7 @@ pub mod routes;
 pub mod schema;
 
 use crate::cli::AppConfig;
+use crate::routes::mork_manager::{MorkManager, SpawnRequest, list_instances, spawn_mork, select_instance}; // Add select_instance
 use diesel::Connection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use mime_guess::from_path;
@@ -17,12 +18,8 @@ use rocket::{get, http::ContentType, post};
 use rocket::{http::Method, routes, Build, Rocket};
 use rocket_cors::AllowedOrigins;
 use rust_embed::RustEmbed;
-use std::io::Write;
 use std::path::PathBuf;
-use std::{env, fs};
-use tempfile::Builder;
 use tokio::sync::mpsc::Sender;
-use tokio::time::Duration;
 use url::Url;
 
 #[cfg(feature = "sqlite")]
@@ -239,86 +236,7 @@ pub async fn launch_setup_server(preferred_url: Option<String>) -> AppConfig {
     rx.recv().await.expect("Failed to receive configuration")
 }
 
-async fn spawn_mork_server(mork_url: &str) {
-    let url = url::Url::parse(mork_url).expect("Invalid Mork server URL");
-    let port = url.port().expect("URL must include a port").to_string();
-    let host = url.host_str().expect("URL must include a host").to_string();
-
-    let is_port_available = if host == "127.0.0.1" || host == "localhost" {
-        std::net::TcpListener::bind(format!("{}:{}", host, port)).is_ok()
-    } else {
-        false
-    };
-
-    if !is_port_available {
-        println!("Port {} is in use or host is remote. Skipping Mork spawn and connecting to existing instance at {}.", port, mork_url);
-        env::set_var("METTA_KG_MORK_URL", mork_url);
-        return;
-    }
-
-    let temp_file = Builder::new()
-        .prefix("mork_server_")
-        .suffix(if cfg!(windows) { ".exe" } else { "" })
-        .tempfile()
-        .expect("Failed to create temporary file");
-
-    temp_file
-        .as_file()
-        .write_all(MORK_BYTES)
-        .expect("Failed to write mork binary to temp file");
-
-    temp_file
-        .as_file()
-        .sync_all()
-        .expect("Failed to sync mork binary");
-
-    let temp_path = temp_file.into_temp_path();
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&temp_path)
-            .expect("Failed to get file metadata")
-            .permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&temp_path, perms).expect("Failed to set executable permissions");
-    }
-
-    tokio::spawn(async move {
-        let mut cmd = tokio::process::Command::new(&temp_path);
-
-        cmd.env("MORK_SERVER_PORT", &port);
-        cmd.env("MORK_SERVER_ADDR", &host);
-
-        cmd.kill_on_drop(true);
-
-        match cmd.spawn() {
-            Ok(mut child) => {
-                println!("Mork server started with PID: {:?}", child.id());
-                match child.wait().await {
-                    Ok(status) => {
-                        if !status.success() {
-                            eprintln!("Mork server exited unexpectedly with status: {}", status);
-                        } else {
-                            println!("Mork server exited successfully.");
-                        }
-                    }
-                    Err(e) => eprintln!("Failed to wait on Mork server: {e}"),
-                }
-            }
-            Err(e) => {
-                eprintln!("Failed to start Mork server: {e}");
-            }
-        }
-    });
-
-    println!("Waiting for Mork server to start...");
-    tokio::time::sleep(Duration::from_secs(2)).await;
-
-    env::set_var("METTA_KG_MORK_URL", mork_url);
-}
-
-fn build_rocket(cfg: &AppConfig) -> Rocket<Build> {
+async fn build_rocket(cfg: &AppConfig) -> Rocket<Build> {
     dotenv::dotenv().ok();
 
     let mut connection: DbConnection = db::establish_connection();
@@ -326,7 +244,39 @@ fn build_rocket(cfg: &AppConfig) -> Rocket<Build> {
         .run_pending_migrations(MIGRATIONS)
         .expect("Failed to run migrations");
 
+    let mork_manager = MorkManager::new(MORK_BYTES);
+
+    if let Ok(url) = url::Url::parse(&cfg.mork_server_url) {
+        if let (Some(port), Some(host)) = (url.port(), url.host_str()) {
+            // Normalize localhost to 127.0.0.1 to avoid IPv4/IPv6 binding mismatches
+            let host = if host == "localhost" { "127.0.0.1" } else { host };
+
+            println!("Booting initial Mork instance on {}:{} ...", host, port);
+
+            match mork_manager
+                .spawn_instance(SpawnRequest {
+                    port,
+                    host: Some(host.to_string()),
+                    memory_limit_mb: None, // IMPORTANT: don't constrain boot
+                    cpu_limit_percent: None,
+                })
+                .await
+            {
+                Ok(pid) => {
+                    println!("Successfully spawned Mork on {}:{} (pid={})", host, port, pid);
+                    
+                    // CRITICAL FIX: 
+                    // The MorkApiClient (used in routes) relies on this environment variable 
+                    // to know where to connect. The old code set this, and we must restore it.
+                    let effective_url = format!("http://{}:{}", host, port);
+                    std::env::set_var("METTA_KG_MORK_URL", effective_url);
+                },
+                Err(e) => eprintln!("Failed to spawn initial Mork instance: {}", e),
+            }
+        }
+    }
     let api_url = Url::parse(&cfg.mettakg_api_url).expect("Invalid mettakg_api_url");
+
     let dynamic_origin = format!(
         "{}://{}:{}",
         api_url.scheme(),
@@ -394,14 +344,18 @@ fn build_rocket(cfg: &AppConfig) -> Rocket<Build> {
                 routes::spaces::explore,
                 routes::spaces::export,
                 routes::spaces::clear,
+                list_instances,
+                spawn_mork,
+                select_instance, // Add this line
             ],
         )
         .attach(cors.clone())
         .manage(cors)
+        .manage(mork_manager)
         .mount("/", routes![index, dist])
 }
 
 pub async fn rocket(cfg: &AppConfig) -> Rocket<Build> {
-    spawn_mork_server(&cfg.mork_server_url).await;
-    build_rocket(cfg)
+    // spawn_mork_server(&cfg.mork_server_url).await;
+    build_rocket(cfg).await
 }
