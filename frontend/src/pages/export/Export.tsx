@@ -122,6 +122,7 @@ const ExportPage: Component = () => {
               title="Export Result"
               data={exportError() ? exportError()!.message : result()}
               status={exportError() ? "error" : "success"}
+              format={format()}
             />
           </div>
         </Show>

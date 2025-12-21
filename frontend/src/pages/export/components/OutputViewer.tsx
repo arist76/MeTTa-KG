@@ -8,7 +8,7 @@ import { Callout, CalloutContent } from "~/components/ui/Callout";
 interface OutputViewerProps {
   title?: string;
   data: any /* eslint-disable-line @typescript-eslint/no-explicit-any */;
-  format?: "json" | "text" | "metta";
+  format?: "json" | "text" | "metta" | "csv" | "raw" | string;
   status?: "success" | "error" | "loading";
 }
 
@@ -20,7 +20,17 @@ export function OutputViewer(props: OutputViewerProps): JSX.Element {
 
     switch (props.format) {
       case "json":
-        return JSON.stringify(props.data, null, 2);
+        try {
+          const parsed =
+            typeof props.data === "string"
+              ? JSON.parse(props.data)
+              : props.data;
+          return JSON.stringify(parsed, null, 2);
+        } catch {
+          return typeof props.data === "string"
+            ? props.data
+            : JSON.stringify(props.data, null, 2);
+        }
       case "text":
       case "metta":
       default:
