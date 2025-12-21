@@ -15,7 +15,12 @@ export const initSSE = () => {
   const eventsUrl = new URL("/events", API_URL).toString();
   eventSource = new EventSource(eventsUrl);
 
+  eventSource.onopen = () => {
+    console.log("SSE Connection Opened");
+  };
+
   eventSource.onmessage = (event) => {
+    console.log("SSE Message Received:", event.data);
     const data = event.data;
 
     if (data === "PROCESS_STARTED") {
@@ -48,12 +53,12 @@ export const initSSE = () => {
     // Handle stdout/stderr
     // If the message is not a lifecycle event, treat it as log output
     setCommandLogs((prev) => [...prev, data]);
-    
+
     // Increment progress (cap at 90%)
     // We use a functional update to ensure we're working with the latest value
     setCommandProgress((prev) => {
-        if (prev >= 90) return prev;
-        return prev + 5;
+      if (prev >= 90) return prev;
+      return prev + 5;
     });
   };
 

@@ -3,11 +3,11 @@ use rocket::futures::stream::{self as futures_stream};
 use rocket::response::stream::{Event, EventStream};
 use rocket::serde::{json::Json, Deserialize};
 use rocket::State;
+use rocket::{get, post, routes};
+use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::{broadcast, mpsc};
-use rocket::{get, post, routes};
-use std::process::Stdio;
 
 #[derive(Clone)]
 pub struct CommandState {

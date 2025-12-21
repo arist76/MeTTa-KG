@@ -6,11 +6,13 @@ use url::Url;
 
 use rocket::response::status::Custom;
 use rocket::serde::json;
-use rocket::{get, post, Data};
+use rocket::{get, post, Data, State};
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration, Instant};
+use tokio::sync::broadcast;
 
 use crate::model::Token;
+use crate::routes::command::CommandState;
 use crate::mork_api::{
     ClearRequest, ExploreRequest, ExportFormat, ExportRequest, ImportRequest, Mm2Cell,
     MorkApiClient, Namespace, ReadRequest, StatusRequest, StatusResponse, TransformDetails,
@@ -360,6 +362,7 @@ pub async fn intersection(
 pub async fn union(
     token: Token,
     operation_input: Json<SetOperationInput>,
+    state: &State<CommandState>,
 ) -> Result<Json<bool>, Status> {
     if !operation_input.source_target_permissions(token) {
         return Err(Status::Unauthorized);
@@ -374,18 +377,40 @@ pub async fn union(
     // create a vector of queries
     let transform_inputs = union_transform(operation_input.into_inner())?;
     let mork_api_client = MorkApiClient::new();
+    let broadcaster = state.broadcaster.clone();
 
-    for transform_input in transform_inputs {
-        let request = TransformRequest::new().transform_input(transform_input);
+    tokio::spawn(async move {
+        let _ = broadcaster.send("PROCESS_STARTED".to_string());
+        let _ = broadcaster.send("Starting union operation...".to_string());
 
-        match mork_api_client.dispatch(request).await {
-            Ok(_) => {}
-            Err(e) => return Err(e),
-        };
+        for transform_input in transform_inputs {
+            let request = TransformRequest::new().transform_input(transform_input);
 
-        // poll status endpoint
-        poll(PathBuf::from(&request_path), &mork_api_client).await?;
-    }
+            match mork_api_client.dispatch(request).await {
+                Ok(_) => {
+                    let _ = broadcaster.send("Transform dispatched successfully.".to_string());
+                }
+                Err(e) => {
+                    let _ = broadcaster.send(format!("Error dispatching transform: {:?}", e));
+                    let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
+                    return;
+                }
+            };
+
+            // poll status endpoint
+            match poll_and_broadcast(PathBuf::from(&request_path), &mork_api_client, &broadcaster).await {
+                Ok(_) => {
+                    let _ = broadcaster.send("Poll successful.".to_string());
+                }
+                Err(e) => {
+                    let _ = broadcaster.send(format!("Error polling status: {:?}", e));
+                    let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
+                    return;
+                }
+            }
+        }
+        let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
+    });
 
     Ok(Json(true))
 }
@@ -393,6 +418,46 @@ pub async fn union(
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////// HELPER FUNCTIONS ////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+async fn poll_and_broadcast(
+    path: PathBuf,
+    mork_api_client: &MorkApiClient,
+    broadcaster: &broadcast::Sender<String>,
+) -> Result<bool, Status> {
+    let start_time = Instant::now();
+    let timeout_duration = Duration::from_secs(40);
+
+    // Check if space is clear by using status endpoint
+    let check_request = StatusRequest::new()
+        .namespace(path.clone())
+        .pattern("$x".to_string());
+
+    loop {
+        // exit condition stop polling after some second
+        if start_time.elapsed() > timeout_duration {
+            return Err(Status::RequestTimeout);
+        }
+
+        // wait 1 second between each status request
+        sleep(Duration::from_millis(1000)).await;
+        let _ = broadcaster.send("Checking status...".to_string());
+
+        // destructure status endpoint json response
+        let status_response: StatusResponse =
+            match mork_api_client.dispatch(check_request.clone()).await {
+                Ok(result) => match json::from_str::<StatusResponse>(&result) {
+                    Ok(c) => c,
+                    Err(_) => return Err(Status::RequestTimeout),
+                },
+                Err(_) => return Err(Status::RequestTimeout),
+            };
+
+        if status_response.status == "pathClear" {
+            break;
+        }
+    }
+    Ok(true)
+}
 
 async fn poll(path: PathBuf, mork_api_client: &MorkApiClient) -> Result<bool, Status> {
     let start_time = Instant::now();
