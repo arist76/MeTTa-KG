@@ -20,6 +20,7 @@ const TokensPage = lazy(() => import("../tokens/Tokens"));
 const ClearPage = lazy(() => import("../clear/Clear"));
 const LandingPage = lazy(() => import("../landing/Landing"));
 
+import Network from "lucide-solid/icons/network";
 const sidebarSections = [
   {
     title: "Inspection and Visualization",
@@ -117,6 +118,13 @@ const sidebarSections = [
         icon: Key,
         to: "/tokens",
         component: TokensPage,
+      },
+      {
+        id: "mork-instances",
+        label: "Mork Instances",
+        icon: Network,
+        to: "/mork-instances",
+        component: lazy(() => import("../instanceManager/MorkManager")),
       },
     ],
   },
