@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import { union } from "~/lib/api";
 import { showToast } from "~/components/ui/Toast";
-import { isCommandRunning, setIsCommandRunning } from "~/lib/sse";
+import { isCommandRunning } from "~/lib/sse";
 
 export { isCommandRunning as isLoading };
 export const [isPolling, setIsPolling] = createSignal(false);
@@ -17,7 +17,7 @@ export const stopPolling = () => {
 
 export const executeUnion = async (
   unionQuery: setOperationInput,
-  spacePath: string
+  _spacePath: string
 ) => {
   if (unionQuery.pattern.length < 1) {
     showToast({
@@ -44,7 +44,6 @@ export const executeUnion = async (
     });
 
     await union(unionQuery);
-
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "An unexpected error occurred.";

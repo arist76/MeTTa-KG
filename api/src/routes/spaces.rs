@@ -8,16 +8,16 @@ use rocket::response::status::Custom;
 use rocket::serde::json;
 use rocket::{get, post, Data, State};
 use std::path::PathBuf;
-use tokio::time::{sleep, Duration, Instant};
 use tokio::sync::broadcast;
+use tokio::time::{sleep, Duration, Instant};
 
 use crate::model::Token;
-use crate::routes::command::CommandState;
 use crate::mork_api::{
     ClearRequest, ExploreRequest, ExportFormat, ExportRequest, ImportRequest, Mm2Cell,
     MorkApiClient, Namespace, ReadRequest, StatusRequest, StatusResponse, TransformDetails,
     TransformRequest, UploadRequest,
 };
+use crate::routes::command::CommandState;
 
 trait SourceTargetPermissions {
     type Ns: ToString + Clone;
@@ -272,6 +272,7 @@ pub async fn clear(token: Token, path: PathBuf, expr: String) -> Result<Json<boo
 pub async fn transform(
     token: Token,
     mm2: Json<Mm2InputMultiWithNamespace>,
+    state: &State<CommandState>,
 ) -> Result<Json<bool>, Status> {
     let mm2 = mm2.into_inner();
     if !mm2.clone().source_target_permissions(token) {
@@ -282,14 +283,48 @@ pub async fn transform(
     let request = TransformRequest::new().transform_input(
         TransformDetails::new()
             .patterns(mm2.clone().patterns)
-            .templates(mm2.templates),
+            .templates(mm2.templates.clone()),
     );
 
-    // TODO: use server sent events instead
-    match mork_api_client.dispatch(request).await {
-        Ok(_) => Ok(Json(true)),
-        Err(e) => Err(e),
-    }
+    let broadcaster = state.broadcaster.clone();
+    // We need a target path to poll. In transform, templates define the target.
+    // Assuming the first template's namespace is the target for polling.
+    let request_path = match mm2.templates.first() {
+        Some(t) => t.namespace().clone(),
+        None => return Err(Status::BadRequest),
+    };
+
+    tokio::spawn(async move {
+        let _ = broadcaster.send("PROCESS_STARTED".to_string());
+        let _ = broadcaster.send("Starting transform operation...".to_string());
+
+        match mork_api_client.dispatch(request).await {
+            Ok(_) => {
+                let _ = broadcaster.send("Transform dispatched successfully.".to_string());
+            }
+            Err(e) => {
+                let _ = broadcaster.send(format!("Error dispatching transform: {:?}", e));
+                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
+                return;
+            }
+        };
+
+        // poll status endpoint
+        // Convert Namespace to PathBuf for polling
+        let path_buf = PathBuf::from(request_path.to_string());
+        match poll_and_broadcast(path_buf, &mork_api_client, &broadcaster).await {
+            Ok(_) => {
+                let _ = broadcaster.send("Poll successful.".to_string());
+                let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
+            }
+            Err(e) => {
+                let _ = broadcaster.send(format!("Error polling status: {:?}", e));
+                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
+            }
+        }
+    });
+
+    Ok(Json(true))
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -311,20 +346,54 @@ pub async fn transform(
 pub async fn composition(
     token: Token,
     operation_input: Json<SetOperationInput>,
+    state: &State<CommandState>,
 ) -> Result<Json<bool>, Status> {
     if !operation_input.source_target_permissions(token) {
         return Err(Status::Unauthorized);
     }
 
-    let transform_input = composition_transform(operation_input.into_inner())?;
+    let input = operation_input.into_inner();
+    let transform_input = composition_transform(input.clone())?;
 
     let request = TransformRequest::new().transform_input(transform_input.clone());
     let mork_api_client = MorkApiClient::new();
+    let broadcaster = state.broadcaster.clone();
 
-    match mork_api_client.dispatch(request).await {
-        Ok(_) => Ok(Json(true)),
-        Err(e) => Err(e),
-    }
+    // Target path for polling is the first target in the input
+    let request_path = match input.target.first() {
+        Some(t) => PathBuf::from(t),
+        None => return Err(Status::BadRequest),
+    };
+
+    tokio::spawn(async move {
+        let _ = broadcaster.send("PROCESS_STARTED".to_string());
+        let _ = broadcaster.send("Starting composition operation...".to_string());
+
+        match mork_api_client.dispatch(request).await {
+            Ok(_) => {
+                let _ = broadcaster.send("Composition dispatched successfully.".to_string());
+            }
+            Err(e) => {
+                let _ = broadcaster.send(format!("Error dispatching composition: {:?}", e));
+                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
+                return;
+            }
+        };
+
+        // poll status endpoint
+        match poll_and_broadcast(request_path, &mork_api_client, &broadcaster).await {
+            Ok(_) => {
+                let _ = broadcaster.send("Poll successful.".to_string());
+                let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
+            }
+            Err(e) => {
+                let _ = broadcaster.send(format!("Error polling status: {:?}", e));
+                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
+            }
+        }
+    });
+
+    Ok(Json(true))
 }
 
 /// Performs an intersection operation on provided namespaces. `token` must have `permission_write`
@@ -398,7 +467,9 @@ pub async fn union(
             };
 
             // poll status endpoint
-            match poll_and_broadcast(PathBuf::from(&request_path), &mork_api_client, &broadcaster).await {
+            match poll_and_broadcast(PathBuf::from(&request_path), &mork_api_client, &broadcaster)
+                .await
+            {
                 Ok(_) => {
                     let _ = broadcaster.send("Poll successful.".to_string());
                 }
@@ -459,6 +530,7 @@ async fn poll_and_broadcast(
     Ok(true)
 }
 
+#[allow(dead_code)]
 async fn poll(path: PathBuf, mork_api_client: &MorkApiClient) -> Result<bool, Status> {
     let start_time = Instant::now();
     let timeout_duration = Duration::from_secs(40);
