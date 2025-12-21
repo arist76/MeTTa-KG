@@ -15,6 +15,7 @@ export const handleExport = async (spacePath: string) => {
   const exportInput: Mm2Input = {
     pattern: pattern().trim() || "$x",
     template: template().trim() || "$x",
+    format: format().charAt(0).toUpperCase() + format().slice(1),
   };
 
   setIsLoading(true);
@@ -22,14 +23,6 @@ export const handleExport = async (spacePath: string) => {
   setExportError(null);
 
   try {
-    if (format() !== "metta") {
-      showToast({
-        title: "Format Not Supported Yet",
-        description: `${format()} format not supported yet. Please use metta format.`,
-        variant: "destructive",
-      });
-      return;
-    }
     const exportResponse = await exportSpace(spacePath, exportInput);
     setResult(exportResponse || "()");
     showToast({
@@ -39,10 +32,16 @@ export const handleExport = async (spacePath: string) => {
   } catch (e) {
     const error = e instanceof Error ? e : new Error("Failed to export data");
     setExportError(error);
-    setResult(error.message);
+
+    let errorMessage = error.message;
+    if (errorMessage.includes("Incompatible metta file")) {
+      errorMessage = "Incompatible metta file";
+    }
+
+    setResult(null);
     showToast({
       title: "Error",
-      description: error.message,
+      description: errorMessage,
       variant: "destructive",
     });
   } finally {
