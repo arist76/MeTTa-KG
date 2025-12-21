@@ -1,19 +1,17 @@
 import { createSignal } from "solid-js";
 import { union, isPathClear } from "~/lib/api";
 import { showToast } from "~/components/ui/Toast";
+import { isCommandRunning, setIsCommandRunning } from "~/lib/sse";
 
-export const [isLoading, setIsLoading] = createSignal(false);
+export { isCommandRunning as isLoading };
 export const [isPolling, setIsPolling] = createSignal(false);
 
 export type setOperationInput = {
   pattern: string[];
   template: string[];
 };
-let pollingIntervalId: NodeJS.Timeout | null = null;
 
 export const stopPolling = () => {
-  if (pollingIntervalId) clearInterval(pollingIntervalId);
-  pollingIntervalId = null;
   setIsPolling(false);
 };
 
@@ -39,8 +37,6 @@ export const executeUnion = async (
     return;
   }
 
-  setIsLoading(true);
-  stopPolling();
   try {
     if (!(await isPathClear(spacePath))) {
       showToast({
@@ -48,30 +44,22 @@ export const executeUnion = async (
         description: "The space is currently busy. Please wait.",
         variant: "destructive",
       });
-      setIsLoading(false);
       return;
     }
 
+    setIsCommandRunning(true);
     showToast({
       title: "Unification Initiated",
       description: "Waiting for results...",
     });
 
-    const success = await union(unionQuery);
+    await union(unionQuery);
 
-    setIsLoading(false);
-    if (success) {
-      showToast({
-        title: "Unification Complete",
-        description: "Operation completed successfully!",
-      });
-    } else {
-      showToast({
-        title: "Unification Failed",
-        description: "Could not initiate the unification.",
-        variant: "destructive",
-      });
-    }
+    showToast({
+      title: "Unification Complete",
+      description: "Operation completed successfully!",
+    });
+
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "An unexpected error occurred.";
@@ -81,6 +69,6 @@ export const executeUnion = async (
       variant: "destructive",
     });
   } finally {
-    setIsLoading(false);
+    setIsCommandRunning(false);
   }
 };
