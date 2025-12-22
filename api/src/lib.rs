@@ -6,7 +6,10 @@ pub mod routes;
 pub mod schema;
 
 use crate::cli::AppConfig;
-use crate::routes::mork_manager::{MorkManager, SpawnRequest, list_instances, spawn_mork, select_instance}; // Add select_instance
+use crate::routes::mork_manager::{
+    kill_mork, list_instances, select_instance, spawn_mork, update_mork_limits, MorkManager,
+    SpawnRequest,
+}; // Add select_instance
 use diesel::Connection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use mime_guess::from_path;
@@ -249,7 +252,11 @@ async fn build_rocket(cfg: &AppConfig) -> Rocket<Build> {
     if let Ok(url) = url::Url::parse(&cfg.mork_server_url) {
         if let (Some(port), Some(host)) = (url.port(), url.host_str()) {
             // Normalize localhost to 127.0.0.1 to avoid IPv4/IPv6 binding mismatches
-            let host = if host == "localhost" { "127.0.0.1" } else { host };
+            let host = if host == "localhost" {
+                "127.0.0.1"
+            } else {
+                host
+            };
 
             println!("Booting initial Mork instance on {}:{} ...", host, port);
 
@@ -263,14 +270,17 @@ async fn build_rocket(cfg: &AppConfig) -> Rocket<Build> {
                 .await
             {
                 Ok(pid) => {
-                    println!("Successfully spawned Mork on {}:{} (pid={})", host, port, pid);
-                    
-                    // CRITICAL FIX: 
-                    // The MorkApiClient (used in routes) relies on this environment variable 
+                    println!(
+                        "Successfully spawned Mork on {}:{} (pid={})",
+                        host, port, pid
+                    );
+
+                    // CRITICAL FIX:
+                    // The MorkApiClient (used in routes) relies on this environment variable
                     // to know where to connect. The old code set this, and we must restore it.
                     let effective_url = format!("http://{}:{}", host, port);
                     std::env::set_var("METTA_KG_MORK_URL", effective_url);
-                },
+                }
                 Err(e) => eprintln!("Failed to spawn initial Mork instance: {}", e),
             }
         }
@@ -346,7 +356,9 @@ async fn build_rocket(cfg: &AppConfig) -> Rocket<Build> {
                 routes::spaces::clear,
                 list_instances,
                 spawn_mork,
-                select_instance, // Add this line
+                select_instance,
+                update_mork_limits,
+                kill_mork,
             ],
         )
         .attach(cors.clone())
