@@ -311,19 +311,52 @@ pub async fn export(
 }
 
 #[post("/spaces/clear/<path..>?<expr>")]
-pub async fn clear(token: Token, path: PathBuf, expr: String) -> Result<Json<bool>, Status> {
+pub async fn clear(
+    token: Token,
+    path: PathBuf,
+    expr: String,
+    state: &State<CommandState>,
+) -> Result<Json<bool>, Status> {
     let token_namespace = token.namespace.strip_prefix("/").unwrap();
     if !path.starts_with(token_namespace) || !token.permission_write {
         return Err(Status::Unauthorized);
     }
 
     let mork_api_client = MorkApiClient::new();
-    let request = ClearRequest::new().namespace(path).expr(expr);
+    let request = ClearRequest::new().namespace(path.clone()).expr(expr);
 
-    match mork_api_client.dispatch(request).await {
-        Ok(_) => Ok(Json(true)),
-        Err(e) => Err(e),
-    }
+    let broadcaster = state.broadcaster.clone();
+    let request_path = path.clone();
+
+    tokio::spawn(async move {
+        let _ = broadcaster.send("PROCESS_STARTED".to_string());
+        let _ = broadcaster.send("Starting clear operation...".to_string());
+
+        match mork_api_client.dispatch(request).await {
+            Ok(_) => {
+                let _ = broadcaster.send("Clear dispatched successfully.".to_string());
+            }
+            Err(e) => {
+                let _ = broadcaster.send(format!("Error dispatching clear: {:?}", e));
+                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
+                return;
+            }
+        };
+
+        // poll status endpoint
+        match poll_and_broadcast(request_path, &mork_api_client, &broadcaster).await {
+            Ok(_) => {
+                let _ = broadcaster.send("Poll successful.".to_string());
+                let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
+            }
+            Err(e) => {
+                let _ = broadcaster.send(format!("Error polling status: {:?}", e));
+                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
+            }
+        }
+    });
+
+    Ok(Json(true))
 }
 
 /// Performs a transformation operation on the `<path..>` space

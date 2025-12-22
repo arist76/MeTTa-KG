@@ -1,10 +1,10 @@
 import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { clearSpace } from "~/lib/api";
-import { refreshSpace } from "../load/lib";
+import { isCommandRunning } from "~/lib/sse";
 
 export const [expression, setExpression] = createSignal("$x \n \n \n");
-export const [isLoading, setIsLoading] = createSignal(false);
+export { isCommandRunning as isLoading };
 
 export const handleClear = async (spacePath: string) => {
   if (!expression().trim()) {
@@ -16,22 +16,13 @@ export const handleClear = async (spacePath: string) => {
     return;
   }
 
-  setIsLoading(true);
-
   try {
-    const success = await clearSpace(expression(), spacePath);
+    const initiated = await clearSpace(expression(), spacePath);
 
-    if (success) {
+    if (initiated) {
       showToast({
-        title: "Cleared Successfully",
-        description: `Space "${spacePath}" has been cleared.`,
-      });
-      refreshSpace();
-    } else {
-      showToast({
-        title: "Clear Operation Failed",
-        description: `Could not clear space "${spacePath}". Check server logs for details.`,
-        variant: "destructive",
+        title: "Clear Initiated",
+        description: "Waiting for results...",
       });
     }
   } catch (error) {
@@ -42,7 +33,5 @@ export const handleClear = async (spacePath: string) => {
       description: errorMessage,
       variant: "destructive",
     });
-  } finally {
-    setIsLoading(false);
   }
 };
