@@ -14,8 +14,8 @@ use tokio::time::{sleep, Duration, Instant};
 use crate::model::Token;
 use crate::mork_api::{
     ClearRequest, ExploreRequest, ExportFormat, ExportRequest, ImportRequest, Mm2Cell,
-    MorkApiClient, Namespace, ReadRequest, StatusRequest, StatusResponse, TransformDetails,
-    TransformRequest, UploadRequest,
+    MorkApiClient, Namespace, ReadRequest, Request, StatusRequest, StatusResponse,
+    TransformDetails, TransformRequest, UploadRequest,
 };
 use crate::routes::command::CommandState;
 
@@ -177,33 +177,14 @@ pub async fn upload(
     let broadcaster = state.broadcaster.clone();
     let request_path = path;
 
-    tokio::spawn(async move {
-        let _ = broadcaster.send("PROCESS_STARTED".to_string());
-        let _ = broadcaster.send("Starting upload operation...".to_string());
-
-        match mork_api_client.dispatch(request).await {
-            Ok(_) => {
-                let _ = broadcaster.send("Upload dispatched successfully.".to_string());
-            }
-            Err(e) => {
-                let _ = broadcaster.send(format!("Error dispatching upload: {:?}", e));
-                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
-                return;
-            }
-        };
-
-        // poll status endpoint
-        match poll_and_broadcast(request_path, &mork_api_client, &broadcaster).await {
-            Ok(_) => {
-                let _ = broadcaster.send("Poll successful.".to_string());
-                let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
-            }
-            Err(e) => {
-                let _ = broadcaster.send(format!("Error polling status: {:?}", e));
-                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
-            }
-        }
-    });
+    spawn_polling_job(
+        broadcaster,
+        mork_api_client,
+        request,
+        request_path,
+        "Starting upload operation...".to_string(),
+        "Upload dispatched successfully.".to_string(),
+    );
 
     Ok(Json(true))
 }
@@ -232,33 +213,14 @@ pub async fn import(
     let broadcaster = state.broadcaster.clone();
     let request_path = path.clone();
 
-    tokio::spawn(async move {
-        let _ = broadcaster.send("PROCESS_STARTED".to_string());
-        let _ = broadcaster.send("Starting import operation...".to_string());
-
-        match mork_api_client.dispatch(request).await {
-            Ok(_) => {
-                let _ = broadcaster.send("Import dispatched successfully.".to_string());
-            }
-            Err(e) => {
-                let _ = broadcaster.send(format!("Error dispatching import: {:?}", e));
-                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
-                return;
-            }
-        };
-
-        // poll status endpoint
-        match poll_and_broadcast(request_path, &mork_api_client, &broadcaster).await {
-            Ok(_) => {
-                let _ = broadcaster.send("Poll successful.".to_string());
-                let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
-            }
-            Err(e) => {
-                let _ = broadcaster.send(format!("Error polling status: {:?}", e));
-                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
-            }
-        }
-    });
+    spawn_polling_job(
+        broadcaster,
+        mork_api_client,
+        request,
+        request_path,
+        "Starting import operation...".to_string(),
+        "Import dispatched successfully.".to_string(),
+    );
 
     Ok(Json(true))
 }
@@ -328,33 +290,14 @@ pub async fn clear(
     let broadcaster = state.broadcaster.clone();
     let request_path = path.clone();
 
-    tokio::spawn(async move {
-        let _ = broadcaster.send("PROCESS_STARTED".to_string());
-        let _ = broadcaster.send("Starting clear operation...".to_string());
-
-        match mork_api_client.dispatch(request).await {
-            Ok(_) => {
-                let _ = broadcaster.send("Clear dispatched successfully.".to_string());
-            }
-            Err(e) => {
-                let _ = broadcaster.send(format!("Error dispatching clear: {:?}", e));
-                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
-                return;
-            }
-        };
-
-        // poll status endpoint
-        match poll_and_broadcast(request_path, &mork_api_client, &broadcaster).await {
-            Ok(_) => {
-                let _ = broadcaster.send("Poll successful.".to_string());
-                let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
-            }
-            Err(e) => {
-                let _ = broadcaster.send(format!("Error polling status: {:?}", e));
-                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
-            }
-        }
-    });
+    spawn_polling_job(
+        broadcaster,
+        mork_api_client,
+        request,
+        request_path,
+        "Starting clear operation...".to_string(),
+        "Clear dispatched successfully.".to_string(),
+    );
 
     Ok(Json(true))
 }
@@ -386,35 +329,18 @@ pub async fn transform(
         None => return Err(Status::BadRequest),
     };
 
-    tokio::spawn(async move {
-        let _ = broadcaster.send("PROCESS_STARTED".to_string());
-        let _ = broadcaster.send("Starting transform operation...".to_string());
+    // poll status endpoint
+    // Convert Namespace to PathBuf for polling
+    let path_buf = PathBuf::from(request_path.to_string());
 
-        match mork_api_client.dispatch(request).await {
-            Ok(_) => {
-                let _ = broadcaster.send("Transform dispatched successfully.".to_string());
-            }
-            Err(e) => {
-                let _ = broadcaster.send(format!("Error dispatching transform: {:?}", e));
-                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
-                return;
-            }
-        };
-
-        // poll status endpoint
-        // Convert Namespace to PathBuf for polling
-        let path_buf = PathBuf::from(request_path.to_string());
-        match poll_and_broadcast(path_buf, &mork_api_client, &broadcaster).await {
-            Ok(_) => {
-                let _ = broadcaster.send("Poll successful.".to_string());
-                let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
-            }
-            Err(e) => {
-                let _ = broadcaster.send(format!("Error polling status: {:?}", e));
-                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
-            }
-        }
-    });
+    spawn_polling_job(
+        broadcaster,
+        mork_api_client,
+        request,
+        path_buf,
+        "Starting transform operation...".to_string(),
+        "Transform dispatched successfully.".to_string(),
+    );
 
     Ok(Json(true))
 }
@@ -457,33 +383,14 @@ pub async fn composition(
         None => return Err(Status::BadRequest),
     };
 
-    tokio::spawn(async move {
-        let _ = broadcaster.send("PROCESS_STARTED".to_string());
-        let _ = broadcaster.send("Starting composition operation...".to_string());
-
-        match mork_api_client.dispatch(request).await {
-            Ok(_) => {
-                let _ = broadcaster.send("Composition dispatched successfully.".to_string());
-            }
-            Err(e) => {
-                let _ = broadcaster.send(format!("Error dispatching composition: {:?}", e));
-                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
-                return;
-            }
-        };
-
-        // poll status endpoint
-        match poll_and_broadcast(request_path, &mork_api_client, &broadcaster).await {
-            Ok(_) => {
-                let _ = broadcaster.send("Poll successful.".to_string());
-                let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
-            }
-            Err(e) => {
-                let _ = broadcaster.send(format!("Error polling status: {:?}", e));
-                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
-            }
-        }
-    });
+    spawn_polling_job(
+        broadcaster,
+        mork_api_client,
+        request,
+        request_path,
+        "Starting composition operation...".to_string(),
+        "Composition dispatched successfully.".to_string(),
+    );
 
     Ok(Json(true))
 }
@@ -531,7 +438,7 @@ pub async fn union(
 
     // path to be used for polling
     let request_path = match operation_input.clone().into_inner().target.first() {
-        Some(value) => value.clone(),
+        Some(value) => PathBuf::from(value),
         None => return Err(Status::BadRequest),
     };
 
@@ -547,29 +454,17 @@ pub async fn union(
         for transform_input in transform_inputs {
             let request = TransformRequest::new().transform_input(transform_input);
 
-            match mork_api_client.dispatch(request).await {
-                Ok(_) => {
-                    let _ = broadcaster.send("Transform dispatched successfully.".to_string());
-                }
-                Err(e) => {
-                    let _ = broadcaster.send(format!("Error dispatching transform: {:?}", e));
-                    let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
-                    return;
-                }
-            };
-
-            // poll status endpoint
-            match poll_and_broadcast(PathBuf::from(&request_path), &mork_api_client, &broadcaster)
-                .await
+            if execute_polling_job(
+                &mork_api_client,
+                &broadcaster,
+                request,
+                request_path.clone(),
+                "Transform dispatched successfully.".to_string(),
+            )
+            .await
+            .is_err()
             {
-                Ok(_) => {
-                    let _ = broadcaster.send("Poll successful.".to_string());
-                }
-                Err(e) => {
-                    let _ = broadcaster.send(format!("Error polling status: {:?}", e));
-                    let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
-                    return;
-                }
+                return;
             }
         }
         let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
@@ -581,6 +476,70 @@ pub async fn union(
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////// HELPER FUNCTIONS ////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+async fn execute_polling_job<R>(
+    mork_api_client: &MorkApiClient,
+    broadcaster: &broadcast::Sender<String>,
+    request: R,
+    request_path: PathBuf,
+    dispatch_msg: String,
+) -> Result<(), ()>
+where
+    R: Request + Send + Sync,
+{
+    match mork_api_client.dispatch(request).await {
+        Ok(_) => {
+            let _ = broadcaster.send(dispatch_msg);
+        }
+        Err(e) => {
+            let _ = broadcaster.send(format!("Error dispatching request: {:?}", e));
+            let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
+            return Err(());
+        }
+    };
+
+    // poll status endpoint
+    match poll_and_broadcast(request_path, mork_api_client, broadcaster).await {
+        Ok(_) => {
+            let _ = broadcaster.send("Poll successful.".to_string());
+            Ok(())
+        }
+        Err(e) => {
+            let _ = broadcaster.send(format!("Error polling status: {:?}", e));
+            let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
+            Err(())
+        }
+    }
+}
+
+fn spawn_polling_job<R>(
+    broadcaster: broadcast::Sender<String>,
+    mork_api_client: MorkApiClient,
+    request: R,
+    request_path: PathBuf,
+    start_msg: String,
+    dispatch_msg: String,
+) where
+    R: Request + Send + Sync + 'static,
+{
+    tokio::spawn(async move {
+        let _ = broadcaster.send("PROCESS_STARTED".to_string());
+        let _ = broadcaster.send(start_msg);
+
+        if execute_polling_job(
+            &mork_api_client,
+            &broadcaster,
+            request,
+            request_path,
+            dispatch_msg,
+        )
+        .await
+        .is_ok()
+        {
+            let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
+        }
+    });
+}
 
 async fn poll_and_broadcast(
     path: PathBuf,
@@ -627,7 +586,7 @@ async fn poll_and_broadcast(
     Ok(true)
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // incase this is necessary in the future
 async fn poll(path: PathBuf, mork_api_client: &MorkApiClient) -> Result<bool, Status> {
     let start_time = Instant::now();
     let timeout_duration = Duration::from_secs(40);
