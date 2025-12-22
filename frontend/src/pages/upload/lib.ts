@@ -1,7 +1,6 @@
 import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { importData, uploadTextToSpace, importSpace } from "~/lib/api";
-import { refreshSpace } from "../load/lib";
 import { isCommandRunning } from "~/lib/sse";
 
 type UploadResult =

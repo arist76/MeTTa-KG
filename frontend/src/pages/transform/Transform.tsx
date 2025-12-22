@@ -34,7 +34,7 @@ const TransformPage: Component = () => {
   };
 
   const handleTransform = () => {
-    executeTransform(state.patterns, state.templates, formatedNamespace());
+    executeTransform(state.patterns, state.templates);
   };
 
   const addPattern = () => {

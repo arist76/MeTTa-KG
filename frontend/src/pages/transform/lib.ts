@@ -11,11 +11,7 @@ export const stopPolling = () => {
   setIsPolling(false);
 };
 
-export const executeTransform = async (
-  patterns: Item[],
-  templates: Item[],
-  _spacePath: string
-) => {
+export const executeTransform = async (patterns: Item[], templates: Item[]) => {
   if (
     !patterns.some((p) => p.value.trim()) ||
     !templates.some((t) => t.value.trim())

@@ -9,7 +9,6 @@ import {
   CardDescription,
   CardContent,
 } from "~/components/ui/Card";
-import { formatedNamespace } from "~/lib/state";
 import { getAllTokens } from "~/lib/api";
 import { rootToken, tokenRootNamespace } from "~/lib/state";
 import {
@@ -80,7 +79,7 @@ const CompositionPage: Component = () => {
   const handleComposition = () => {
     const compositionQueryInput: setOperationInput =
       buildCompositionSetInput(state);
-    executeComposition(compositionQueryInput, formatedNamespace());
+    executeComposition(compositionQueryInput);
   };
 
   const addSource = () => {

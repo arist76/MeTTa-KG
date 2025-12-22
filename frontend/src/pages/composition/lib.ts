@@ -16,8 +16,7 @@ export const stopPolling = () => {
 };
 
 export const executeComposition = async (
-  compositionQuery: setOperationInput,
-  _spacePath: string
+  compositionQuery: setOperationInput
 ) => {
   if (compositionQuery.source.length < 2) {
     showToast({

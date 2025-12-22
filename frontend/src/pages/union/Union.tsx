@@ -9,7 +9,6 @@ import {
   CardDescription,
   CardContent,
 } from "~/components/ui/Card";
-import { formatedNamespace } from "~/lib/state";
 import { getAllTokens } from "~/lib/api";
 import { rootToken, tokenRootNamespace } from "~/lib/state";
 import {
@@ -78,7 +77,7 @@ const UnionPage: Component = () => {
 
   const handleUnion = () => {
     const unionQueryInput: setOperationInput = buildUnionSetInput(state);
-    executeUnion(unionQueryInput, formatedNamespace());
+    executeUnion(unionQueryInput);
   };
 
   const addPattern = () => {
