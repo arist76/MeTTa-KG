@@ -10,7 +10,11 @@ import {
   DialogTitle,
 } from "~/components/ui/Dialog";
 import { Button } from "~/components/ui/Button";
-import { TextField, TextFieldInput, TextFieldLabel } from "~/components/ui/TextField";
+import {
+  TextField,
+  TextFieldInput,
+  TextFieldLabel,
+} from "~/components/ui/TextField";
 import Activity from "lucide-solid/icons/activity";
 import Network from "lucide-solid/icons/network";
 
@@ -48,7 +52,10 @@ export const SpawnModal = (props: {
   };
 
   return (
-    <Dialog open={props.isOpen} onOpenChange={(open) => !open && props.onClose()}>
+    <Dialog
+      open={props.isOpen}
+      onOpenChange={(open) => !open && props.onClose()}
+    >
       <DialogContent class="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Spawn New Instance</DialogTitle>
@@ -120,7 +127,11 @@ export const SpawnModal = (props: {
         </form>
 
         <DialogFooter>
-          <Button variant="outline" onClick={props.onClose} disabled={loading()}>
+          <Button
+            variant="outline"
+            onClick={props.onClose}
+            disabled={loading()}
+          >
             Cancel
           </Button>
           <Button type="submit" form="spawn-form" disabled={loading()}>

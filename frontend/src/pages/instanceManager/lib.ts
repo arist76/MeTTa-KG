@@ -4,9 +4,10 @@ import { showToast } from "~/components/ui/Toast";
 export interface MorkInstance {
   id: string;
   port: number;
-  cpu: number; // Changed to number for easier progress calc
-  memory: number; // Current MB
-  memory_limit: number | null; // Limit MB
+  cpu: number;
+  cpu_limit: number | null;
+  memory: number;
+  memory_limit: number | null;
   status: "running" | "stopped" | "starting";
 }
 
@@ -17,7 +18,9 @@ export interface SpawnRequest {
   cpu_limit_percent?: number;
 }
 
-export const [activeMorkPort, setActiveMorkPort] = createSignal<number | null>(null);
+export const [activeMorkPort, setActiveMorkPort] = createSignal<number | null>(
+  null
+);
 
 export const fetchInstances = async (): Promise<MorkInstance[]> => {
   try {
@@ -52,10 +55,9 @@ export const spawnNewInstance = async (req: SpawnRequest) => {
       return false;
     }
 
-    // CRITICAL FIX: Explicitly tell backend to switch to the new port
     await selectInstance(req.port);
 
-    setActiveMorkPort(req.port); 
+    setActiveMorkPort(req.port);
     showToast({
       title: "Success",
       description: `Mork instance running on port ${req.port}`,
@@ -90,5 +92,61 @@ export const selectInstance = async (port: number) => {
       description: "Could not switch Mork instance.",
       variant: "destructive",
     });
+  }
+};
+
+export const killInstance = async (port: number) => {
+  try {
+    const response = await fetch(`/api/mork/kill/${port}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) throw new Error("Failed to kill instance");
+
+    if (activeMorkPort() === port) {
+      setActiveMorkPort(null);
+    }
+
+    showToast({
+      title: "Instance Stopped",
+      description: `Mork instance on port ${port} has been terminated.`,
+    });
+    return true;
+  } catch (e) {
+    showToast({
+      title: "Error",
+      description: "Could not kill instance.",
+      variant: "destructive",
+    });
+    return false;
+  }
+};
+
+export const updateInstanceLimits = async (
+  port: number,
+  memory_limit_mb?: number,
+  cpu_limit_percent?: number
+) => {
+  try {
+    const response = await fetch(`/api/mork/update/${port}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ memory_limit_mb, cpu_limit_percent }),
+    });
+
+    if (!response.ok) throw new Error("Failed to update limits");
+
+    showToast({
+      title: "Limits Updated",
+      description: `Resource limits for port ${port} updated.`,
+    });
+    return true;
+  } catch (e) {
+    showToast({
+      title: "Update Failed",
+      description: "Could not update instance limits.",
+      variant: "destructive",
+    });
+    return false;
   }
 };
