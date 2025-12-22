@@ -6,13 +6,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use rocket::serde::json::Json;
-use rocket::{get, post, http::Status, State};
+use rocket::{delete, get, http::Status, patch, post, State};
 
 use serde::{Deserialize, Serialize};
-use sysinfo::{Pid, System, ProcessesToUpdate}; // Added ProcessesToUpdate
+use sysinfo::{Pid, ProcessesToUpdate, System};
 
 use tempfile::Builder;
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::process::Command;
 use tokio::sync::RwLock;
@@ -22,6 +21,7 @@ pub struct MorkInstanceInfo {
     pub id: String,
     pub port: u16,
     pub cpu: f32,
+    pub cpu_limit: Option<f32>, // Added
     pub memory: u64,
     pub memory_limit: Option<u64>,
     pub status: String,
@@ -36,10 +36,17 @@ pub struct SpawnRequest {
     pub cpu_limit_percent: Option<f32>,
 }
 
+#[derive(Deserialize, Clone)]
+pub struct UpdateLimitsRequest {
+    pub memory_limit_mb: Option<u64>,
+    pub cpu_limit_percent: Option<f32>, // Added
+}
+
 pub struct ManagedInstance {
     pub port: u16,
     pub pid: u32,
     pub memory_limit: Option<u64>,
+    pub cpu_limit: Option<f32>, // Added
 }
 
 pub struct MorkManager {
@@ -63,7 +70,7 @@ impl MorkManager {
             .as_file()
             .write_all(binary_bytes)
             .expect("Failed to write Mork binary to temp file");
-        
+
         temp_file
             .as_file()
             .sync_all()
@@ -89,30 +96,11 @@ impl MorkManager {
         }
     }
 
-    fn spawn_log_reader(
-        prefix: &'static str,
-        pid: u32,
-        reader: impl tokio::io::AsyncRead + Unpin + Send + 'static,
-    ) {
-        tokio::spawn(async move {
-            let mut r = BufReader::new(reader);
-            let mut line = String::new();
-            loop {
-                line.clear();
-                match r.read_line(&mut line).await {
-                    Ok(0) => break,
-                    Ok(_) => print!("{prefix} [{pid}]: {line}"),
-                    Err(e) => {
-                        eprintln!("{prefix} [{pid}]: <read error> {e}");
-                        break;
-                    }
-                }
-            }
-            eprintln!("{prefix} [{pid}]: <stream closed>");
-        });
-    }
-
-    async fn wait_for_port_ready(host: &str, port: u16, child: &mut tokio::process::Child) -> Result<(), String> {
+    async fn wait_for_port_ready(
+        host: &str,
+        port: u16,
+        child: &mut tokio::process::Child,
+    ) -> Result<(), String> {
         let addr = format!("{host}:{port}");
         println!("DEBUG: Waiting for Mork to listen on {addr} ...");
 
@@ -135,12 +123,93 @@ impl MorkManager {
             }
         }
 
-        Err(format!("Mork did not start listening on {addr} within timeout"))
+        Err(format!(
+            "Mork did not start listening on {addr} within timeout"
+        ))
+    }
+
+    // Helper for consistent units (MB)
+    fn proc_mem_mb(proc_: &sysinfo::Process) -> u64 {
+        proc_.memory() / 1024 / 1024
+    }
+
+    // NEW: Check memory usage and return error if exceeded (no killing)
+    pub async fn check_resource_usage(&self, port: u16) -> Result<(), String> {
+        let (pid_u32, limit_mb) = {
+            let instances = self.instances.read().await;
+            let Some(inst) = instances.get(&port) else {
+                return Ok(());
+            };
+            let Some(limit) = inst.memory_limit else {
+                return Ok(());
+            };
+            (inst.pid, limit)
+        };
+
+        let pid = Pid::from_u32(pid_u32);
+        let mut sys = System::new();
+        sys.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+
+        if let Some(proc_) = sys.process(pid) {
+            let mem_mb = Self::proc_mem_mb(proc_);
+            if mem_mb > limit_mb {
+                return Err(format!(
+                    "Memory limit exceeded: {}MB > {}MB",
+                    mem_mb, limit_mb
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    // NEW: Kill a specific instance by port
+    pub async fn kill_instance(&self, port: u16) -> Result<(), String> {
+        let pid_u32 = {
+            let instances = self.instances.read().await;
+            instances
+                .get(&port)
+                .map(|i| i.pid)
+                .ok_or("Instance not found")?
+        };
+
+        let pid = Pid::from_u32(pid_u32);
+        let mut sys = System::new();
+        sys.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+
+        if let Some(proc) = sys.process(pid) {
+            if proc.kill() {
+                Ok(())
+            } else {
+                Err("Failed to send kill signal".to_string())
+            }
+        } else {
+            Err("Process not running".to_string())
+        }
+    }
+
+    // NEW: Update limits for an existing instance
+    pub async fn update_limits(
+        &self,
+        port: u16,
+        memory_limit_mb: Option<u64>,
+        cpu_limit_percent: Option<f32>,
+    ) -> Result<(), String> {
+        let mut instances = self.instances.write().await;
+        if let Some(inst) = instances.get_mut(&port) {
+            inst.memory_limit = memory_limit_mb;
+            inst.cpu_limit = cpu_limit_percent;
+            Ok(())
+        } else {
+            Err("Instance not found".to_string())
+        }
     }
 
     pub async fn spawn_instance(&self, req: SpawnRequest) -> Result<u32, String> {
         let host = req.host.clone().unwrap_or_else(|| "127.0.0.1".to_string());
-        println!("DEBUG: Attempting to spawn instance host={host} port={}", req.port);
+        println!(
+            "DEBUG: Attempting to spawn instance host={host} port={}",
+            req.port
+        );
 
         {
             let instances = self.instances.read().await;
@@ -161,20 +230,13 @@ impl MorkManager {
         let mut cmd = Command::new(&self.binary_path);
         cmd.env("MORK_SERVER_PORT", req.port.to_string());
         cmd.stdout(Stdio::piped())
-           .stderr(Stdio::piped())
-           .kill_on_drop(true);
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
 
         println!("DEBUG: Spawning process now...");
         let mut child = cmd.spawn().map_err(|e| format!("Spawn error: {e}"))?;
         let pid = child.id().ok_or("Failed to get PID")?;
         println!("DEBUG: Spawned PID={pid}");
-
-        if let Some(stdout) = child.stdout.take() {
-            Self::spawn_log_reader("MORK OUT", pid, stdout);
-        }
-        if let Some(stderr) = child.stderr.take() {
-            Self::spawn_log_reader("MORK ERR", pid, stderr);
-        }
 
         if let Err(e) = Self::wait_for_port_ready(&host, req.port, &mut child).await {
             eprintln!("DEBUG: Readiness probe failed: {e}");
@@ -185,60 +247,35 @@ impl MorkManager {
 
         {
             let mut instances = self.instances.write().await;
-            instances.insert(req.port, ManagedInstance {
-                port: req.port,
-                pid,
-                memory_limit: req.memory_limit_mb,
-            });
+            instances.insert(
+                req.port,
+                ManagedInstance {
+                    port: req.port,
+                    pid,
+                    memory_limit: req.memory_limit_mb,
+                    cpu_limit: req.cpu_limit_percent, // Added
+                },
+            );
         }
 
-        // --- ROBUST MONITORING LOOP ---
+        // CHANGED: Removed the killing loop. Just wait for exit.
         let instances = Arc::clone(&self.instances);
         let port = req.port;
-        let memory_limit = req.memory_limit_mb;
 
         tokio::spawn(async move {
-            let mut sys = System::new();
-            let sys_pid = Pid::from_u32(pid);
-            // Check resources every 2 seconds
-            let mut interval = tokio::time::interval(Duration::from_secs(2));
-
-            loop {
-                tokio::select! {
-                    // 1. Wait for process exit
-                    exit_status = child.wait() => {
-                        match exit_status {
-                            Ok(status) => eprintln!("MORK [{pid}] exited (port={port}) with status: {status}"),
-                            Err(e) => eprintln!("MORK [{pid}] wait() failed (port={port}): {e}"),
-                        }
-                        break;
-                    }
-                    // 2. Monitor resources
-                    _ = interval.tick() => {
-                        if let Some(limit_mb) = memory_limit {
-                            // Refresh only this process to be efficient
-                            sys.refresh_processes(ProcessesToUpdate::Some(&[sys_pid]), true);
-                            
-                            if let Some(proc) = sys.process(sys_pid) {
-                                // proc.memory() returns bytes
-                                let mem_usage_mb = proc.memory() / 1024 / 1024;
-                                
-                                if mem_usage_mb > limit_mb {
-                                    eprintln!("MORK [{pid}] exceeded memory limit ({mem_usage_mb}MB > {limit_mb}MB). Killing...");
-                                    let _ = child.start_kill();
-                                    // The loop will break on the next iteration via child.wait()
-                                }
-                            }
-                        }
-                    }
-                }
+            match child.wait().await {
+                Ok(status) => eprintln!("MORK [{pid}] exited (port={port}) with status: {status}"),
+                Err(e) => eprintln!("MORK [{pid}] wait() failed (port={port}): {e}"),
             }
 
             let mut map = instances.write().await;
             map.remove(&port);
         });
 
-        println!("DEBUG: Spawn complete and registered pid={pid} port={}", req.port);
+        println!(
+            "DEBUG: Spawn complete and registered pid={pid} port={}",
+            req.port
+        );
         Ok(pid)
     }
 
@@ -252,7 +289,7 @@ impl MorkManager {
             .map(|(port, inst)| {
                 let pid = Pid::from_u32(inst.pid);
                 let (cpu, mem) = if let Some(proc_) = sys.process(pid) {
-                    (proc_.cpu_usage(), proc_.memory() / 1024 / 1024)
+                    (proc_.cpu_usage(), Self::proc_mem_mb(proc_))
                 } else {
                     (0.0, 0)
                 };
@@ -261,6 +298,7 @@ impl MorkManager {
                     id: inst.pid.to_string(),
                     port: *port,
                     cpu,
+                    cpu_limit: inst.cpu_limit, // Added
                     memory: mem,
                     memory_limit: inst.memory_limit,
                     status: "running".to_string(),
@@ -288,10 +326,10 @@ pub async fn spawn_mork(
             let url = format!("http://127.0.0.1:{}", port);
             std::env::set_var("METTA_KG_MORK_URL", &url);
             std::env::set_var("MORK_SERVER_PORT", port.to_string());
-            
+
             println!("DEBUG: Auto-selected new Mork instance at {}", url);
             Ok(Status::Created)
-        },
+        }
         Err(e) => Err((Status::Conflict, e)),
     }
 }
@@ -301,7 +339,35 @@ pub async fn select_instance(port: u16) -> Status {
     let url = format!("http://127.0.0.1:{}", port);
     std::env::set_var("METTA_KG_MORK_URL", &url);
     std::env::set_var("MORK_SERVER_PORT", port.to_string());
-    
+
     println!("DEBUG: Selected Mork instance switched to {}", url);
     Status::Ok
+}
+
+// NEW: Route to kill an instance
+#[delete("/mork/kill/<port>")]
+pub async fn kill_mork(
+    manager: &State<MorkManager>,
+    port: u16,
+) -> Result<Status, (Status, String)> {
+    match manager.kill_instance(port).await {
+        Ok(_) => Ok(Status::Ok),
+        Err(e) => Err((Status::NotFound, e)),
+    }
+}
+
+// NEW: Route to update instance limits
+#[patch("/mork/update/<port>", data = "<req>")]
+pub async fn update_mork_limits(
+    manager: &State<MorkManager>,
+    port: u16,
+    req: Json<UpdateLimitsRequest>,
+) -> Result<Status, (Status, String)> {
+    match manager
+        .update_limits(port, req.memory_limit_mb, req.cpu_limit_percent)
+        .await
+    {
+        Ok(_) => Ok(Status::Ok),
+        Err(e) => Err((Status::NotFound, e)),
+    }
 }
