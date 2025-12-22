@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use rocket::response::status::Custom;
-use rocket::{get, post, Data};
+use rocket::{get, post, Data, State};
+use std::env;
 use std::path::PathBuf;
 
 use crate::model::Token;
@@ -13,6 +14,13 @@ use crate::mork_api::{
     ClearRequest, ExploreRequest, ExportFormat, ExportRequest, ImportRequest, Mm2Cell,
     MorkApiClient, Namespace, ReadRequest, TransformDetails, TransformRequest, UploadRequest,
 };
+use crate::routes::mork_manager::MorkManager; // Import Manager
+
+fn get_current_port() -> Option<u16> {
+    env::var("MORK_SERVER_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+}
 
 trait SourceTargetPermissions {
     type Ns: ToString + Clone;
@@ -122,10 +130,18 @@ pub async fn upload(
     token: Token,
     path: PathBuf,
     data: Data<'_>,
+    manager: &State<MorkManager>, // Inject Manager
 ) -> Result<Json<String>, Custom<String>> {
     let token_namespace = token.namespace.strip_prefix("/").unwrap();
     if !path.starts_with(token_namespace) || !token.permission_write {
         return Err(Custom(Status::Unauthorized, "Unauthorized".to_string()));
+    }
+
+    if let Some(port) = get_current_port() {
+        if let Err(e) = manager.check_resource_usage(port).await {
+            // Renamed
+            return Err(Custom(Status::InsufficientStorage, e));
+        }
     }
 
     let mut body = String::new();
@@ -152,23 +168,33 @@ pub async fn upload(
 
     match mork_api_client.dispatch(request).await {
         Ok(text) => Ok(Json(text)),
-        Err(e) => Err(Custom(
-            Status::InternalServerError,
-            format!("Failed to contact backend: {e}"),
-        )),
+        Err(e) => Err(Custom(e, format!("Mork API Error: {}", e))),
     }
 }
 
 /// Imports data from `<uri>` into the `<path..>` space. Exectes mm2 on the imported data.
 #[post("/spaces/import/<path..>?<uri>")]
-pub async fn import(token: Token, path: PathBuf, uri: String) -> Result<Json<bool>, Status> {
+pub async fn import(
+    token: Token,
+    path: PathBuf,
+    uri: String,
+    manager: &State<MorkManager>,
+) -> Result<Json<bool>, Custom<String>> {
+    // Changed from Status to Custom<String>
     if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_write {
-        return Err(Status::Unauthorized);
+        return Err(Custom(Status::Unauthorized, "Unauthorized".to_string()));
+    }
+
+    if let Some(port) = get_current_port() {
+        if let Err(e) = manager.check_resource_usage(port).await {
+            // Renamed
+            return Err(Custom(Status::InsufficientStorage, e));
+        }
     }
 
     // validate uri
     if Url::parse(&uri).is_err() {
-        return Err(Status::BadRequest);
+        return Err(Custom(Status::BadRequest, "Invalid URI".to_string()));
     }
 
     let mork_api_client = MorkApiClient::new();
@@ -177,7 +203,7 @@ pub async fn import(token: Token, path: PathBuf, uri: String) -> Result<Json<boo
 
     match mork_api_client.dispatch(request).await {
         Ok(_) => Ok(Json(true)),
-        Err(e) => Err(e),
+        Err(e) => Err(Custom(e, format!("Mork API Error: {}", e))),
     }
 }
 
@@ -249,10 +275,19 @@ pub async fn clear(token: Token, path: PathBuf, expr: String) -> Result<Json<boo
 pub async fn transform(
     token: Token,
     mm2: Json<Mm2InputMultiWithNamespace>,
-) -> Result<Json<bool>, Status> {
+    manager: &State<MorkManager>, // Inject Manager
+) -> Result<Json<bool>, Custom<String>> {
+    // Changed from Status to Custom<String>
     let mm2 = mm2.into_inner();
     if !mm2.clone().source_target_permissions(token) {
-        return Err(Status::Unauthorized);
+        return Err(Custom(Status::Unauthorized, "Unauthorized".to_string()));
+    }
+
+    if let Some(port) = get_current_port() {
+        if let Err(e) = manager.check_resource_usage(port).await {
+            // Renamed
+            return Err(Custom(Status::InsufficientStorage, e));
+        }
     }
 
     let mork_api_client = MorkApiClient::new();
@@ -265,6 +300,6 @@ pub async fn transform(
     // TODO: use server sent events instead
     match mork_api_client.dispatch(request).await {
         Ok(_) => Ok(Json(true)),
-        Err(e) => Err(e),
+        Err(e) => Err(Custom(e, format!("Mork API Error: {}", e))),
     }
 }
