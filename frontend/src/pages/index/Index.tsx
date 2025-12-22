@@ -162,7 +162,7 @@ const AppLayout = (
         <Show when={isCommandRunning()}>
           <div class="w-full h-1 bg-gray-200">
             <div
-              class="h-full bg-blue-500 transition-all duration-300"
+              class="h-full bg-green-500 transition-all duration-300"
               style={{ width: `${commandProgress()}%` }}
             ></div>
           </div>
