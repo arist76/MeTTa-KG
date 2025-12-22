@@ -145,7 +145,8 @@ pub async fn upload(
     token: Token,
     path: PathBuf,
     data: Data<'_>,
-) -> Result<Json<String>, Custom<String>> {
+    state: &State<CommandState>,
+) -> Result<Json<bool>, Custom<String>> {
     let token_namespace = token.namespace.strip_prefix("/").unwrap();
     if !path.starts_with(token_namespace) || !token.permission_write {
         return Err(Custom(Status::Unauthorized, "Unauthorized".to_string()));
@@ -168,23 +169,53 @@ pub async fn upload(
 
     let mork_api_client = MorkApiClient::new();
     let request = UploadRequest::new()
-        .namespace(path)
+        .namespace(path.clone())
         .pattern(pattern.to_string())
         .template(template.to_string())
         .data(body);
 
-    match mork_api_client.dispatch(request).await {
-        Ok(text) => Ok(Json(text)),
-        Err(e) => Err(Custom(
-            Status::InternalServerError,
-            format!("Failed to contact backend: {e}"),
-        )),
-    }
+    let broadcaster = state.broadcaster.clone();
+    let request_path = path;
+
+    tokio::spawn(async move {
+        let _ = broadcaster.send("PROCESS_STARTED".to_string());
+        let _ = broadcaster.send("Starting upload operation...".to_string());
+
+        match mork_api_client.dispatch(request).await {
+            Ok(_) => {
+                let _ = broadcaster.send("Upload dispatched successfully.".to_string());
+            }
+            Err(e) => {
+                let _ = broadcaster.send(format!("Error dispatching upload: {:?}", e));
+                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
+                return;
+            }
+        };
+
+        // poll status endpoint
+        match poll_and_broadcast(request_path, &mork_api_client, &broadcaster).await {
+            Ok(_) => {
+                let _ = broadcaster.send("Poll successful.".to_string());
+                let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
+            }
+            Err(e) => {
+                let _ = broadcaster.send(format!("Error polling status: {:?}", e));
+                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
+            }
+        }
+    });
+
+    Ok(Json(true))
 }
 
 /// Imports data from `<uri>` into the `<path..>` space. Exectes mm2 on the imported data.
 #[post("/spaces/import/<path..>?<uri>")]
-pub async fn import(token: Token, path: PathBuf, uri: String) -> Result<Json<bool>, Status> {
+pub async fn import(
+    token: Token,
+    path: PathBuf,
+    uri: String,
+    state: &State<CommandState>,
+) -> Result<Json<bool>, Status> {
     if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_write {
         return Err(Status::Unauthorized);
     }
@@ -195,13 +226,41 @@ pub async fn import(token: Token, path: PathBuf, uri: String) -> Result<Json<boo
     }
 
     let mork_api_client = MorkApiClient::new();
-    let template = Mm2Cell::new_template("$x".to_string(), Namespace::from(path));
+    let template = Mm2Cell::new_template("$x".to_string(), Namespace::from(path.clone()));
     let request = ImportRequest::new().to(template).uri(uri);
 
-    match mork_api_client.dispatch(request).await {
-        Ok(_) => Ok(Json(true)),
-        Err(e) => Err(e),
-    }
+    let broadcaster = state.broadcaster.clone();
+    let request_path = path.clone();
+
+    tokio::spawn(async move {
+        let _ = broadcaster.send("PROCESS_STARTED".to_string());
+        let _ = broadcaster.send("Starting import operation...".to_string());
+
+        match mork_api_client.dispatch(request).await {
+            Ok(_) => {
+                let _ = broadcaster.send("Import dispatched successfully.".to_string());
+            }
+            Err(e) => {
+                let _ = broadcaster.send(format!("Error dispatching import: {:?}", e));
+                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
+                return;
+            }
+        };
+
+        // poll status endpoint
+        match poll_and_broadcast(request_path, &mork_api_client, &broadcaster).await {
+            Ok(_) => {
+                let _ = broadcaster.send("Poll successful.".to_string());
+                let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
+            }
+            Err(e) => {
+                let _ = broadcaster.send(format!("Error polling status: {:?}", e));
+                let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
+            }
+        }
+    });
+
+    Ok(Json(true))
 }
 
 /// Performs an explore operation on the `<path..>` space. Get the result that
@@ -496,13 +555,14 @@ async fn poll_and_broadcast(
     broadcaster: &broadcast::Sender<String>,
 ) -> Result<bool, Status> {
     let start_time = Instant::now();
-    let timeout_duration = Duration::from_secs(40);
+    let timeout_duration = Duration::from_secs(300);
 
     // Check if space is clear by using status endpoint
     let check_request = StatusRequest::new()
         .namespace(path.clone())
         .pattern("$x".to_string());
 
+    let mut counter = 0;
     loop {
         // exit condition stop polling after some second
         if start_time.elapsed() > timeout_duration {
@@ -511,7 +571,11 @@ async fn poll_and_broadcast(
 
         // wait 1 second between each status request
         sleep(Duration::from_millis(1000)).await;
-        let _ = broadcaster.send("Checking status...".to_string());
+
+        if counter % 5 == 0 {
+            let _ = broadcaster.send("Checking status...".to_string());
+        }
+        counter += 1;
 
         // destructure status endpoint json response
         let status_response: StatusResponse =
