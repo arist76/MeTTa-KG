@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { composition } from "~/lib/api";
 import { showToast } from "~/components/ui/Toast";
 import { isCommandRunning } from "~/lib/sse";
+import { refreshSpace } from "../load/lib";
 
 export { isCommandRunning as isLoading };
 export const [isPolling, setIsPolling] = createSignal(false);
@@ -43,6 +44,8 @@ export const executeComposition = async (
     });
 
     await composition(compositionQuery);
+
+    refreshSpace()
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "An unexpected error occurred.";

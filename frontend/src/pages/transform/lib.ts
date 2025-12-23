@@ -3,6 +3,7 @@ import { transform } from "~/lib/api";
 import { Mm2InputMultiWithNamespace, Item } from "~/lib/types";
 import { showToast } from "~/components/ui/Toast";
 import { isCommandRunning } from "~/lib/sse";
+import { refreshSpace } from "../load/lib";
 
 export { isCommandRunning as isLoading };
 export const [isPolling, setIsPolling] = createSignal(false);
@@ -44,6 +45,8 @@ export const executeTransform = async (patterns: Item[], templates: Item[]) => {
     });
 
     await transform(input);
+
+    refreshSpace()
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "An unexpected error occurred.";
