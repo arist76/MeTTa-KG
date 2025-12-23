@@ -46,7 +46,7 @@ export const executeTransform = async (patterns: Item[], templates: Item[]) => {
 
     await transform(input);
 
-    refreshSpace()
+    refreshSpace();
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "An unexpected error occurred.";

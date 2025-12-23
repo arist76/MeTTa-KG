@@ -27,7 +27,7 @@ export const handleClear = async (spacePath: string) => {
       });
     }
 
-    refreshSpace()
+    refreshSpace();
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "An unexpected error occurred.";

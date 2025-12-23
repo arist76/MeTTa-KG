@@ -3,7 +3,6 @@ import { showToast } from "~/components/ui/Toast";
 import { importData, uploadTextToSpace, importSpace } from "~/lib/api";
 import { isCommandRunning } from "~/lib/sse";
 import { refreshSpace } from "../load/lib";
-import { ref } from "process";
 
 type UploadResult =
   | null

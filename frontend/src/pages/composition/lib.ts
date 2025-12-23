@@ -45,7 +45,7 @@ export const executeComposition = async (
 
     await composition(compositionQuery);
 
-    refreshSpace()
+    refreshSpace();
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "An unexpected error occurred.";
