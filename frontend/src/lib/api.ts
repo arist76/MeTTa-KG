@@ -12,9 +12,14 @@ import { quoteFromBytes } from "./utils";
 export const API_URL =
   import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
 
-export interface ApiResponse {
+export interface ApiErrorData {
+  message?: string;
+  [key: string]: unknown;
+}
+
+export interface ApiResponse<T = unknown> {
   status: "success" | "error";
-  data?: any /* eslint-disable-line @typescript-eslint/no-explicit-any */;
+  data?: T;
   message: string;
 }
 
@@ -53,8 +58,7 @@ export async function request<T>(
     if (contentType && contentType.includes("application/json")) {
       const errorData = await response.json();
       const error = new Error(errorData.message || "An unknown error occurred");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (error as any).data = errorData;
+      (error as Error & { data: ApiErrorData }).data = errorData;
       throw error;
     } else {
       const errorText = await response.text();
@@ -138,9 +142,10 @@ export const createFromCSV = (file: File, params: CSVParserParameters) => {
   const formData = new FormData();
   formData.append("file", file);
   const url = new URL(`${API_URL}/translations/csv`);
-  url.search = new URLSearchParams(
-    params as any /* eslint-disable-line @typescript-eslint/no-explicit-any */
-  ).toString();
+  const searchParams = new URLSearchParams();
+  searchParams.append("direction", params.direction.toString());
+  searchParams.append("delimiter", params.delimiter);
+  url.search = searchParams.toString();
 
   return fetch(url.toString(), {
     method: "POST",
@@ -214,7 +219,7 @@ export async function isPathClear(path: string): Promise<boolean> {
 
 export async function importData(
   type: string,
-  data: any /* eslint-disable-line @typescript-eslint/no-explicit-any */ = null,
+  data: string | FormData,
   format: string = "metta",
   path: string
 ): Promise<ImportDataResponse> {
@@ -237,9 +242,12 @@ export async function importData(
 
       case "file":
         try {
-          const file: File = data.get("file");
+          if (!(data instanceof FormData)) {
+            return { status: "error", message: "Invalid data format" };
+          }
+          const file = data.get("file");
 
-          if (!file) {
+          if (!file || !(file instanceof File)) {
             return { status: "error", message: "No file provided" };
           }
 
