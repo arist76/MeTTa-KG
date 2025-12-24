@@ -6,7 +6,7 @@ import { A } from "@solidjs/router";
 interface SidebarItem {
   id: string;
   label: string;
-  icon: Component | (() => JSX.Element);
+  icon: Component<any> | (() => JSX.Element);
   to: string;
   description?: string;
 }
