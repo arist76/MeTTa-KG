@@ -174,7 +174,7 @@ const TransformPage: Component = () => {
 
         <Button
           onClick={handleTransform}
-          disabled={isAppBusy() || isPolling()}
+          disabled={isAppBusy() || isPolling() || !canTransform()}
           class="inline-flex items-center justify-center w-[180px] h-10 mt-4"
         >
           <Show when={isLoading() || isPolling()}>
