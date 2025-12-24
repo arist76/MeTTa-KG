@@ -6,9 +6,10 @@ import { A } from "@solidjs/router";
 interface SidebarItem {
   id: string;
   label: string;
-  icon: Component<any> | (() => JSX.Element);
+  icon: Component<{ class?: string }> | (() => JSX.Element);
   to: string;
   description?: string;
+  component?: Component;
 }
 
 interface SidebarSection {
@@ -16,7 +17,7 @@ interface SidebarSection {
   items: SidebarItem[];
 }
 
-interface SidbarProps {
+interface SidebarProps {
   activeTab: Accessor<string>;
   setActiveTab: (tab: string) => void;
   sidebarSections: SidebarSection[];
@@ -26,7 +27,7 @@ export default function Sidebar({
   activeTab,
   setActiveTab,
   sidebarSections,
-}: SidbarProps) {
+}: SidebarProps) {
   // const [activeTab, setActiveTab] = createSignal("explore")
 
   return (
