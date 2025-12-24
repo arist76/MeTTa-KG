@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { importData, uploadTextToSpace, importSpace } from "~/lib/api";
-import { isCommandRunning } from "~/lib/sse";
+import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
 import { refreshSpace } from "../load/lib";
 
 type UploadResult =
@@ -26,7 +26,9 @@ export const [textContent, setTextContent] = createSignal(`()`);
 export const [textFormat, setTextFormat] = createSignal("metta");
 export const [fileFormat, setFileFormat] = createSignal("metta");
 export const [activeTab, setActiveTab] = createSignal("url");
-export { isCommandRunning as isLoading };
+export const isLoading = () =>
+  isCommandActive("IMPORT") || isCommandActive("UPLOAD");
+export const isAppBusy = isAnyCommandActive;
 export const [result, setResult] = createSignal<UploadResult>(null);
 
 export const isFileUploadImplemented = true;

@@ -2,9 +2,25 @@ import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { API_URL } from "./api";
 
-export const [isCommandRunning, setIsCommandRunning] = createSignal(false);
+export type CommandType =
+  | "IMPORT"
+  | "EXPORT"
+  | "UNION"
+  | "TRANSFORM"
+  | "COMPOSITION"
+  | "CLEAR"
+  | "UPLOAD"
+  | "UNKNOWN"
+  | null;
+
+export const [activeCommand, setActiveCommand] =
+  createSignal<CommandType>(null);
 export const [commandProgress, setCommandProgress] = createSignal(0);
 export const [commandLogs, setCommandLogs] = createSignal<string[]>([]);
+
+export const isCommandActive = (type: CommandType) => activeCommand() === type;
+export const isAnyCommandActive = () => activeCommand() !== null;
+export const isCommandRunning = isAnyCommandActive;
 
 let eventSource: EventSource | null = null;
 
@@ -23,8 +39,11 @@ export const initSSE = () => {
     console.log("SSE Message Received:", event.data);
     const data = event.data;
 
-    if (data === "PROCESS_STARTED") {
-      setIsCommandRunning(true);
+    if (data.startsWith("PROCESS_STARTED")) {
+      const parts = data.split(":");
+      const commandType =
+        parts.length > 1 ? (parts[1] as CommandType) : "UNKNOWN";
+      setActiveCommand(commandType);
       setCommandProgress(0);
       setCommandLogs([]);
       return;
@@ -32,7 +51,7 @@ export const initSSE = () => {
 
     if (data === "PROCESS_EXIT_SUCCESS") {
       setCommandProgress(100);
-      setIsCommandRunning(false);
+      setActiveCommand(null);
       showToast({
         title: "Success",
         description: "Command completed successfully",
@@ -41,7 +60,7 @@ export const initSSE = () => {
     }
 
     if (data === "PROCESS_EXIT_ERROR") {
-      setIsCommandRunning(false);
+      setActiveCommand(null);
       showToast({
         title: "Error",
         description: "Command failed",

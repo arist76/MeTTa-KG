@@ -182,6 +182,7 @@ pub async fn upload(
         mork_api_client,
         request,
         request_path,
+        "UPLOAD".to_string(),
         "Starting upload operation...".to_string(),
         "Upload dispatched successfully.".to_string(),
     );
@@ -218,6 +219,7 @@ pub async fn import(
         mork_api_client,
         request,
         request_path,
+        "IMPORT".to_string(),
         "Starting import operation...".to_string(),
         "Import dispatched successfully.".to_string(),
     );
@@ -268,7 +270,7 @@ pub async fn export(
         .format(ExportFormat::Metta);
 
     let broadcaster = state.broadcaster.clone();
-    let _ = broadcaster.send("PROCESS_STARTED".to_string());
+    let _ = broadcaster.send("PROCESS_STARTED:EXPORT".to_string());
     let _ = broadcaster.send("Starting export operation...".to_string());
 
     let dispatch_future = mork_api_client.dispatch(request);
@@ -322,6 +324,7 @@ pub async fn clear(
         mork_api_client,
         request,
         request_path,
+        "CLEAR".to_string(),
         "Starting clear operation...".to_string(),
         "Clear dispatched successfully.".to_string(),
     );
@@ -365,6 +368,7 @@ pub async fn transform(
         mork_api_client,
         request,
         path_buf,
+        "TRANSFORM".to_string(),
         "Starting transform operation...".to_string(),
         "Transform dispatched successfully.".to_string(),
     );
@@ -415,6 +419,7 @@ pub async fn composition(
         mork_api_client,
         request,
         request_path,
+        "COMPOSITION".to_string(),
         "Starting composition operation...".to_string(),
         "Composition dispatched successfully.".to_string(),
     );
@@ -475,7 +480,7 @@ pub async fn union(
     let broadcaster = state.broadcaster.clone();
 
     tokio::spawn(async move {
-        let _ = broadcaster.send("PROCESS_STARTED".to_string());
+        let _ = broadcaster.send("PROCESS_STARTED:UNION".to_string());
         let _ = broadcaster.send("Starting union operation...".to_string());
 
         for transform_input in transform_inputs {
@@ -544,13 +549,14 @@ fn spawn_polling_job<R>(
     mork_api_client: MorkApiClient,
     request: R,
     request_path: PathBuf,
+    command_type: String,
     start_msg: String,
     dispatch_msg: String,
 ) where
     R: Request + Send + Sync + 'static,
 {
     tokio::spawn(async move {
-        let _ = broadcaster.send("PROCESS_STARTED".to_string());
+        let _ = broadcaster.send(format!("PROCESS_STARTED:{}", command_type));
         let _ = broadcaster.send(start_msg);
 
         if execute_polling_job(

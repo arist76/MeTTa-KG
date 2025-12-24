@@ -18,6 +18,7 @@ import {
   format,
   setFormat,
   isLoading,
+  isAppBusy,
   pattern,
   setPattern,
   template,
@@ -76,7 +77,7 @@ const ExportPage: Component = () => {
               options={["metta", "json", "csv", "raw"]}
               value={format()}
               onChange={setFormat}
-              disabled={isLoading()}
+              disabled={isAppBusy()}
               placeholder="Select a format"
               itemComponent={(props) => (
                 <SelectItem item={props.item}>
@@ -97,7 +98,7 @@ const ExportPage: Component = () => {
         <div class="mt-4">
           <Button
             onClick={() => handleExport(formatedNamespace())}
-            disabled={isLoading() || !pattern().trim() || !template().trim()}
+            disabled={isAppBusy() || !pattern().trim() || !template().trim()}
             class="w-36"
           >
             <Show

@@ -1,9 +1,10 @@
 import { createSignal } from "solid-js";
 import { union } from "~/lib/api";
 import { showToast } from "~/components/ui/Toast";
-import { isCommandRunning } from "~/lib/sse";
+import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
 
-export { isCommandRunning as isLoading };
+export const isLoading = () => isCommandActive("UNION");
+export const isAppBusy = isAnyCommandActive;
 export const [isPolling, setIsPolling] = createSignal(false);
 
 export type setOperationInput = {

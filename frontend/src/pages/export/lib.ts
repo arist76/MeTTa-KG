@@ -2,11 +2,12 @@ import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { exportSpace } from "~/lib/api";
 import { Mm2Input } from "~/lib/types";
-import { isCommandRunning } from "~/lib/sse";
+import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
 
 export const [uri, setUri] = createSignal("");
 export const [format, setFormat] = createSignal("metta");
-export { isCommandRunning as isLoading };
+export const isLoading = () => isCommandActive("EXPORT");
+export const isAppBusy = isAnyCommandActive;
 export const [pattern, setPattern] = createSignal("$x\n\n\n");
 export const [template, setTemplate] = createSignal("$x\n\n\n");
 export const [result, setResult] = createSignal<string | null>(null);

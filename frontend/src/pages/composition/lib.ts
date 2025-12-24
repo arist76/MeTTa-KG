@@ -1,10 +1,11 @@
 import { createSignal } from "solid-js";
 import { composition } from "~/lib/api";
 import { showToast } from "~/components/ui/Toast";
-import { isCommandRunning } from "~/lib/sse";
+import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
 import { refreshSpace } from "../load/lib";
 
-export { isCommandRunning as isLoading };
+export const isLoading = () => isCommandActive("COMPOSITION");
+export const isAppBusy = isAnyCommandActive;
 export const [isPolling, setIsPolling] = createSignal(false);
 
 export type setOperationInput = {
