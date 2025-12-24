@@ -254,6 +254,7 @@ pub async fn export(
     token: Token,
     path: PathBuf,
     export_input: Json<Mm2Input>,
+    state: &State<CommandState>,
 ) -> Result<Json<String>, Status> {
     if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_read {
         return Err(Status::Unauthorized);
@@ -266,9 +267,35 @@ pub async fn export(
         .template(export_input.template.clone())
         .format(ExportFormat::Metta);
 
-    match mork_api_client.dispatch(request).await {
-        Ok(data) => Ok(Json(data)),
-        Err(e) => Err(e),
+    let broadcaster = state.broadcaster.clone();
+    let _ = broadcaster.send("PROCESS_STARTED".to_string());
+    let _ = broadcaster.send("Starting export operation...".to_string());
+
+    let dispatch_future = mork_api_client.dispatch(request);
+    tokio::pin!(dispatch_future);
+
+    let mut interval = tokio::time::interval(Duration::from_secs(1));
+
+    let result = loop {
+        tokio::select! {
+            res = &mut dispatch_future => break res,
+            _ = interval.tick() => {
+                let _ = broadcaster.send("Exporting...".to_string());
+            }
+        }
+    };
+
+    match result {
+        Ok(data) => {
+            let _ = broadcaster.send("Export completed successfully.".to_string());
+            let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
+            Ok(Json(data))
+        }
+        Err(e) => {
+            let _ = broadcaster.send(format!("Error during export: {:?}", e));
+            let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
+            Err(e)
+        }
     }
 }
 

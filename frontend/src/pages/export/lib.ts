@@ -2,10 +2,11 @@ import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { exportSpace } from "~/lib/api";
 import { Mm2Input } from "~/lib/types";
+import { isCommandRunning } from "~/lib/sse";
 
 export const [uri, setUri] = createSignal("");
 export const [format, setFormat] = createSignal("metta");
-export const [isLoading, setIsLoading] = createSignal(false);
+export { isCommandRunning as isLoading };
 export const [pattern, setPattern] = createSignal("$x\n\n\n");
 export const [template, setTemplate] = createSignal("$x\n\n\n");
 export const [result, setResult] = createSignal<string | null>(null);
@@ -17,7 +18,6 @@ export const handleExport = async (spacePath: string) => {
     template: template().trim() || "$x",
   };
 
-  setIsLoading(true);
   setResult(null);
   setExportError(null);
 
@@ -45,7 +45,5 @@ export const handleExport = async (spacePath: string) => {
       description: error.message,
       variant: "destructive",
     });
-  } finally {
-    setIsLoading(false);
   }
 };
