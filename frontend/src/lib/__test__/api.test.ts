@@ -19,8 +19,10 @@ import type { Mm2Input, Mm2InputMultiWithNamespace } from "../types";
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mockSuccessResponse = (body: any, contentType = "application/json") =>
+const mockSuccessResponse = (
+  body: Record<string, unknown> | unknown[] | string | number | boolean | null,
+  contentType = "application/json"
+) =>
   new Response(JSON.stringify(body), {
     status: 200,
     headers: { "Content-Type": contentType },
