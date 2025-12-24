@@ -1,12 +1,25 @@
 import Network from "lucide-solid/icons/network";
-import { Accessor } from "solid-js";
+import { Accessor, Component, JSX } from "solid-js";
 import { Button } from "~/components/ui/Button";
 import { A } from "@solidjs/router";
+
+interface SidebarItem {
+  id: string;
+  label: string;
+  icon: Component | (() => JSX.Element);
+  to: string;
+  description?: string;
+}
+
+interface SidebarSection {
+  title: string;
+  items: SidebarItem[];
+}
 
 interface SidbarProps {
   activeTab: Accessor<string>;
   setActiveTab: (tab: string) => void;
-  sidebarSections: any /* eslint-disable-line @typescript-eslint/no-explicit-any */;
+  sidebarSections: SidebarSection[];
 }
 
 export default function Sidebar({
@@ -32,60 +45,52 @@ export default function Sidebar({
 
           {/* <ScrollArea class="h-[calc(100vh-120px)]"> */}
           <nav class="space-y-6 mt-12">
-            {sidebarSections.map(
-              (
-                section: any /* eslint-disable-line @typescript-eslint/no-explicit-any */
-              ) => (
-                <div class="mb-12">
-                  <h3 class="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-3 px-2">
-                    {section.title}
-                  </h3>
-                  <div class="space-y-1">
-                    {section.items.map(
-                      (
-                        item: any /* eslint-disable-line @typescript-eslint/no-explicit-any */
-                      ) => {
-                        const Icon = item.icon;
-                        return (
-                          <A href={item.to}>
-                            <Button
-                              variant={
-                                activeTab() === item.id ? "default" : "ghost"
-                              }
-                              class={`w-full gap-3 h-auto py-2 px-3 justify-start ${
-                                activeTab() === item.id
-                                  ? "bg-primary text-white"
-                                  : "text-neutral-400 hover:text-white hover:bg-neutral-800"
-                              }`}
-                              onClick={() => setActiveTab(item.id)}
-                            >
-                              <div class="flex items-center justify-center w-4 h-4">
-                                {typeof Icon === "function" &&
-                                Icon.name === undefined ? (
-                                  <Icon />
-                                ) : (
-                                  <Icon class="h-4 w-4" />
-                                )}
+            {sidebarSections.map((section: SidebarSection) => (
+              <div class="mb-12">
+                <h3 class="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-3 px-2">
+                  {section.title}
+                </h3>
+                <div class="space-y-1">
+                  {section.items.map((item: SidebarItem) => {
+                    const Icon = item.icon;
+                    return (
+                      <A href={item.to}>
+                        <Button
+                          variant={
+                            activeTab() === item.id ? "default" : "ghost"
+                          }
+                          class={`w-full gap-3 h-auto py-2 px-3 justify-start ${
+                            activeTab() === item.id
+                              ? "bg-primary text-white"
+                              : "text-neutral-400 hover:text-white hover:bg-neutral-800"
+                          }`}
+                          onClick={() => setActiveTab(item.id)}
+                        >
+                          <div class="flex items-center justify-center w-4 h-4">
+                            {typeof Icon === "function" &&
+                            Icon.name === undefined ? (
+                              <Icon />
+                            ) : (
+                              <Icon class="h-4 w-4" />
+                            )}
+                          </div>
+                          <div class="flex-1 text-left">
+                            <div class="flex items-center gap-2 uppercase">
+                              {item.label}
+                            </div>
+                            {item.description && (
+                              <div class="text-xs text-neutral-500 mt-0.5">
+                                {item.description}
                               </div>
-                              <div class="flex-1 text-left">
-                                <div class="flex items-center gap-2 uppercase">
-                                  {item.label}
-                                </div>
-                                {item.description && (
-                                  <div class="text-xs text-neutral-500 mt-0.5">
-                                    {item.description}
-                                  </div>
-                                )}
-                              </div>
-                            </Button>
-                          </A>
-                        );
-                      }
-                    )}
-                  </div>
+                            )}
+                          </div>
+                        </Button>
+                      </A>
+                    );
+                  })}
                 </div>
-              )
-            )}
+              </div>
+            ))}
           </nav>
           {/* </ScrollArea> */}
         </div>
