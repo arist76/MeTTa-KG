@@ -97,7 +97,7 @@ export const UploadPage: Component = () => {
           <Show when={activeTab() !== "file" || isFileUploadImplemented}>
             <Button
               onClick={handleImportClick}
-              disabled={isAppBusy() || !isFormValid()}
+              disabled={isAppBusy()}
               class="mt-4 px-6"
             >
               <Show
