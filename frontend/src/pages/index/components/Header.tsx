@@ -11,7 +11,7 @@ export default function Header() {
   return (
     <>
       {/* Header */}
-      <header class="h-16 bg-neutral-800 border-b border-neutral-700 flex items-center justify-between px-6">
+      <header class="h-16 flex-none bg-neutral-800 border-b border-neutral-700 flex items-center justify-between px-6">
         <NameSpace
           namespace={namespace()}
           setNamespace={setNamespace}

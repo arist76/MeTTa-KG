@@ -18,8 +18,8 @@ export default function Sidebar({
 
   return (
     <>
-      <div class="relative w-80 bg-neutral-900 border-r border-neutral-700">
-        <div class="p-3">
+      <div class="relative w-80 h-full bg-neutral-900 border-r border-neutral-700 flex flex-col">
+        <div class="flex-1 overflow-y-auto p-3">
           <div class="flex items-center gap-2 mb-8">
             <Network class="h-8 w-8 text-primary" />
             <div>

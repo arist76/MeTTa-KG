@@ -134,8 +134,8 @@ const AppLayout = (
   const [activeTab, setActiveTab] = createSignal("explore");
 
   return (
-    <div class="w-full h-screen flex ">
-      <div class="flex h-full">
+    <div class="w-full h-screen flex overflow-hidden">
+      <div class="flex-none h-full">
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -143,7 +143,7 @@ const AppLayout = (
         />
       </div>
 
-      <div class="w-full h-full flex flex-col">
+      <div class="flex-1 flex flex-col min-w-0 h-full">
         {/* <div class="flex items-center justify-between w-full h-14 shadow-lg shadow-[hsla(var(--secondary-foreground)/0.05)]">
                     <div class="flex items-center">
                         <span class={`text-3xl font-bold text-[hsla(var(--secondary-foreground)/0.7)] ml-10`}>MeTTa-KG</span>
@@ -154,7 +154,7 @@ const AppLayout = (
                 </div> */}
         <Header />
 
-        <div class="flex-1 w-full">{props.children}</div>
+        <div class="flex-1 w-full overflow-y-auto">{props.children}</div>
       </div>
     </div>
   );
@@ -166,8 +166,8 @@ const NotImplementedWrapper = (name: string) => () => (
 
 const App = () => {
   return (
-    <div class="flex">
-      <div class="flex-1 flex flex-col">
+    <div class="h-screen overflow-hidden">
+      <div class="h-full flex flex-col">
         <Router>
           <Route path="*" component={AppLayout}>
             <For each={sidebarSections}>
