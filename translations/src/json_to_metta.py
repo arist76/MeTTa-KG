@@ -96,7 +96,7 @@ def expr_to_path(e: hyperon.Atom) -> list:
 def metta_to_dict(f: IO[str]) -> dict:
     # it feels too hard to recognize arrays unhinted
     m = hyperon.MeTTa()
-    es = m.parse_all(f.read())
+    es = m.parse_all(f)
     d = {}
     # print("atoms", len(es))
     for e in es:
