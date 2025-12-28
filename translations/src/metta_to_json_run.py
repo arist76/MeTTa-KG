@@ -12,7 +12,12 @@ if __name__ == "__main__":
         filename = sys.argv[1]
         output_filename = sys.argv[2]
         with open(filename, 'r') as f:
-            result = metta_to_dict(f)
+            content = f.read()
+    
+        # Replace consecutive double quotes with a single double quote
+        result = content.replace('""', '"')
+        
+        result = metta_to_dict(result)
         
         with open(output_filename, 'w') as f:
             json.dump(result, f)
