@@ -47,9 +47,8 @@ if __name__ == "__main__":
         
         # Parse MeTTa content
         matrix = metta_to_list(content)
-        # metta = parse_metta(content)
 
-        # # Convert matrix to CSV string
+        # Convert matrix to CSV string
         csv_output = matrix_to_csv_str(matrix)
         
         with open(output_filename, 'w') as f:
