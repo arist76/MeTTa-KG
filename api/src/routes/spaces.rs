@@ -259,14 +259,14 @@ pub async fn export(
             translations::convert_metta_to_json(mork_response)
                 .map(Json)
                 .map_err(|e| {
-                    Custom(Status::UnprocessableEntity, Json(json!({ "message": "Incompatible metta file: {}" })))
+                    Custom(Status::UnprocessableEntity, Json(json!({ "message": format!("Incompatible metta file: {}", e) })))
                 })
         },
         ExportFormat::Csv => {
             translations::convert_metta_to_csv(mork_response)
                 .map(Json)
                 .map_err(|e| {
-                    Custom(Status::UnprocessableEntity, Json(json!({ "message": "Incompatible metta file: (,)" })))
+                    Custom(Status::UnprocessableEntity, Json(json!({ "message": format!("Incompatible metta file: {}", e) })))
                 })
         },
         _ => Ok(Json(mork_response)),
