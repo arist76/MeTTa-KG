@@ -27,6 +27,10 @@ export const handleClear = async (spacePath: string) => {
       });
     }
 
+    if (!isCommandRunning) {
+      refreshSpace();
+    }
+
     refreshSpace();
   } catch (error) {
     const errorMessage =

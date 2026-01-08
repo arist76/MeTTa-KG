@@ -77,7 +77,7 @@ export const handleImport = async (spacePath: string) => {
             description: `Data import from "${uri()}" has started.`,
           });
 
-          setTimeout(() => refreshSpace(), 3000);
+          refreshSpace();
         } else {
           setResult({ error: "Error initiating import" });
           showToast({
