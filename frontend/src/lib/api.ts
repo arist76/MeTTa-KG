@@ -138,10 +138,16 @@ export const createFromCSV = (file: File, params: CSVParserParameters) => {
   const formData = new FormData();
   formData.append("file", file);
   const url = new URL(`${API_URL}/translations/csv`);
-  url.search = new URLSearchParams(
-    params as any /* eslint-disable-line @typescript-eslint/no-explicit-any */
-  ).toString();
+  
+  const queryParams = {
+    ...params,
+    direction: CSVParseDirection[params.direction],
+  };
 
+  url.search = new URLSearchParams(
+    queryParams as any /* eslint-disable-line @typescript-eslint/no-explicit-any */
+  ).toString();
+  console.log("Creating from CSV with params:", formData);
   return fetch(url.toString(), {
     method: "POST",
     body: formData,
@@ -182,6 +188,19 @@ export const createFromN3 = (file: File) => {
   formData.append("file", file);
 
   return fetch(`${API_URL}/translations/n3`, {
+    method: "POST",
+    body: formData,
+    headers: {
+      Authorization: `${localStorage.getItem("rootToken")}`,
+    },
+  }).then((response) => response.json());
+};
+
+export const createFromJson = (file: File) => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return fetch(`${API_URL}/translations/json`, {
     method: "POST",
     body: formData,
     headers: {
@@ -243,13 +262,25 @@ export async function importData(
             return { status: "error", message: "No file provided" };
           }
 
-          const text = await file.text();
+          let text: string;
           let contentType = "text/plain";
+
           if (format === "json") {
-            contentType = "application/json";
-          } else if (format === "csv") {
-            contentType = "text/csv";
+            text = await createFromJson(file);
+          } else {
+            text = await file.text();
+            if (format === "csv") {
+              console.log("Converting CSV file to MeTTa format");
+              text = await createFromCSV(file, {
+                direction: CSVParseDirection.Row,
+                delimiter: ",",
+              } as CSVParserParameters);
+              console.log("CSV converted text:", text);
+              contentType = "text/csv";
+            }
           }
+
+          console.log("Uploading to space:", path, "Content-Type:", contentType);
           const resp = await request<string>(`/spaces/upload${path}`, {
             method: "POST",
             headers: { "Content-Type": contentType },

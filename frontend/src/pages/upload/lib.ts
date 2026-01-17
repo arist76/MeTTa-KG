@@ -58,14 +58,63 @@ export const handleImport = async (spacePath: string) => {
           });
           return;
         }
-        if (urlFormat() !== "metta") {
+        if (urlFormat() !== "metta" && urlFormat() !== "json") {
           showToast({
             title: "Format Not Supported Yet",
-            description: `${urlFormat()} format not supported yet. Please use metta format.`,
+            description: `${urlFormat()} format not supported yet. Please use metta or json format.`,
             variant: "destructive",
           });
           return;
         }
+
+        if (urlFormat() === "json") {
+          try {
+            const response = await fetch(uri());
+            if (!response.ok) throw new Error("Failed to fetch JSON from URL");
+            const jsonText = await response.text();
+            const file = new File([jsonText], "imported.json", {
+              type: "application/json",
+            });
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const importResponse = await importData(
+              "file",
+              formData,
+              "json",
+              spacePath
+            );
+
+            if (importResponse.status === "success") {
+              setResult({ data: importResponse.data, status: "success" });
+              showToast({
+                title: "Import Successful",
+                description: `JSON data was imported from "${uri()}".`,
+              });
+              setTimeout(() => refreshSpace(), 1000);
+            } else {
+              setResult({ error: importResponse.message });
+              showToast({
+                title: "Import Failed",
+                description: importResponse.message,
+                variant: "destructive",
+              });
+            }
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch or process JSON from URL";
+            setResult({ error: errorMessage });
+            showToast({
+              title: "Import Failed",
+              description: errorMessage,
+              variant: "destructive",
+            });
+          }
+          break;
+        }
+
         const response = await importSpace(spacePath, uri());
 
         if (response) {
@@ -103,13 +152,15 @@ export const handleImport = async (spacePath: string) => {
             type: fileState.type,
           })
         );
-
+        
+        console.log("Uploading file with format:", fileFormat());
         const response = await importData(
           "file",
           formData,
           fileFormat(),
           spacePath
         );
+        console.log("Import response:", response);
         if (response.status === "success") {
           setResult({ data: response.data, status: "success" });
           showToast({
@@ -138,13 +189,45 @@ export const handleImport = async (spacePath: string) => {
           return;
         }
 
-        if (textFormat() !== "metta") {
+        if (textFormat() !== "metta" && textFormat() !== "json") {
           showToast({
             title: "Format Not Supported Yet",
-            description: `${textFormat()} format not supported yet. Please use metta format.`,
+            description: `${textFormat()} format not supported yet. Please use metta or json format.`,
             variant: "destructive",
           });
           return;
+        }
+
+        if (textFormat() === "json") {
+          const file = new File([textContent()], "pasted.json", {
+            type: "application/json",
+          });
+          const formData = new FormData();
+          formData.append("file", file);
+
+          const response = await importData(
+            "file",
+            formData,
+            "json",
+            spacePath
+          );
+
+          if (response.status === "success") {
+            setResult({ data: response.data, status: "success" });
+            showToast({
+              title: "Text Uploaded",
+              description: `JSON text was uploaded to the "${spacePath}" space.`,
+            });
+            refreshSpace();
+          } else {
+            setResult({ error: response.message });
+            showToast({
+              title: "Upload Failed",
+              description: response.message,
+              variant: "destructive",
+            });
+          }
+          break;
         }
 
         const cleanText = textContent()
