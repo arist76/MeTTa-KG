@@ -3,16 +3,20 @@ import hyperon
 import numpy as np
 
 from io import StringIO
+import sys
 
 
 def csv_to_matrix(filename: str, delimiter: str=",", quotechar: str='"', lineterminator:str ="\r\n") -> list[list[str]]:
+    print(f"csv to matrix is called", file=sys.stdout)
     with open(filename, mode="r") as f:
         r = csv.reader(f, delimiter=delimiter, quotechar=quotechar, lineterminator=lineterminator, strict=True)
         lines = [row for row in r if len(row) > 0]
-    line_len = len(lines[0])
+    line_len = len(lines[3])
     for e, l in enumerate(lines):
-        if not len(l) == line_len:
-            raise ValueError("The rows of the csv file don't all have equal length. First row with different length is row " + str(e + 1) + ".")
+        print(f'the lines {l}', file=sys.stdout)
+        if e >= 3 and e < len(lines)-1:
+            if not len(l) == line_len:
+                raise ValueError("The rows of the csv file don't all have equal length. First row with different length is row " + str(e + 1) + ".")
     return lines
 
 
