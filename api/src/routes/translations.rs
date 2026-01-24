@@ -45,7 +45,7 @@ pub struct JSONLDParserParameters {
 #[derive(FromForm, Clone)]
 pub struct JSONParserParameters {
     #[allow(dead_code)]
-    pub dummy: String,
+    pub dummy: Option<String>,
 }
 
 #[derive(FromForm, Clone)]

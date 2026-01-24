@@ -197,7 +197,7 @@ export const createFromJson = (file: File) => {
 
   return fetch(`${API_URL}/translations/json`, {
     method: "POST",
-    body: formData,
+    body: file,
     headers: {
       Authorization: `${localStorage.getItem("rootToken")}`,
     },
