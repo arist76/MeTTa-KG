@@ -6,12 +6,9 @@ if __name__ == '__main__':
     direction = sys.argv[2]
     delimiter = sys.argv[3]
 
-    print(f"running csv to Metta ", file=sys.stdout)
     matrix = csv_to_matrix(f"{filename}.csv", delimiter=delimiter)
-    print(f"csv to matrix loaded with {matrix}", file=sys.stdout)
     if direction == '1':
         metta = matrix_to_row_based_metta(matrix)
-        print(f"converted to row based metta {metta}",file=sys.stdout)
     elif direction == '2':
         metta = matrix_to_column_based_metta(matrix)
     elif direction == '3':

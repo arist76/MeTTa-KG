@@ -161,8 +161,6 @@ pub async fn upload(
         ));
     }
 
-    println!("Upload received. Path: {:?}, Body length: {}", path, body.len());
-
     let pattern = "$x";
     let template = "$x";
 

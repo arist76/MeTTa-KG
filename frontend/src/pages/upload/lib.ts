@@ -153,14 +153,13 @@ export const handleImport = async (spacePath: string) => {
           })
         );
         
-        console.log("Uploading file with format:", fileFormat());
         const response = await importData(
           "file",
           formData,
           fileFormat(),
           spacePath
         );
-        console.log("Import response:", response);
+        
         if (response.status === "success") {
           setResult({ data: response.data, status: "success" });
           showToast({

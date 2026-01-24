@@ -138,16 +138,11 @@ export const createFromCSV = (file: File, params: CSVParserParameters) => {
   const formData = new FormData();
   formData.append("file", file);
   const url = new URL(`${API_URL}/translations/csv`);
-  
-  const queryParams = {
-    ...params,
-    direction: CSVParseDirection[params.direction],
-  };
 
   url.search = new URLSearchParams(
-    queryParams as any /* eslint-disable-line @typescript-eslint/no-explicit-any */
+    params as any /* eslint-disable-line @typescript-eslint/no-explicit-any */
   ).toString();
-  console.log("Creating from CSV with params:", formData);
+
   return fetch(url.toString(), {
     method: "POST",
     body: formData,
@@ -270,17 +265,14 @@ export async function importData(
           } else {
             text = await file.text();
             if (format === "csv") {
-              console.log("Converting CSV file to MeTTa format");
               text = await createFromCSV(file, {
                 direction: CSVParseDirection.Row,
                 delimiter: ",",
               } as CSVParserParameters);
-              console.log("CSV converted text:", text);
               contentType = "text/csv";
             }
           }
-
-          console.log("Uploading to space:", path, "Content-Type:", contentType);
+          
           const resp = await request<string>(`/spaces/upload${path}`, {
             method: "POST",
             headers: { "Content-Type": contentType },

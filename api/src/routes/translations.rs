@@ -25,7 +25,7 @@ pub struct CSVParserParameters {
 pub struct NTParserParameters {
     // TODO: figure out how to deal with this normally empty struct
     #[allow(dead_code)]
-    pub dummy: Option<String>,
+    pub dummy: String,
 }
 
 #[derive(FromForm, Clone)]
@@ -44,7 +44,6 @@ pub struct JSONLDParserParameters {
 
 #[derive(FromForm, Clone)]
 pub struct JSONParserParameters {
-    // TODO: figure out how to deal with this normally empty struct
     #[allow(dead_code)]
     pub dummy: String,
 }
@@ -81,7 +80,7 @@ pub async fn create(
         } => {
             let direction = (parameters.direction as u8).to_string();
             let delimiter = parameters.delimiter;
-            println!("Running CSV to MeTTa with path: {}", &path);
+
             let output = Command::new("./venv/bin/python")
                 .arg("translations/src/csv_to_metta_run.py")
                 .arg(&path)
@@ -91,10 +90,6 @@ pub async fn create(
 
             match output {
                 Ok(output) => {
-                    println!("CSV to MeTTa output: {}", String::from_utf8_lossy(&output.stdout));
-                    if !output.stderr.is_empty() {
-                        eprintln!("CSV to MeTTa stderr: {}", String::from_utf8_lossy(&output.stderr));
-                    }
                     Ok(output.status)
                 }
                 Err(e) => Err(e),
@@ -166,7 +161,6 @@ pub async fn create_from_csv(
     file: TempFile<'_>,
     parse_parameters: CSVParserParameters,
 ) -> Result<Json<String>, Status> {
-    println!("create_from_csv called with parameters:");
     create(
         "csv",
         file,
