@@ -17,7 +17,7 @@ use crate::mork_api::{
     MorkApiClient, Namespace, ReadRequest, Request, StatusRequest, StatusResponse,
     TransformDetails, TransformRequest, UploadRequest,
 };
-use crate::routes::command::CommandState;
+use crate::routes::sse::SseState;
 
 trait SourceTargetPermissions {
     type Ns: ToString + Clone;
@@ -145,7 +145,7 @@ pub async fn upload(
     token: Token,
     path: PathBuf,
     data: Data<'_>,
-    state: &State<CommandState>,
+    state: &State<SseState>,
 ) -> Result<Json<bool>, Custom<String>> {
     let token_namespace = token.namespace.strip_prefix("/").unwrap();
     if !path.starts_with(token_namespace) || !token.permission_write {
@@ -196,7 +196,7 @@ pub async fn import(
     token: Token,
     path: PathBuf,
     uri: String,
-    state: &State<CommandState>,
+    state: &State<SseState>,
 ) -> Result<Json<bool>, Status> {
     if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_write {
         return Err(Status::Unauthorized);
@@ -256,7 +256,7 @@ pub async fn export(
     token: Token,
     path: PathBuf,
     export_input: Json<Mm2Input>,
-    state: &State<CommandState>,
+    state: &State<SseState>,
 ) -> Result<Json<String>, Status> {
     if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_read {
         return Err(Status::Unauthorized);
@@ -306,7 +306,7 @@ pub async fn clear(
     token: Token,
     path: PathBuf,
     expr: String,
-    state: &State<CommandState>,
+    state: &State<SseState>,
 ) -> Result<Json<bool>, Status> {
     let token_namespace = token.namespace.strip_prefix("/").unwrap();
     if !path.starts_with(token_namespace) || !token.permission_write {
@@ -337,7 +337,7 @@ pub async fn clear(
 pub async fn transform(
     token: Token,
     mm2: Json<Mm2InputMultiWithNamespace>,
-    state: &State<CommandState>,
+    state: &State<SseState>,
 ) -> Result<Json<bool>, Status> {
     let mm2 = mm2.into_inner();
     if !mm2.clone().source_target_permissions(token) {
@@ -395,7 +395,7 @@ pub async fn transform(
 pub async fn composition(
     token: Token,
     operation_input: Json<SetOperationInput>,
-    state: &State<CommandState>,
+    state: &State<SseState>,
 ) -> Result<Json<bool>, Status> {
     if !operation_input.source_target_permissions(token) {
         return Err(Status::Unauthorized);
@@ -462,7 +462,7 @@ pub async fn intersection(
 pub async fn union(
     token: Token,
     operation_input: Json<SetOperationInput>,
-    state: &State<CommandState>,
+    state: &State<SseState>,
 ) -> Result<Json<bool>, Status> {
     if !operation_input.source_target_permissions(token) {
         return Err(Status::Unauthorized);

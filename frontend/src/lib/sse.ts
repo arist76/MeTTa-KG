@@ -25,14 +25,16 @@ export const isCommandRunning = isAnyCommandActive;
 let eventSource: EventSource | null = null;
 
 export const initSSE = () => {
-
-  if (eventSource && (eventSource.readyState === 0 || eventSource.readyState === 1)) {
+  if (
+    eventSource &&
+    (eventSource.readyState === 0 || eventSource.readyState === 1)
+  ) {
     return;
   }
-  
+
   // Close any existing potentially closed/broken connection before making a new one
   if (eventSource) {
-     eventSource.close();
+    eventSource.close();
   }
 
   // Use API_URL to construct the full URL for the events endpoint
@@ -58,7 +60,6 @@ export const initSSE = () => {
     }
 
     if (data === "PROCESS_EXIT_SUCCESS") {
-
       const cmdName = activeCommand();
       setCommandProgress(100);
       setActiveCommand(null);
@@ -70,7 +71,6 @@ export const initSSE = () => {
     }
 
     if (data === "PROCESS_EXIT_ERROR") {
-
       const cmdName = activeCommand();
       setActiveCommand(null);
       showToast({

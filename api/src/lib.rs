@@ -63,7 +63,7 @@ pub fn rocket() -> Rocket<Build> {
                 routes::spaces::union,
             ],
         )
-        .attach(routes::command::stage())
+        .attach(routes::sse::stage())
         .attach(cors.clone())
         .manage(cors)
 }

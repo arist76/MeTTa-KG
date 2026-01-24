@@ -6,14 +6,12 @@ use rocket::{get, routes};
 use tokio::sync::broadcast;
 
 #[derive(Clone)]
-pub struct CommandState {
+pub struct SseState {
     pub broadcaster: broadcast::Sender<String>,
 }
 
 #[get("/events")]
-pub fn stream(
-    state: &State<CommandState>,
-) -> EventStream<impl rocket::futures::Stream<Item = Event>> {
+pub fn stream(state: &State<SseState>) -> EventStream<impl rocket::futures::Stream<Item = Event>> {
     let rx = state.broadcaster.subscribe();
 
     let stream = futures_stream::unfold(rx, |mut rx| async move {
@@ -27,14 +25,11 @@ pub fn stream(
 }
 
 pub fn stage() -> AdHoc {
-    AdHoc::on_ignite("Command Processor", |rocket| async {
+    AdHoc::on_ignite("SSE Processor", |rocket| async {
         let (tx_bc, _) = broadcast::channel::<String>(100);
 
         rocket
-            .manage(CommandState {
-                // sender: tx_cmd,
-                broadcaster: tx_bc,
-            })
+            .manage(SseState { broadcaster: tx_bc })
             .mount("/", routes![stream])
     })
 }
