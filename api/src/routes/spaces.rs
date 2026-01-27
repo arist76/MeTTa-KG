@@ -14,10 +14,11 @@ use tokio::time::{sleep, Duration, Instant};
 use crate::model::Token;
 use crate::mork_api::{
     ClearRequest, ExploreRequest, ExportFormat, ExportRequest, ImportRequest, Mm2Cell,
-    MorkApiClient, Namespace, ReadRequest, Request, StatusRequest, StatusResponse,
-    TransformDetails, TransformRequest, UploadRequest,
+    MorkApiClient, Namespace, ReadRequest, StatusRequest, StatusResponse, TransformDetails,
+    TransformRequest, UploadRequest,
 };
 use crate::routes::sse::SseState;
+use crate::sse_utils::{JobRunner, ServerEvent};
 
 trait SourceTargetPermissions {
     type Ns: ToString + Clone;
@@ -177,14 +178,32 @@ pub async fn upload(
     let broadcaster = state.broadcaster.clone();
     let request_path = path;
 
-    spawn_polling_job(
-        broadcaster,
-        mork_api_client,
-        request,
-        request_path,
-        "UPLOAD".to_string(),
-        "Starting upload operation...".to_string(),
-        "Upload dispatched successfully.".to_string(),
+    JobRunner::spawn(
+        "UPLOAD",
+        broadcaster.clone(),
+        move |tx: broadcast::Sender<ServerEvent>| {
+            let client = mork_api_client;
+            let req = request;
+            async move {
+                let _ = tx.send(ServerEvent::Log {
+                    message: "Starting upload operation...".to_string(),
+                });
+                match client.dispatch(req).await {
+                    Ok(_) => {
+                        let _ = tx.send(ServerEvent::Log {
+                            message: "Upload dispatched successfully.".to_string(),
+                        });
+                    }
+                    Err(e) => {
+                        return Err(format!("Error dispatching request: {:?}", e));
+                    }
+                }
+                match poll_and_broadcast(request_path, &client, &tx).await {
+                    Ok(_) => Ok("Poll successful.".to_string()),
+                    Err(e) => Err(format!("Error polling status: {:?}", e)),
+                }
+            }
+        },
     );
 
     Ok(Json(true))
@@ -214,14 +233,32 @@ pub async fn import(
     let broadcaster = state.broadcaster.clone();
     let request_path = path.clone();
 
-    spawn_polling_job(
-        broadcaster,
-        mork_api_client,
-        request,
-        request_path,
-        "IMPORT".to_string(),
-        "Starting import operation...".to_string(),
-        "Import dispatched successfully.".to_string(),
+    JobRunner::spawn(
+        "IMPORT",
+        broadcaster.clone(),
+        move |tx: broadcast::Sender<ServerEvent>| {
+            let client = mork_api_client;
+            let req = request;
+            async move {
+                let _ = tx.send(ServerEvent::Log {
+                    message: "Starting import operation...".to_string(),
+                });
+                match client.dispatch(req).await {
+                    Ok(_) => {
+                        let _ = tx.send(ServerEvent::Log {
+                            message: "Import dispatched successfully.".to_string(),
+                        });
+                    }
+                    Err(e) => {
+                        return Err(format!("Error dispatching request: {:?}", e));
+                    }
+                }
+                match poll_and_broadcast(request_path, &client, &tx).await {
+                    Ok(_) => Ok("Poll successful.".to_string()),
+                    Err(e) => Err(format!("Error polling status: {:?}", e)),
+                }
+            }
+        },
     );
 
     Ok(Json(true))
@@ -270,8 +307,12 @@ pub async fn export(
         .format(ExportFormat::Metta);
 
     let broadcaster = state.broadcaster.clone();
-    let _ = broadcaster.send("PROCESS_STARTED:EXPORT".to_string());
-    let _ = broadcaster.send("Starting export operation...".to_string());
+    let _ = broadcaster.send(ServerEvent::Started {
+        command: "EXPORT".to_string(),
+    });
+    let _ = broadcaster.send(ServerEvent::Log {
+        message: "Starting export operation...".to_string(),
+    });
 
     let dispatch_future = mork_api_client.dispatch(request);
     tokio::pin!(dispatch_future);
@@ -282,20 +323,28 @@ pub async fn export(
         tokio::select! {
             res = &mut dispatch_future => break res,
             _ = interval.tick() => {
-                let _ = broadcaster.send("Exporting...".to_string());
+                let _ = broadcaster.send(ServerEvent::Log { message: "Exporting...".to_string() });
             }
         }
     };
 
     match result {
         Ok(data) => {
-            let _ = broadcaster.send("Export completed successfully.".to_string());
-            let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
+            let _ = broadcaster.send(ServerEvent::Log {
+                message: "Export completed successfully.".to_string(),
+            });
+            let _ = broadcaster.send(ServerEvent::Success {
+                message: "Export done".to_string(),
+            });
             Ok(Json(data))
         }
         Err(e) => {
-            let _ = broadcaster.send(format!("Error during export: {:?}", e));
-            let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
+            let _ = broadcaster.send(ServerEvent::Log {
+                message: format!("Error during export: {:?}", e),
+            });
+            let _ = broadcaster.send(ServerEvent::Error {
+                message: format!("{:?}", e),
+            });
             Err(e)
         }
     }
@@ -319,14 +368,32 @@ pub async fn clear(
     let broadcaster = state.broadcaster.clone();
     let request_path = path.clone();
 
-    spawn_polling_job(
-        broadcaster,
-        mork_api_client,
-        request,
-        request_path,
-        "CLEAR".to_string(),
-        "Starting clear operation...".to_string(),
-        "Clear dispatched successfully.".to_string(),
+    JobRunner::spawn(
+        "CLEAR",
+        broadcaster.clone(),
+        move |tx: broadcast::Sender<ServerEvent>| {
+            let client = mork_api_client;
+            let req = request;
+            async move {
+                let _ = tx.send(ServerEvent::Log {
+                    message: "Starting clear operation...".to_string(),
+                });
+                match client.dispatch(req).await {
+                    Ok(_) => {
+                        let _ = tx.send(ServerEvent::Log {
+                            message: "Clear dispatched successfully.".to_string(),
+                        });
+                    }
+                    Err(e) => {
+                        return Err(format!("Error dispatching request: {:?}", e));
+                    }
+                }
+                match poll_and_broadcast(request_path, &client, &tx).await {
+                    Ok(_) => Ok("Poll successful.".to_string()),
+                    Err(e) => Err(format!("Error polling status: {:?}", e)),
+                }
+            }
+        },
     );
 
     Ok(Json(true))
@@ -363,14 +430,32 @@ pub async fn transform(
     // Convert Namespace to PathBuf for polling
     let path_buf = PathBuf::from(request_path.to_string());
 
-    spawn_polling_job(
-        broadcaster,
-        mork_api_client,
-        request,
-        path_buf,
-        "TRANSFORM".to_string(),
-        "Starting transform operation...".to_string(),
-        "Transform dispatched successfully.".to_string(),
+    JobRunner::spawn(
+        "TRANSFORM",
+        broadcaster.clone(),
+        move |tx: broadcast::Sender<ServerEvent>| {
+            let client = mork_api_client;
+            let req = request;
+            async move {
+                let _ = tx.send(ServerEvent::Log {
+                    message: "Starting transform operation...".to_string(),
+                });
+                match client.dispatch(req).await {
+                    Ok(_) => {
+                        let _ = tx.send(ServerEvent::Log {
+                            message: "Transform dispatched successfully.".to_string(),
+                        });
+                    }
+                    Err(e) => {
+                        return Err(format!("Error dispatching request: {:?}", e));
+                    }
+                }
+                match poll_and_broadcast(path_buf, &client, &tx).await {
+                    Ok(_) => Ok("Poll successful.".to_string()),
+                    Err(e) => Err(format!("Error polling status: {:?}", e)),
+                }
+            }
+        },
     );
 
     Ok(Json(true))
@@ -414,14 +499,32 @@ pub async fn composition(
         None => return Err(Status::BadRequest),
     };
 
-    spawn_polling_job(
-        broadcaster,
-        mork_api_client,
-        request,
-        request_path,
-        "COMPOSITION".to_string(),
-        "Starting composition operation...".to_string(),
-        "Composition dispatched successfully.".to_string(),
+    JobRunner::spawn(
+        "COMPOSITION",
+        broadcaster.clone(),
+        move |tx: broadcast::Sender<ServerEvent>| {
+            let client = mork_api_client;
+            let req = request;
+            async move {
+                let _ = tx.send(ServerEvent::Log {
+                    message: "Starting composition operation...".to_string(),
+                });
+                match client.dispatch(req).await {
+                    Ok(_) => {
+                        let _ = tx.send(ServerEvent::Log {
+                            message: "Composition dispatched successfully.".to_string(),
+                        });
+                    }
+                    Err(e) => {
+                        return Err(format!("Error dispatching request: {:?}", e));
+                    }
+                }
+                match poll_and_broadcast(request_path, &client, &tx).await {
+                    Ok(_) => Ok("Poll successful.".to_string()),
+                    Err(e) => Err(format!("Error polling status: {:?}", e)),
+                }
+            }
+        },
     );
 
     Ok(Json(true))
@@ -479,28 +582,37 @@ pub async fn union(
     let mork_api_client = MorkApiClient::new();
     let broadcaster = state.broadcaster.clone();
 
-    tokio::spawn(async move {
-        let _ = broadcaster.send("PROCESS_STARTED:UNION".to_string());
-        let _ = broadcaster.send("Starting union operation...".to_string());
+    JobRunner::spawn(
+        "UNION",
+        broadcaster.clone(),
+        move |tx: broadcast::Sender<ServerEvent>| {
+            let client = mork_api_client;
+            let path = request_path;
+            async move {
+                let _ = tx.send(ServerEvent::Log {
+                    message: "Starting union operation...".to_string(),
+                });
 
-        for transform_input in transform_inputs {
-            let request = TransformRequest::new().transform_input(transform_input);
+                for transform_input in transform_inputs {
+                    let request = TransformRequest::new().transform_input(transform_input);
 
-            if execute_polling_job(
-                &mork_api_client,
-                &broadcaster,
-                request,
-                request_path.clone(),
-                "Transform dispatched successfully.".to_string(),
-            )
-            .await
-            .is_err()
-            {
-                return;
+                    match client.dispatch(request).await {
+                        Ok(_) => {
+                            let _ = tx.send(ServerEvent::Log {
+                                message: "Transform dispatched successfully.".to_string(),
+                            });
+                        }
+                        Err(e) => return Err(format!("Error dispatching request: {:?}", e)),
+                    }
+
+                    if let Err(e) = poll_and_broadcast(path.clone(), &client, &tx).await {
+                        return Err(format!("Error polling status: {:?}", e));
+                    }
+                }
+                Ok("Union complete".to_string())
             }
-        }
-        let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
-    });
+        },
+    );
 
     Ok(Json(true))
 }
@@ -509,75 +621,10 @@ pub async fn union(
 ////////////////////////////////////////////// HELPER FUNCTIONS ////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-async fn execute_polling_job<R>(
-    mork_api_client: &MorkApiClient,
-    broadcaster: &broadcast::Sender<String>,
-    request: R,
-    request_path: PathBuf,
-    dispatch_msg: String,
-) -> Result<(), ()>
-where
-    R: Request + Send + Sync,
-{
-    match mork_api_client.dispatch(request).await {
-        Ok(_) => {
-            let _ = broadcaster.send(dispatch_msg);
-        }
-        Err(e) => {
-            let _ = broadcaster.send(format!("Error dispatching request: {:?}", e));
-            let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
-            return Err(());
-        }
-    };
-
-    // poll status endpoint
-    match poll_and_broadcast(request_path, mork_api_client, broadcaster).await {
-        Ok(_) => {
-            let _ = broadcaster.send("Poll successful.".to_string());
-            Ok(())
-        }
-        Err(e) => {
-            let _ = broadcaster.send(format!("Error polling status: {:?}", e));
-            let _ = broadcaster.send("PROCESS_EXIT_ERROR".to_string());
-            Err(())
-        }
-    }
-}
-
-fn spawn_polling_job<R>(
-    broadcaster: broadcast::Sender<String>,
-    mork_api_client: MorkApiClient,
-    request: R,
-    request_path: PathBuf,
-    command_type: String,
-    start_msg: String,
-    dispatch_msg: String,
-) where
-    R: Request + Send + Sync + 'static,
-{
-    tokio::spawn(async move {
-        let _ = broadcaster.send(format!("PROCESS_STARTED:{}", command_type));
-        let _ = broadcaster.send(start_msg);
-
-        if execute_polling_job(
-            &mork_api_client,
-            &broadcaster,
-            request,
-            request_path,
-            dispatch_msg,
-        )
-        .await
-        .is_ok()
-        {
-            let _ = broadcaster.send("PROCESS_EXIT_SUCCESS".to_string());
-        }
-    });
-}
-
 async fn poll_and_broadcast(
     path: PathBuf,
     mork_api_client: &MorkApiClient,
-    broadcaster: &broadcast::Sender<String>,
+    broadcaster: &broadcast::Sender<ServerEvent>,
 ) -> Result<bool, Status> {
     let start_time = Instant::now();
     let timeout_duration = Duration::from_secs(300);
@@ -598,7 +645,9 @@ async fn poll_and_broadcast(
         sleep(Duration::from_millis(1000)).await;
 
         if counter % 5 == 0 {
-            let _ = broadcaster.send("Checking status...".to_string());
+            let _ = broadcaster.send(ServerEvent::Log {
+                message: "Checking status...".to_string(),
+            });
         }
         counter += 1;
 

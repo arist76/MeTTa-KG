@@ -95,10 +95,10 @@ export const initSSE = () => {
 
   eventSource.onerror = (err) => {
     showToast({
-        title: "Error",
-        description: `Error in SSE connection, attempting to reconnect...`,
-        variant: "destructive",
-      });
+      title: "Error",
+      description: `Error in SSE connection, attempting to reconnect...`,
+      variant: "destructive",
+    });
     console.error("SSE Error:", err);
     // EventSource will attempt to reconnect automatically
   };

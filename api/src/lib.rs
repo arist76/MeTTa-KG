@@ -9,6 +9,7 @@ pub mod model;
 pub mod mork_api;
 pub mod routes;
 pub mod schema;
+pub mod sse_utils;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
