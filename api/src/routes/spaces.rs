@@ -619,42 +619,6 @@ async fn poll_and_broadcast(
     Ok(true)
 }
 
-#[allow(dead_code)] // incase this is necessary in the future
-async fn poll(path: PathBuf, mork_api_client: &MorkApiClient) -> Result<bool, Status> {
-    let start_time = Instant::now();
-    let timeout_duration = Duration::from_secs(40);
-
-    // Check if space is clear by using status endpoint
-    let check_request = StatusRequest::new()
-        .namespace(path.clone())
-        .pattern("$x".to_string());
-
-    loop {
-        // exit condition stop polling after some second
-        if start_time.elapsed() > timeout_duration {
-            return Err(Status::RequestTimeout);
-        }
-
-        // wait 1 second between each status request
-        sleep(Duration::from_millis(1000)).await;
-
-        // destructure status endpoint json response
-        let status_response: StatusResponse =
-            match mork_api_client.dispatch(check_request.clone()).await {
-                Ok(result) => match json::from_str::<StatusResponse>(&result) {
-                    Ok(c) => c,
-                    Err(_) => return Err(Status::RequestTimeout),
-                },
-                Err(_) => return Err(Status::RequestTimeout),
-            };
-
-        if status_response.status == "pathClear" {
-            break;
-        }
-    }
-    Ok(true)
-}
-
 fn composition_transform(input: SetOperationInput) -> Result<TransformDetails, Status> {
     let mut template = String::new();
 
