@@ -87,6 +87,12 @@ pub struct ExploreInput {
     pub token: String,
 }
 
+#[derive(Serialize)]
+struct ExploreFallbackItem {
+    token: Vec<u64>,
+    expr: String,
+}
+
 #[derive(Default, Serialize, Deserialize, Clone)]
 pub struct SetOperationInput {
     pub source: Vec<String>,
@@ -215,13 +221,55 @@ pub async fn explore(
     }
 
     let mork_api_client = MorkApiClient::new();
+    let namespace_path = path.clone();
     let request = ExploreRequest::new()
         .namespace(path)
         .pattern(explore_input.pattern.clone())
         .token(explore_input.token.clone());
 
-    let response = mork_api_client.dispatch(request).await.map(Json);
-    response
+    let response_text = mork_api_client.dispatch(request).await?;
+    let trimmed = response_text.trim();
+
+    if explore_input.token.is_empty()
+        && (trimmed.is_empty() || trimmed == "[]" || trimmed == "null")
+    {
+        let transform_input = TransformDetails::new()
+            .patterns(vec![Mm2Cell::new_pattern(
+                explore_input.pattern.clone(),
+                Namespace::from(namespace_path.clone()),
+            )])
+            .templates(vec![Mm2Cell::new_template(
+                "$x".to_string(),
+                Namespace::from(namespace_path),
+            )]);
+        let read_request = ReadRequest::new().transform_input(transform_input);
+
+        if let Ok(raw_text) = mork_api_client.dispatch(read_request).await {
+            let exprs: Vec<String> = raw_text
+                .lines()
+                .map(|line| line.trim())
+                .filter(|line| !line.is_empty())
+                .map(|line| line.to_string())
+                .collect();
+
+            if !exprs.is_empty() {
+                let fallback: Vec<ExploreFallbackItem> = exprs
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, expr)| ExploreFallbackItem {
+                        token: vec![(index + 1) as u64],
+                        expr,
+                    })
+                    .collect();
+
+                let fallback_json =
+                    json::serde_json::to_string(&fallback).unwrap_or_else(|_| "[]".to_string());
+                return Ok(Json(fallback_json));
+            }
+        }
+    }
+
+    Ok(Json(response_text))
 }
 
 /// Performs an export operation on the `<path..>` space. Get the result that
