@@ -495,24 +495,55 @@ impl Request for ExploreRequest {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct StatusRequest {
+    pub namespace: Namespace,
+    pattern: String,
+}
+
+impl StatusRequest {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn namespace(mut self, ns: PathBuf) -> Self {
+        self.namespace = Namespace::from(ns);
+        self
+    }
+
+    pub fn pattern(mut self, pattern: String) -> Self {
+        self.pattern = pattern;
+        self
+    }
+}
+
+impl Request for StatusRequest {
+    type Body = ();
+
+    fn method(&self) -> Method {
+        Method::GET
+    }
+
+    fn path(&self) -> String {
+        format!(
+            "/status/{}",
+            urlencoding::encode(&self.namespace.with_namespace(&self.pattern))
+        )
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct StatusResponse {
+    pub status: String,
+}
+
+#[derive(Default)]
 pub struct UploadRequest {
     namespace: Namespace,
     pattern: String,
     template: String,
     data: String,
     data_tag: bool,
-}
-
-impl Default for UploadRequest {
-    fn default() -> Self {
-        Self {
-            namespace: Namespace::default(), // assuming Namespace has Default
-            pattern: String::new(),
-            template: String::new(),
-            data: String::new(),
-            data_tag: true, // ← your desired default
-        }
-    }
 }
 
 impl UploadRequest {
@@ -736,7 +767,7 @@ impl Request for ExecRequest {
 
 #[cfg(test)]
 mod tests {
-    use crate::mork_api::Namespace;
+    use crate::mork_api::*;
 
     #[test]
     fn test_namespace() {
@@ -749,15 +780,137 @@ mod tests {
                 "grandchild".to_string()
             ]
         );
-        assert_eq!(ns.current_name(), "grandchild".to_string());
-        assert_eq!(ns.data_tag(), "grandchilda727d4f9-836a-4e4c-9480");
+        assert_eq!(ns.current_name(), Some("grandchild".to_string()));
+        assert_eq!(ns.data_tag(), "__grandchilddata__");
     }
+
+    // ----------------------- Namespace -----------------------
 
     #[test]
     fn test_with_namespace() {
         let ns = Namespace::from_path_string("/parent/child/grandchild");
-        let expected = "(parent (child (grandchild (grandchilda727d4f9-836a-4e4c-9480 $x))))";
+        let expected = "(__root__ (parent (child (grandchild (__grandchilddata__ $x)))))";
 
         assert_eq!(ns.with_namespace("$x"), expected);
+        assert_eq!(ns.current_name().unwrap(), "grandchild".to_string());
+        assert_eq!(ns.data_tag(), "__grandchilddata__");
+        assert_eq!(
+            ns.with_namespace("$x"),
+            "(__root__ (parent (child (grandchild (__grandchilddata__ $x)))))"
+        );
+    }
+
+    #[test]
+    fn test_empty_namespace() {
+        let ns = Namespace::from_path_string("/");
+        assert_eq!(ns.path, vec![] as Vec<String>);
+        assert_eq!(ns.current_name(), None);
+        assert_eq!(ns.data_tag(), "__rootdata__");
+        assert_eq!(ns.with_namespace("$x"), "(__root__ (__rootdata__ $x))");
+
+        let ns = Namespace::from_path_string("");
+        assert_eq!(ns.path, vec![] as Vec<String>);
+        assert_eq!(ns.current_name(), None);
+        assert_eq!(ns.data_tag(), "__rootdata__");
+        assert_eq!(ns.with_namespace("$x"), "(__root__ (__rootdata__ $x))");
+    }
+
+    #[test]
+    fn test_data_tag() {
+        let ns = Namespace::from_path_string("/parent/child/grandchild");
+        assert_eq!(ns.data_tag(), "__grandchilddata__");
+    }
+
+    #[test]
+    fn test_current_name() {
+        let ns = Namespace::from_path_string("/parent/child/grandchild");
+        assert_eq!(ns.current_name().unwrap(), "grandchild".to_string());
+
+        let ns = Namespace::from_path_string("/parent/child");
+        assert_eq!(ns.current_name().unwrap(), "child".to_string());
+
+        let ns = Namespace::from_path_string("/parent");
+        assert_eq!(ns.current_name().unwrap(), "parent".to_string());
+
+        let ns = Namespace::from_path_string("/");
+        assert_eq!(ns.current_name(), None);
+    }
+
+    // ----------------------- Mm2Cell -----------------------
+    #[test]
+    fn test_mm2_cell_default() {
+        let cell = Mm2Cell::default();
+        assert_eq!(cell.value(), "$x".to_string());
+        assert_eq!(cell.namespace().path, vec![] as Vec<String>);
+        assert_eq!(cell.build(), "(__root__ (__rootdata__ $x))");
+    }
+
+    #[test]
+    fn test_mm2_cell_basic() {
+        let cell = Mm2Cell::new_pattern(
+            "$x".to_string(),
+            Namespace::from_path_string("/parent/child"),
+        );
+        assert_eq!(cell.value(), "$x".to_string());
+        assert_eq!(
+            cell.namespace().path,
+            vec!["parent".to_string(), "child".to_string()]
+        );
+        assert_eq!(
+            cell.build(),
+            "(__root__ (parent (child (__childdata__ $x))))"
+        );
+    }
+
+    // ----------------------- TransformRequest -----------------------
+    #[test]
+    fn test_transform_request_multi_with_defaults() {
+        let request = TransformRequest::new();
+        assert_eq!(request.transform_input.patterns.len(), 1);
+        assert_eq!(request.transform_input.templates.len(), 1);
+        assert_eq!(
+            request.multi_patterns(),
+            "(, (__root__ (__rootdata__ $x)))".to_string()
+        );
+        assert_eq!(
+            request.multi_templates(),
+            "(, (__root__ (__rootdata__ $x)))".to_string()
+        );
+    }
+
+    #[test]
+    fn test_transform_request_multi_with_basic_values() {
+        let request = TransformRequest::new().transform_input(
+            TransformDetails::new()
+                .patterns(vec![
+                    Mm2Cell::new_pattern(
+                        "$x".to_string(),
+                        Namespace::from_path_string("/parent/child"),
+                    ),
+                    Mm2Cell::new_pattern(
+                        "$y".to_string(),
+                        Namespace::from_path_string("/parent/child/grandchild"),
+                    ),
+                ])
+                .templates(vec![
+                    Mm2Cell::new_template("$x".to_string(), Namespace::from_path_string("")),
+                    Mm2Cell::new_template(
+                        "$y".to_string(),
+                        Namespace::from_path_string("/parent/child/grandchild"),
+                    ),
+                    Mm2Cell::new_template("$z".to_string(), Namespace::from_path_string("/")),
+                ]),
+        );
+
+        assert_eq!(request.transform_input.patterns.len(), 2);
+        assert_eq!(request.transform_input.templates.len(), 3);
+        assert_eq!(
+            request.multi_patterns(),
+            "(, (__root__ (parent (child (__childdata__ $x)))) (__root__ (parent (child (grandchild (__grandchilddata__ $y))))))".to_string()
+        );
+        assert_eq!(
+            request.    multi_templates(),
+            "(, (__root__ (__rootdata__ $x)) (__root__ (parent (child (grandchild (__grandchilddata__ $y))))) (__root__ (__rootdata__ $z)))".to_string()
+        );
     }
 }

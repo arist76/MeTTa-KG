@@ -1,23 +1,21 @@
-use rocket::futures::future::join_all;
-use rocket::http::Status;
-use rocket::serde::json::Json;
-use rocket::tokio::io::AsyncReadExt;
-use serde::{Deserialize, Serialize};
-use std::thread;
-use std::time::Duration;
-use url::Url;
-
-use rocket::response::status::Custom;
-use rocket::{get, post, Data};
-use std::path::PathBuf;
-use uuid::Uuid;
-
 use crate::model::Token;
 use crate::mork_api::{
     ClearRequest, ExecRequest, ExploreRequest, ExportFormat, ExportRequest, ImportRequest, Mm2Cell,
-    MorkApiClient, Namespace, ReadRequest, Request, TransformDetails, TransformRequest,
-    UploadRequest,
+    MorkApiClient, Namespace, ReadRequest, StatusRequest, StatusResponse, TransformDetails,
+    TransformRequest, UploadRequest,
 };
+use rocket::http::Status;
+use rocket::response::status::Custom;
+use rocket::serde::json;
+use rocket::serde::json::Json;
+use rocket::tokio::io::AsyncReadExt;
+use rocket::{get, post, Data};
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use std::thread;
+use tokio::time::{sleep, Duration, Instant};
+use url::Url;
+use uuid::Uuid;
 
 trait SourceTargetPermissions {
     type Ns: ToString + Clone;
@@ -334,6 +332,37 @@ pub async fn composition(
     }
 }
 
+/// Performs an intersection operation on provided namespaces. `token` must have `permission_write`
+/// on the target namespace and `permission_read` on all source namespaces.
+/// Intersection is implemented as a positive join on a shared variable across all sources.
+/// # Intersection Transformation (conceptual)
+/// ```lisp
+/// (transform
+///     (, (namespace1 $x) (namespace2 $x) ...)  ; all sources share the same variable $x
+///     (, (target $x))
+/// )
+/// ```
+#[post("/spaces/intersection", data = "<operation_input>")]
+pub async fn intersection(
+    token: Token,
+    operation_input: Json<SetOperationInput>,
+) -> Result<Json<bool>, Status> {
+    // check `permission read` for all sources
+    if !operation_input.source_target_permissions(token) {
+        return Err(Status::Unauthorized);
+    }
+
+    let transform_input = intersection_transform(operation_input.into_inner())?;
+
+    let request = TransformRequest::new().transform_input(transform_input);
+    let mork_api_client = MorkApiClient::new();
+
+    match mork_api_client.dispatch(request).await {
+        Ok(_) => Ok(Json(true)),
+        Err(e) => Err(e),
+    }
+}
+
 #[post("/spaces/union", data = "<operation_input>")]
 pub async fn union(
     token: Token,
@@ -343,26 +372,26 @@ pub async fn union(
         return Err(Status::Unauthorized);
     }
 
+    // path to be used for polling
+    let request_path = match operation_input.clone().into_inner().target.first() {
+        Some(value) => value.clone(),
+        None => return Err(Status::BadRequest),
+    };
+
     // create a vector of queries
     let transform_inputs = union_transform(operation_input.into_inner())?;
+    let mork_api_client = MorkApiClient::new();
 
-    let futures = transform_inputs
-        .iter()
-        .map(async |transform_input| {
-            let request = TransformRequest::new().transform_input(transform_input.clone());
-            let mork_api_client = MorkApiClient::new();
+    for transform_input in transform_inputs {
+        let request = TransformRequest::new().transform_input(transform_input);
 
-            mork_api_client.dispatch(request).await
-        })
-        .collect::<Vec<_>>();
+        match mork_api_client.dispatch(request).await {
+            Ok(_) => {}
+            Err(e) => return Err(e),
+        };
 
-    let results = join_all(futures).await;
-
-    // Check if any requests failed
-    for result in results {
-        if let Err(e) = result {
-            Err(e)?
-        }
+        // poll status endpoint
+        poll(PathBuf::from(&request_path), &mork_api_client).await?;
     }
 
     Ok(Json(true))
@@ -508,16 +537,39 @@ pub async fn restriction(
 ////////////////////////////////////////////// HELPER FUNCTIONS ////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Converts an integer to a lower case letter
-fn int_to_lower(n: u8) -> Option<char> {
-    const BASE: u8 = b'a';
-    const ALPHABET: usize = 26;
+async fn poll(path: PathBuf, mork_api_client: &MorkApiClient) -> Result<bool, Status> {
+    let start_time = Instant::now();
+    let timeout_duration = Duration::from_secs(40);
 
-    if n as usize >= ALPHABET {
-        return None;
-    };
+    // Check if space is clear by using status endpoint
+    let check_request = StatusRequest::new()
+        .namespace(path.clone())
+        .pattern("$x".to_string());
 
-    Some((BASE + n) as char)
+    loop {
+        // exit condition stop polling after some second
+        if start_time.elapsed() > timeout_duration {
+            return Err(Status::RequestTimeout);
+        }
+
+        // wait 1 second between each status request
+        sleep(Duration::from_millis(1000)).await;
+
+        // destructure status endpoint json response
+        let status_response: StatusResponse =
+            match mork_api_client.dispatch(check_request.clone()).await {
+                Ok(result) => match json::from_str::<StatusResponse>(&result) {
+                    Ok(c) => c,
+                    Err(_) => return Err(Status::RequestTimeout),
+                },
+                Err(_) => return Err(Status::RequestTimeout),
+            };
+
+        if status_response.status == "pathClear" {
+            break;
+        }
+    }
+    Ok(true)
 }
 
 fn peano(depth: i32) -> String {
@@ -525,13 +577,6 @@ fn peano(depth: i32) -> String {
 }
 
 fn composition_transform(input: SetOperationInput) -> Result<TransformDetails, Status> {
-    // Exceed the maximum number of source namespaces for composition, 26
-    // and
-    // Only one target namespace is allowed
-    if input.source.len() > 26 && input.target.len() != 1 {
-        return Err(Status::BadRequest);
-    }
-
     let mut template = String::new();
 
     let patterns = input
@@ -539,9 +584,9 @@ fn composition_transform(input: SetOperationInput) -> Result<TransformDetails, S
         .iter()
         .enumerate()
         .map(|(index, source_ns)| {
-            let c = int_to_lower(index as u8).unwrap();
+            let c = index.to_string();
             template.push('$');
-            template.push(c);
+            template.push_str(&c);
             template.push(' ');
 
             Mm2Cell::new_pattern(format!("${}", c), Namespace::from(PathBuf::from(source_ns)))
@@ -553,6 +598,31 @@ fn composition_transform(input: SetOperationInput) -> Result<TransformDetails, S
             .patterns(patterns)
             .templates(vec![Mm2Cell::new_template(
                 template,
+                Namespace::from(PathBuf::from(input.target.first().cloned().unwrap())),
+            )]);
+
+    Ok(transform_input)
+}
+
+fn intersection_transform(input: SetOperationInput) -> Result<TransformDetails, Status> {
+    // Require at least 2 sources and exactly 1 target
+    if input.source.len() < 2 || input.target.len() != 1 {
+        return Err(Status::BadRequest);
+    }
+
+    let patterns = input
+        .source
+        .iter()
+        .map(|source_ns| {
+            Mm2Cell::new_pattern("$x".to_string(), Namespace::from(PathBuf::from(source_ns)))
+        })
+        .collect::<Vec<Mm2Cell>>();
+
+    let transform_input =
+        TransformDetails::new()
+            .patterns(patterns)
+            .templates(vec![Mm2Cell::new_template(
+                "$x".to_string(),
                 Namespace::from(PathBuf::from(input.target.first().cloned().unwrap())),
             )]);
 
@@ -602,15 +672,15 @@ mod tests {
 
         assert_eq!(
             transform_input.patterns[0].build(),
-            "(ns1 (ns1a727d4f9-836a-4e4c-9480 $a))".to_string()
+            "(__root__ (ns1 (__ns1data__ $0)))".to_string()
         );
         assert_eq!(
             transform_input.patterns[1].build(),
-            "(ns2 (ns2a727d4f9-836a-4e4c-9480 $b))".to_string()
+            "(__root__ (ns2 (__ns2data__ $1)))".to_string()
         );
         assert_eq!(
             transform_input.templates[0].build(),
-            "(ns3 (ns3a727d4f9-836a-4e4c-9480 $a $b ))".to_string()
+            "(__root__ (ns3 (__ns3data__ $0 $1 )))".to_string()
         );
     }
 
@@ -627,19 +697,45 @@ mod tests {
 
         assert_eq!(
             transform_inputs[0].patterns[0].build(),
-            "(ns1 (ns1a727d4f9-836a-4e4c-9480 $x))".to_string()
+            "(__root__ (ns1 (__ns1data__ $x)))".to_string()
         );
         assert_eq!(
             transform_inputs[1].patterns[0].build(),
-            "(ns2 (ns2a727d4f9-836a-4e4c-9480 $x))".to_string()
+            "(__root__ (ns2 (__ns2data__ $x)))".to_string()
         );
         assert_eq!(
             transform_inputs[0].templates[0].build(),
-            "(ns3 (ns3a727d4f9-836a-4e4c-9480 $x))".to_string()
+            "(__root__ (ns3 (__ns3data__ $x)))".to_string()
         );
         assert_eq!(
             transform_inputs[1].templates[0].build(),
-            "(ns3 (ns3a727d4f9-836a-4e4c-9480 $x))".to_string()
+            "(__root__ (ns3 (__ns3data__ $x)))".to_string()
+        );
+    }
+
+    #[test]
+    fn test_intersection_transform() {
+        let input = SetOperationInput {
+            source: vec!["ns1".to_string(), "ns2".to_string()],
+            target: vec!["ns3".to_string()],
+        };
+
+        let transform_input = intersection_transform(input).unwrap();
+
+        assert_eq!(transform_input.patterns.len(), 2);
+        assert_eq!(transform_input.templates.len(), 1);
+
+        assert_eq!(
+            transform_input.patterns[0].build(),
+            "(__root__ (ns1 (__ns1data__ $x)))".to_string()
+        );
+        assert_eq!(
+            transform_input.patterns[1].build(),
+            "(__root__ (ns2 (__ns2data__ $x)))".to_string()
+        );
+        assert_eq!(
+            transform_input.templates[0].build(),
+            "(__root__ (ns3 (__ns3data__ $x)))".to_string()
         );
     }
 }

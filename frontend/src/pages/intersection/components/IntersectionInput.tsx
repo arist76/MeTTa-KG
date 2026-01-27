@@ -7,8 +7,7 @@ import {
   CardDescription,
   CardContent,
 } from "~/components/ui/Card";
-import Plus from "lucide-solid/icons/plus";
-import Trash2 from "lucide-solid/icons/trash-2";
+import { Plus, Trash2 } from "lucide-solid";
 import NameSpace from "~/pages/index/components/NameSpace";
 
 type Token = {
@@ -21,24 +20,21 @@ export interface Item {
   namespace: string[];
 }
 
-interface UnionInputProps {
+interface IntersectionInputProps {
   type: "patterns" | "templates";
   items: Item[];
-  addItem: () => void;
-  removeItem: (id: string) => void;
-  updateItem: (id: string, field: "namespace", value: string[]) => void;
+  addItem?: () => void;
+  removeItem?: (id: string) => void;
+  updateItem: (id: string, ns: string[]) => void;
   accentColor: string;
   rootToken: boolean;
   tokenRootNamespace: () => string[];
   getAllTokens: () => Promise<Token[]>;
+  description: string;
 }
 
-export function UnionInput(props: UnionInputProps) {
+export function IntersectionInput(props: IntersectionInputProps) {
   const title = props.type === "patterns" ? "Patterns" : "Templates";
-  const description =
-    props.type === "patterns"
-      ? "Define patterns to match against"
-      : "Define templates for unification";
 
   return (
     <Card class={`border-l-4 border-l-${props.accentColor}`}>
@@ -49,7 +45,7 @@ export function UnionInput(props: UnionInputProps) {
           ></div>
           <CardTitle>{title}</CardTitle>
         </div>
-        <CardDescription>{description}</CardDescription>
+        <CardDescription>{props.description}</CardDescription>
       </CardHeader>
       <CardContent>
         <div class="space-y-2">
@@ -59,38 +55,40 @@ export function UnionInput(props: UnionInputProps) {
                 <div class="flex-1 flex flex-col gap-2">
                   <NameSpace
                     namespace={item.namespace}
-                    setNamespace={(ns) =>
-                      props.updateItem(item.id, "namespace", ns)
-                    }
+                    setNamespace={(ns) => props.updateItem(item.id, ns)}
                     rootToken={props.rootToken}
                     tokenRootNamespace={props.tokenRootNamespace}
                     getAllTokens={props.getAllTokens}
                   />
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => props.removeItem(item.id)}
-                  disabled={props.items.length === 1}
-                  class="text-destructive hover:text-destructive self-center"
-                >
-                  <Trash2 class="w-4 h-4" />
-                </Button>
+                {props.type === "patterns" && props.removeItem && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => props.removeItem!(item.id)}
+                    disabled={props.items.length <= 2}
+                    class="text-destructive hover:text-destructive self-center"
+                  >
+                    <Trash2 class="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             )}
           </For>
-          <hr class="my-4" />
-          {props.type === "patterns" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={props.addItem}
-              class="w-full"
-            >
-              <Plus class="w-4 h-4 mr-2" />
-              Add Patterns
-            </Button>
-          ) : null}
+          {props.type === "patterns" && props.addItem && (
+            <>
+              <hr class="my-4" />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={props.addItem}
+                class="w-full"
+              >
+                <Plus class="w-4 h-4 mr-2" />
+                Add Source
+              </Button>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>
