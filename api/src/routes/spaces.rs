@@ -228,44 +228,17 @@ pub async fn explore(
         .token(explore_input.token.clone());
 
     let response_text = mork_api_client.dispatch(request).await?;
-    let trimmed = response_text.trim();
 
-    if explore_input.token.is_empty()
-        && (trimmed.is_empty() || trimmed == "[]" || trimmed == "null")
-    {
-        let transform_input = TransformDetails::new()
-            .patterns(vec![Mm2Cell::new_pattern(
-                explore_input.pattern.clone(),
-                Namespace::from(namespace_path.clone()),
-            )])
-            .templates(vec![Mm2Cell::new_template(
-                "$x".to_string(),
-                Namespace::from(namespace_path),
-            )]);
-        let read_request = ReadRequest::new().transform_input(transform_input);
-
-        if let Ok(raw_text) = mork_api_client.dispatch(read_request).await {
-            let exprs: Vec<String> = raw_text
-                .lines()
-                .map(|line| line.trim())
-                .filter(|line| !line.is_empty())
-                .map(|line| line.to_string())
-                .collect();
-
-            if !exprs.is_empty() {
-                let fallback: Vec<ExploreFallbackItem> = exprs
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, expr)| ExploreFallbackItem {
-                        token: vec![(index + 1) as u64],
-                        expr,
-                    })
-                    .collect();
-
-                let fallback_json =
-                    json::serde_json::to_string(&fallback).unwrap_or_else(|_| "[]".to_string());
-                return Ok(Json(fallback_json));
-            }
+    // Performs fallback to read if explore returns empty result and no token was provided
+    if explore_input.token.is_empty() && is_empty_explore_response(&response_text) {
+        if let Some(fallback) = fallback_explore_via_read(
+            &mork_api_client,
+            explore_input.pattern.clone(),
+            namespace_path,
+        )
+        .await
+        {
+            return Ok(fallback);
         }
     }
 
@@ -555,6 +528,54 @@ fn union_transform(input: SetOperationInput) -> Result<Vec<TransformDetails>, St
     }
 
     Ok(union_query)
+}
+
+async fn fallback_explore_via_read(
+    client: &MorkApiClient,
+    pattern: String,
+    namespace_path: PathBuf,
+) -> Option<Json<String>> {
+    let transform_input = TransformDetails::new()
+        .patterns(vec![Mm2Cell::new_pattern(
+            pattern.clone(),
+            Namespace::from(namespace_path.clone()),
+        )])
+        .templates(vec![Mm2Cell::new_template(
+            "$x".to_string(),
+            Namespace::from(namespace_path),
+        )]);
+
+    let read_request = ReadRequest::new().transform_input(transform_input);
+
+    let raw_text = client.dispatch(read_request).await.ok()?;
+
+    let exprs: Vec<String> = raw_text
+        .lines()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty())
+        .map(String::from)
+        .collect();
+
+    if exprs.is_empty() {
+        return None;
+    }
+
+    let fallback: Vec<ExploreFallbackItem> = exprs
+        .into_iter()
+        .enumerate()
+        .map(|(index, expr)| ExploreFallbackItem {
+            token: vec![(index + 1) as u64],
+            expr,
+        })
+        .collect();
+
+    let json = json::serde_json::to_string(&fallback).ok()?;
+    Some(Json(json))
+}
+
+fn is_empty_explore_response(response_text: &str) -> bool {
+    let trimmed = response_text.trim();
+    trimmed.is_empty() || trimmed == "[]" || trimmed == "null"
 }
 
 // unit tests
