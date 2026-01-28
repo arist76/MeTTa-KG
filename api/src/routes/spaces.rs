@@ -185,23 +185,20 @@ pub async fn upload(
             let client = mork_api_client;
             let req = request;
             async move {
+                client
+                    .dispatch(req)
+                    .await
+                    .map_err(|e| format!("Upload dispatch failed: {:?}", e))?;
+
                 let _ = tx.send(ServerEvent::Log {
-                    message: "Starting upload operation...".to_string(),
+                    message: "Data received, waiting for processing...".to_string(),
                 });
-                match client.dispatch(req).await {
-                    Ok(_) => {
-                        let _ = tx.send(ServerEvent::Log {
-                            message: "Upload dispatched successfully.".to_string(),
-                        });
-                    }
-                    Err(e) => {
-                        return Err(format!("Error dispatching request: {:?}", e));
-                    }
-                }
-                match poll_and_broadcast(request_path, &client, &tx).await {
-                    Ok(_) => Ok("Poll successful.".to_string()),
-                    Err(e) => Err(format!("Error polling status: {:?}", e)),
-                }
+
+                poll_and_broadcast(request_path, &client, &tx)
+                    .await
+                    .map_err(|e| format!("Processing timeout: {:?}", e))?;
+
+                Ok("File uploaded and processed successfully".to_string())
             }
         },
     );
@@ -240,23 +237,20 @@ pub async fn import(
             let client = mork_api_client;
             let req = request;
             async move {
+                client
+                    .dispatch(req)
+                    .await
+                    .map_err(|e| format!("Import dispatch failed: {:?}", e))?;
+
                 let _ = tx.send(ServerEvent::Log {
-                    message: "Starting import operation...".to_string(),
+                    message: "Data received, waiting for processing...".to_string(),
                 });
-                match client.dispatch(req).await {
-                    Ok(_) => {
-                        let _ = tx.send(ServerEvent::Log {
-                            message: "Import dispatched successfully.".to_string(),
-                        });
-                    }
-                    Err(e) => {
-                        return Err(format!("Error dispatching request: {:?}", e));
-                    }
-                }
-                match poll_and_broadcast(request_path, &client, &tx).await {
-                    Ok(_) => Ok("Poll successful.".to_string()),
-                    Err(e) => Err(format!("Error polling status: {:?}", e)),
-                }
+
+                poll_and_broadcast(request_path, &client, &tx)
+                    .await
+                    .map_err(|e| format!("Processing timeout: {:?}", e))?;
+
+                Ok("Import completed successfully.".to_string())
             }
         },
     );
@@ -375,23 +369,20 @@ pub async fn clear(
             let client = mork_api_client;
             let req = request;
             async move {
+                client
+                    .dispatch(req)
+                    .await
+                    .map_err(|e| format!("Clear dispatch failed: {:?}", e))?;
+
                 let _ = tx.send(ServerEvent::Log {
-                    message: "Starting clear operation...".to_string(),
+                    message: "Data received, waiting for processing...".to_string(),
                 });
-                match client.dispatch(req).await {
-                    Ok(_) => {
-                        let _ = tx.send(ServerEvent::Log {
-                            message: "Clear dispatched successfully.".to_string(),
-                        });
-                    }
-                    Err(e) => {
-                        return Err(format!("Error dispatching request: {:?}", e));
-                    }
-                }
-                match poll_and_broadcast(request_path, &client, &tx).await {
-                    Ok(_) => Ok("Poll successful.".to_string()),
-                    Err(e) => Err(format!("Error polling status: {:?}", e)),
-                }
+
+                poll_and_broadcast(request_path, &client, &tx)
+                    .await
+                    .map_err(|e| format!("Processing timeout: {:?}", e))?;
+
+                Ok("Clear completed successfully.".to_string())
             }
         },
     );
@@ -437,23 +428,20 @@ pub async fn transform(
             let client = mork_api_client;
             let req = request;
             async move {
+                client
+                    .dispatch(req)
+                    .await
+                    .map_err(|e| format!("Transform dispatch failed: {:?}", e))?;
+
                 let _ = tx.send(ServerEvent::Log {
-                    message: "Starting transform operation...".to_string(),
+                    message: "Data received, waiting for processing...".to_string(),
                 });
-                match client.dispatch(req).await {
-                    Ok(_) => {
-                        let _ = tx.send(ServerEvent::Log {
-                            message: "Transform dispatched successfully.".to_string(),
-                        });
-                    }
-                    Err(e) => {
-                        return Err(format!("Error dispatching request: {:?}", e));
-                    }
-                }
-                match poll_and_broadcast(path_buf, &client, &tx).await {
-                    Ok(_) => Ok("Poll successful.".to_string()),
-                    Err(e) => Err(format!("Error polling status: {:?}", e)),
-                }
+
+                poll_and_broadcast(path_buf, &client, &tx)
+                    .await
+                    .map_err(|e| format!("Processing timeout: {:?}", e))?;
+
+                Ok("Transform completed successfully.".to_string())
             }
         },
     );
@@ -506,23 +494,20 @@ pub async fn composition(
             let client = mork_api_client;
             let req = request;
             async move {
+                client
+                    .dispatch(req)
+                    .await
+                    .map_err(|e| format!("Composition dispatch failed: {:?}", e))?;
+
                 let _ = tx.send(ServerEvent::Log {
-                    message: "Starting composition operation...".to_string(),
+                    message: "Data received, waiting for processing...".to_string(),
                 });
-                match client.dispatch(req).await {
-                    Ok(_) => {
-                        let _ = tx.send(ServerEvent::Log {
-                            message: "Composition dispatched successfully.".to_string(),
-                        });
-                    }
-                    Err(e) => {
-                        return Err(format!("Error dispatching request: {:?}", e));
-                    }
-                }
-                match poll_and_broadcast(request_path, &client, &tx).await {
-                    Ok(_) => Ok("Poll successful.".to_string()),
-                    Err(e) => Err(format!("Error polling status: {:?}", e)),
-                }
+
+                poll_and_broadcast(request_path, &client, &tx)
+                    .await
+                    .map_err(|e| format!("Processing timeout: {:?}", e))?;
+
+                Ok("Composition completed successfully.".to_string())
             }
         },
     );
@@ -596,18 +581,18 @@ pub async fn union(
                 for transform_input in transform_inputs {
                     let request = TransformRequest::new().transform_input(transform_input);
 
-                    match client.dispatch(request).await {
-                        Ok(_) => {
-                            let _ = tx.send(ServerEvent::Log {
-                                message: "Transform dispatched successfully.".to_string(),
-                            });
-                        }
-                        Err(e) => return Err(format!("Error dispatching request: {:?}", e)),
-                    }
+                    client
+                        .dispatch(request)
+                        .await
+                        .map_err(|e| format!("Transformation dispatch failed: {:?}", e))?;
 
-                    if let Err(e) = poll_and_broadcast(path.clone(), &client, &tx).await {
-                        return Err(format!("Error polling status: {:?}", e));
-                    }
+                    let _ = tx.send(ServerEvent::Log {
+                        message: "Data received, waiting for processing...".to_string(),
+                    });
+
+                    poll_and_broadcast(path.clone(), &client, &tx)
+                        .await
+                        .map_err(|e| format!("Processing timeout: {:?}", e))?;
                 }
                 Ok("Union complete".to_string())
             }
