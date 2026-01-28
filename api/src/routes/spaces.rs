@@ -14,8 +14,8 @@ use tokio::time::{sleep, Duration, Instant};
 use crate::model::Token;
 use crate::mork_api::{
     ClearRequest, ExploreRequest, ExportFormat, ExportRequest, ImportRequest, Mm2Cell,
-    MorkApiClient, Namespace, ReadRequest, StatusRequest, StatusResponse, TransformDetails,
-    TransformRequest, UploadRequest,
+    MorkApiClient, Namespace, ReadRequest, Request, StatusRequest, StatusResponse,
+    TransformDetails, TransformRequest, UploadRequest,
 };
 use crate::routes::sse::SseState;
 use crate::sse_utils::{JobRunner, ServerEvent};
@@ -176,32 +176,7 @@ pub async fn upload(
         .data(body);
 
     let broadcaster = state.broadcaster.clone();
-    let request_path = path;
-
-    JobRunner::spawn(
-        "UPLOAD",
-        broadcaster.clone(),
-        move |tx: broadcast::Sender<ServerEvent>| {
-            let client = mork_api_client;
-            let req = request;
-            async move {
-                client
-                    .dispatch(req)
-                    .await
-                    .map_err(|e| format!("Upload dispatch failed: {:?}", e))?;
-
-                let _ = tx.send(ServerEvent::Log {
-                    message: "Data received, waiting for processing...".to_string(),
-                });
-
-                poll_and_broadcast(request_path, &client, &tx)
-                    .await
-                    .map_err(|e| format!("Processing timeout: {:?}", e))?;
-
-                Ok("File uploaded and processed successfully".to_string())
-            }
-        },
-    );
+    spawn_job("UPLOAD", broadcaster, mork_api_client, request, path);
 
     Ok(Json(true))
 }
@@ -228,31 +203,12 @@ pub async fn import(
     let request = ImportRequest::new().to(template).uri(uri);
 
     let broadcaster = state.broadcaster.clone();
-    let request_path = path.clone();
-
-    JobRunner::spawn(
+    spawn_job(
         "IMPORT",
-        broadcaster.clone(),
-        move |tx: broadcast::Sender<ServerEvent>| {
-            let client = mork_api_client;
-            let req = request;
-            async move {
-                client
-                    .dispatch(req)
-                    .await
-                    .map_err(|e| format!("Import dispatch failed: {:?}", e))?;
-
-                let _ = tx.send(ServerEvent::Log {
-                    message: "Data received, waiting for processing...".to_string(),
-                });
-
-                poll_and_broadcast(request_path, &client, &tx)
-                    .await
-                    .map_err(|e| format!("Processing timeout: {:?}", e))?;
-
-                Ok("Import completed successfully.".to_string())
-            }
-        },
+        broadcaster,
+        mork_api_client,
+        request,
+        path.clone(),
     );
 
     Ok(Json(true))
@@ -360,32 +316,7 @@ pub async fn clear(
     let request = ClearRequest::new().namespace(path.clone()).expr(expr);
 
     let broadcaster = state.broadcaster.clone();
-    let request_path = path.clone();
-
-    JobRunner::spawn(
-        "CLEAR",
-        broadcaster.clone(),
-        move |tx: broadcast::Sender<ServerEvent>| {
-            let client = mork_api_client;
-            let req = request;
-            async move {
-                client
-                    .dispatch(req)
-                    .await
-                    .map_err(|e| format!("Clear dispatch failed: {:?}", e))?;
-
-                let _ = tx.send(ServerEvent::Log {
-                    message: "Data received, waiting for processing...".to_string(),
-                });
-
-                poll_and_broadcast(request_path, &client, &tx)
-                    .await
-                    .map_err(|e| format!("Processing timeout: {:?}", e))?;
-
-                Ok("Clear completed successfully.".to_string())
-            }
-        },
-    );
+    spawn_job("CLEAR", broadcaster, mork_api_client, request, path.clone());
 
     Ok(Json(true))
 }
@@ -421,30 +352,7 @@ pub async fn transform(
     // Convert Namespace to PathBuf for polling
     let path_buf = PathBuf::from(request_path.to_string());
 
-    JobRunner::spawn(
-        "TRANSFORM",
-        broadcaster.clone(),
-        move |tx: broadcast::Sender<ServerEvent>| {
-            let client = mork_api_client;
-            let req = request;
-            async move {
-                client
-                    .dispatch(req)
-                    .await
-                    .map_err(|e| format!("Transform dispatch failed: {:?}", e))?;
-
-                let _ = tx.send(ServerEvent::Log {
-                    message: "Data received, waiting for processing...".to_string(),
-                });
-
-                poll_and_broadcast(path_buf, &client, &tx)
-                    .await
-                    .map_err(|e| format!("Processing timeout: {:?}", e))?;
-
-                Ok("Transform completed successfully.".to_string())
-            }
-        },
-    );
+    spawn_job("TRANSFORM", broadcaster, mork_api_client, request, path_buf);
 
     Ok(Json(true))
 }
@@ -487,29 +395,12 @@ pub async fn composition(
         None => return Err(Status::BadRequest),
     };
 
-    JobRunner::spawn(
+    spawn_job(
         "COMPOSITION",
-        broadcaster.clone(),
-        move |tx: broadcast::Sender<ServerEvent>| {
-            let client = mork_api_client;
-            let req = request;
-            async move {
-                client
-                    .dispatch(req)
-                    .await
-                    .map_err(|e| format!("Composition dispatch failed: {:?}", e))?;
-
-                let _ = tx.send(ServerEvent::Log {
-                    message: "Data received, waiting for processing...".to_string(),
-                });
-
-                poll_and_broadcast(request_path, &client, &tx)
-                    .await
-                    .map_err(|e| format!("Processing timeout: {:?}", e))?;
-
-                Ok("Composition completed successfully.".to_string())
-            }
-        },
+        broadcaster,
+        mork_api_client,
+        request,
+        request_path,
     );
 
     Ok(Json(true))
@@ -651,6 +542,49 @@ async fn poll_and_broadcast(
         }
     }
     Ok(true)
+}
+
+fn spawn_job<R>(
+    command: &str,
+    broadcaster: broadcast::Sender<ServerEvent>,
+    mork_api_client: MorkApiClient,
+    request: R,
+    request_path: PathBuf,
+) where
+    R: Request + Send + Sync + 'static,
+{
+    let command_label = command.to_string();
+    // Capitalize first letter for success message
+    let success_msg = if let Some(first_char) = command.chars().next() {
+        format!(
+            "{}{}",
+            first_char.to_uppercase(),
+            &command.to_lowercase()[1..]
+        )
+    } else {
+        command.to_string()
+    } + " completed successfully.";
+
+    JobRunner::spawn(
+        command,
+        broadcaster,
+        move |tx: broadcast::Sender<ServerEvent>| async move {
+            mork_api_client
+                .dispatch(request)
+                .await
+                .map_err(|e| format!("{} dispatch failed: {:?}", command_label, e))?;
+
+            let _ = tx.send(ServerEvent::Log {
+                message: "Data received, waiting for processing...".to_string(),
+            });
+
+            poll_and_broadcast(request_path, &mork_api_client, &tx)
+                .await
+                .map_err(|e| format!("Processing timeout: {:?}", e))?;
+
+            Ok(success_msg)
+        },
+    );
 }
 
 fn composition_transform(input: SetOperationInput) -> Result<TransformDetails, Status> {
