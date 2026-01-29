@@ -7,7 +7,7 @@ import {
 } from "~/lib/api";
 import { Token } from "~/lib/types";
 import { showToast } from "~/components/ui/Toast";
-import { rootToken, setRootToken } from "~/lib/state";
+import { rootToken, setRootToken, isConfigured } from "~/lib/state";
 
 export enum SortableColumns {
   TIMESTAMP,
@@ -58,11 +58,14 @@ export const [tokens, { mutate: mutateTokens, refetch: refetchTokens }] =
               variant: "destructive",
             });
           } else {
-            showToast({
-              title: "Error",
-              description: `Failed to fetch tokens. ${e instanceof Error ? e.message : String(e)}`,
-              variant: "destructive",
-            });
+            const errorMsg = e instanceof Error ? e.message : String(e);
+            if (!errorMsg.includes("404") || isConfigured()) {
+              showToast({
+                title: "Error",
+                description: `Failed to fetch tokens. ${errorMsg}`,
+                variant: "destructive",
+              });
+            }
           }
           return [];
         }

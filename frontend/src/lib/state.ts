@@ -85,11 +85,23 @@ export const formatedNamespace = createMemo(() => {
 
 export const checkConfiguration = async () => {
   try {
-    const res = await fetch("/api/tokens");
+    const buildRes = await fetch("/build-info");
+    if (!buildRes.ok) {
+      setIsConfigured(false);
+      return false;
+    }
 
-    if (res.ok || res.status === 401) {
+    const apiRes = await fetch("/api/tokens");
+
+    if (apiRes.ok || apiRes.status === 401) {
       setIsConfigured(true);
       return true;
+    }
+
+    const contentType = apiRes.headers.get("content-type");
+    if (apiRes.status === 404 && contentType?.includes("text/html")) {
+      setIsConfigured(false);
+      return false;
     }
 
     setIsConfigured(false);
