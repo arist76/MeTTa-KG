@@ -211,3 +211,24 @@ export function pathToSExpr(parts: string[], leaf: string = "$x"): string {
   }
   return expr;
 }
+
+export function getHttpErrorMessage(statusCode: number): string {
+  const messages: Record<number, string> = {
+    400: "The server could not understand the request. Please check your input.",
+    401: "Authentication required. Please check your token.",
+    403: "Access denied. You don't have permission to perform this action.",
+    404: "The requested resource was not found.",
+    405: "This operation is not supported.",
+    408: "The request timed out. Please try again.",
+    413: "The uploaded file is too large.",
+    422: "The request data is invalid. Please check your input.",
+    429: "Too many requests. Please wait a moment.",
+    500: "An internal server error occurred. Please try again later.",
+    502: "The server is temporarily unavailable. Please try again.",
+    503: "The service is unavailable. Please try again later.",
+    504: "The server took too long to respond. Please try again.",
+  };
+  return (
+    messages[statusCode] || `Server error (${statusCode}). Please try again.`
+  );
+}
