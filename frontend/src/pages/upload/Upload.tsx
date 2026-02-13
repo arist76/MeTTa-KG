@@ -2,7 +2,6 @@ import { Component, Show } from "solid-js";
 import { Button } from "~/components/ui/Button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/Tabs";
 import { CommandCard } from "~/components/common/CommandCard";
-import { ToastViewport } from "~/components/ui/Toast";
 import Loader from "lucide-solid/icons/loader";
 import Upload_ from "lucide-solid/icons/upload";
 import Link from "lucide-solid/icons/link";
@@ -41,7 +40,6 @@ export const UploadPage: Component = () => {
 
   return (
     <>
-      <ToastViewport />
       <div class="ml-10 mt-8">
         <CommandCard
           title="Import & Upload Data"

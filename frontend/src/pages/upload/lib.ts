@@ -2,6 +2,12 @@ import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { importData, uploadTextToSpace, importSpace } from "~/lib/api";
 import { refreshSpace } from "../load/lib";
+import {
+  AppError,
+  ErrorSeverity,
+  extractErrorInfo,
+  toToastOptions,
+} from "~/lib/error";
 
 type UploadResult =
   | null
@@ -46,56 +52,93 @@ export const handleFileSelect = async (event: Event) => {
 export const handleImport = async (spacePath: string) => {
   setIsLoading(true);
   setResult(null);
+  const currentTab = activeTab();
 
   try {
-    switch (activeTab()) {
+    switch (currentTab) {
       case "url": {
-        if (!uri().trim()) {
-          showToast({
-            title: "Missing URL",
-            description: "Please enter a valid URL.",
-            variant: "destructive",
-          });
+        const url = uri().trim();
+        const format = urlFormat();
+
+        if (!url) {
+          const errorInfo = extractErrorInfo(
+            new AppError("Please enter a URL to import data from.", {
+              severity: ErrorSeverity.WARNING,
+              context: { tab: "url" },
+            }),
+            { displayTitle: "Missing URL" }
+          );
+          showToast(toToastOptions(errorInfo));
           return;
         }
-        if (urlFormat() !== "metta") {
-          showToast({
-            title: "Format Not Supported Yet",
-            description: `${urlFormat()} format not supported yet. Please use metta format.`,
-            variant: "destructive",
-          });
+
+        if (format !== "metta") {
+          const errorInfo = extractErrorInfo(
+            new AppError(
+              `The "${format}" format is not supported yet. Please use MeTTa format for now.`,
+              {
+                severity: ErrorSeverity.WARNING,
+                context: { tab: "url", format },
+              }
+            ),
+            { displayTitle: "Format Not Supported" }
+          );
+          showToast(toToastOptions(errorInfo));
           return;
         }
-        const response = await importSpace(spacePath, uri());
+
+        const response = await importSpace(spacePath, url);
 
         if (response) {
           setResult("Successfully imported to space");
           showToast({
             title: "Import Successful",
-            description: `Data was imported from "${uri()}".`,
+            description: `Data was imported from "${url}" into "${spacePath}".`,
           });
           setTimeout(() => refreshSpace(), 1000);
         } else {
-          setResult({ error: "Error importing to space" });
-          showToast({
-            title: "Import Failed",
-            description: "Could not import from URL.",
-            variant: "destructive",
-          });
+          throw new AppError(
+            `Failed to import data from "${url}" into "${spacePath}". The URL may be invalid or the server may be unavailable.`,
+            {
+              severity: ErrorSeverity.ERROR,
+              context: { tab: "url", uri: url, spacePath },
+            }
+          );
         }
         break;
       }
 
       case "file": {
         const fileState = selectedFile();
+        const format = fileFormat();
+
         if (!fileState) {
-          showToast({
-            title: "No File Selected",
-            description: "Please select a file.",
-            variant: "destructive",
-          });
+          const errorInfo = extractErrorInfo(
+            new AppError("Please select a file to upload.", {
+              severity: ErrorSeverity.WARNING,
+              context: { tab: "file" },
+            }),
+            { displayTitle: "No File Selected" }
+          );
+          showToast(toToastOptions(errorInfo));
           return;
         }
+
+        if (format !== "metta") {
+          const errorInfo = extractErrorInfo(
+            new AppError(
+              `The "${format}" format is not supported yet. Please use MeTTa format for now.`,
+              {
+                severity: ErrorSeverity.WARNING,
+                context: { tab: "file", format, fileName: fileState.name },
+              }
+            ),
+            { displayTitle: "Format Not Supported" }
+          );
+          showToast(toToastOptions(errorInfo));
+          return;
+        }
+
         const formData = new FormData();
         formData.append(
           "file",
@@ -104,74 +147,121 @@ export const handleImport = async (spacePath: string) => {
           })
         );
 
-        const response = await importData(
-          "file",
-          formData,
-          fileFormat(),
-          spacePath
-        );
+        const response = await importData("file", formData, format, spacePath);
+
         if (response.status === "success") {
           setResult({ data: response.data, status: "success" });
           showToast({
             title: "File Uploaded",
-            description: `File "${fileState.name}" uploaded.`,
+            description: `File "${fileState.name}" (${formatFileSize(
+              fileState.size
+            )}) was uploaded to "${spacePath}".`,
           });
           refreshSpace();
         } else {
-          setResult({ error: response.message });
-          showToast({
-            title: "File Upload Failed",
-            description: response.message,
-            variant: "destructive",
-          });
+          throw new AppError(
+            `Failed to upload "${fileState.name}" to "${spacePath}". ${response.message}`,
+            {
+              severity: ErrorSeverity.ERROR,
+              context: {
+                tab: "file",
+                fileName: fileState.name,
+                fileSize: fileState.size,
+                spacePath,
+              },
+            }
+          );
         }
         break;
       }
 
       case "text": {
-        if (!textContent().trim()) {
-          showToast({
-            title: "Missing Text",
-            description: "Please enter text to upload.",
-            variant: "destructive",
-          });
+        const text = textContent().trim();
+        const format = textFormat();
+
+        if (!text) {
+          const errorInfo = extractErrorInfo(
+            new AppError("Please enter MeTTa text to upload.", {
+              severity: ErrorSeverity.WARNING,
+              context: { tab: "text" },
+            }),
+            { displayTitle: "Missing Text" }
+          );
+          showToast(toToastOptions(errorInfo));
           return;
         }
 
-        if (textFormat() !== "metta") {
-          showToast({
-            title: "Format Not Supported Yet",
-            description: `${textFormat()} format not supported yet. Please use metta format.`,
-            variant: "destructive",
-          });
+        if (format !== "metta") {
+          const errorInfo = extractErrorInfo(
+            new AppError(
+              `The "${format}" format is not supported yet. Please use MeTTa format for now.`,
+              {
+                severity: ErrorSeverity.WARNING,
+                context: { tab: "text", format },
+              }
+            ),
+            { displayTitle: "Format Not Supported" }
+          );
+          showToast(toToastOptions(errorInfo));
           return;
         }
 
-        const cleanText = textContent()
-          .replace(/[\r\n]+/g, "\n")
-          .trim();
+        const cleanText = text.replace(/[\r\n]+/g, "\n").trim();
         const response = await uploadTextToSpace(spacePath, cleanText);
+
         setResult({ data: response, status: "success" });
         showToast({
           title: "Text Uploaded",
-          description: `Text was uploaded to the "${spacePath}" space.`,
+          description: `Text content was uploaded to "${spacePath}".`,
         });
         refreshSpace();
         break;
       }
 
       default:
-        throw new Error("Invalid tab selection");
+        throw new AppError(`Invalid upload tab: "${currentTab}".`, {
+          severity: ErrorSeverity.ERROR,
+          context: { tab: currentTab, spacePath },
+        });
     }
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "An unexpected error occurred";
+    let displayTitle = "Upload Failed";
+    let displayMessage = "An unexpected error occurred during upload.";
+
+    if (error instanceof AppError) {
+      displayMessage = error.message;
+      displayTitle =
+        error.severity === ErrorSeverity.WARNING
+          ? "Input Error"
+          : "Upload Failed";
+    } else if (error instanceof Error) {
+      if (
+        error.message.includes("fetch") ||
+        error.message.includes("network") ||
+        error.message.includes("Failed to fetch")
+      ) {
+        displayTitle = "Connection Error";
+        displayMessage =
+          "Could not connect to the server. Please verify the MORK server is running.";
+      } else {
+        displayMessage = `Upload failed: ${error.message}`;
+      }
+    }
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
     setResult({ error: errorMessage });
-    showToast({
-      title: "Operation Failed",
-      description: errorMessage,
-      variant: "destructive",
+
+    const errorInfo = extractErrorInfo(error, {
+      displayTitle,
+      displayMessage,
+      context: {
+        tab: currentTab,
+        spacePath,
+        timestamp: new Date().toISOString(),
+      },
     });
+
+    showToast(toToastOptions(errorInfo));
   } finally {
     setIsLoading(false);
   }
