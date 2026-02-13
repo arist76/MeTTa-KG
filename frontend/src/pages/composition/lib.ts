@@ -2,6 +2,12 @@ import { createSignal } from "solid-js";
 import { composition, isPathClear } from "~/lib/api";
 import { showToast } from "~/components/ui/Toast";
 import { refreshSpace } from "../load/lib";
+import {
+  AppError,
+  ErrorSeverity,
+  extractErrorInfo,
+  toToastOptions,
+} from "~/lib/error";
 
 export const [isLoading, setIsLoading] = createSignal(false);
 export const [isPolling, setIsPolling] = createSignal(false);
@@ -31,12 +37,13 @@ export const startPolling = (spacePath: string) => {
         });
         refreshSpace();
       }
-    } catch {
-      showToast({
-        title: "Polling Error",
-        description: "Failed to fetch composition status.",
-        variant: "destructive",
+    } catch (error) {
+      const errorInfo = extractErrorInfo(error, {
+        displayTitle: "Connection Lost", //FIX: maybe not apporpriate title
+        displayMessage: `Lost connection while monitoring composition progress for "${spacePath}". The operation may still be running in the background.`,
+        context: { spacePath, operation: "composition-polling" },
       });
+      showToast(toToastOptions(errorInfo));
       stopPolling();
     }
   }, 3000);
@@ -46,21 +53,31 @@ export const executeComposition = async (
   compositionQuery: setOperationInput,
   spacePath: string
 ) => {
-  if (compositionQuery.source.length < 2) {
-    showToast({
-      title: "Error",
-      description: "Please enter at least two source namespaces",
-      variant: "destructive",
-    });
+  const sourceCount = compositionQuery.source.length;
+  const targetCount = compositionQuery.target.length;
+  const targetNamespace = compositionQuery.target[0] || "unknown";
+
+  if (sourceCount < 2) {
+    const errorInfo = extractErrorInfo(
+      new AppError(
+        `Composition requires at least two source namespaces to combine data. You have provided ${sourceCount}.`,
+        { severity: ErrorSeverity.WARNING }
+      ),
+      { displayTitle: "Invalid Input" }
+    );
+    showToast(toToastOptions(errorInfo));
     return;
   }
 
-  if (compositionQuery.target.length !== 1) {
-    showToast({
-      title: "Error",
-      description: "Please enter a single target namespace",
-      variant: "destructive",
-    });
+  if (targetCount !== 1) {
+    const errorInfo = extractErrorInfo(
+      new AppError(
+        `Please specify exactly one target namespace. Composition combines multiple sources into a single destination. You have provided ${targetCount}.`,
+        { severity: ErrorSeverity.WARNING }
+      ),
+      { displayTitle: "Invalid Input" }
+    );
+    showToast(toToastOptions(errorInfo));
     return;
   }
 
@@ -68,11 +85,17 @@ export const executeComposition = async (
   stopPolling();
   try {
     if (!(await isPathClear(spacePath))) {
-      showToast({
-        title: "Space Busy",
-        description: "The space is currently busy. Please wait.",
-        variant: "destructive",
-      });
+      const errorInfo = extractErrorInfo(
+        new AppError(
+          `Space "${spacePath}" is currently busy with another operation. Please wait for it to complete before starting composition.`,
+          {
+            severity: ErrorSeverity.WARNING,
+            context: { spacePath, target: targetNamespace, sourceCount },
+          }
+        ),
+        { displayTitle: "Space Busy" }
+      );
+      showToast(toToastOptions(errorInfo));
       setIsLoading(false);
       return;
     }
@@ -82,24 +105,58 @@ export const executeComposition = async (
     if (success) {
       showToast({
         title: "Composition Initiated",
-        description: "Waiting for results...",
+        description: `Composing ${sourceCount} source(s) into "${targetNamespace}". This may take a moment...`,
       });
       startPolling(spacePath);
     } else {
-      showToast({
-        title: "Composition Failed",
-        description: "Could not initiate the composition.",
-        variant: "destructive",
-      });
+      throw new AppError(
+        `Failed to start composition into "${targetNamespace}". ` +
+          `The server may be unavailable or one of the source namespaces may be invalid.`,
+        {
+          severity: ErrorSeverity.ERROR,
+          context: {
+            spacePath,
+            target: targetNamespace,
+            sources: compositionQuery.source,
+            sourceCount,
+          },
+        }
+      );
     }
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "An unexpected error occurred.";
-    showToast({
-      title: "Error",
-      description: errorMessage,
-      variant: "destructive",
+    let displayTitle = "Composition Failed";
+    let displayMessage = "An unexpected error occured.";
+
+    if (error instanceof AppError) {
+      displayMessage = error.message;
+      displayTitle =
+        error.severity === ErrorSeverity.WARNING
+          ? "Input Error"
+          : "Composition Failed";
+    } else if (error instanceof Error) {
+      if (
+        error.message.includes("fetch") ||
+        error.message.includes("network")
+      ) {
+        displayMessage =
+          "Could not connect to the server. Please verify the MORK server is running.";
+      } else {
+        displayMessage = `Composition failed: ${error.message}`;
+      }
+    }
+
+    const errorInfo = extractErrorInfo(error, {
+      displayTitle,
+      displayMessage,
+      context: {
+        spacePath,
+        target: targetNamespace,
+        sources: compositionQuery.source,
+        timestamp: new Date().toISOString(),
+      },
     });
+
+    showToast(toToastOptions(errorInfo));
   } finally {
     setIsLoading(false);
   }
