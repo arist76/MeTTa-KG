@@ -1,9 +1,15 @@
 import { createSignal, createResource } from "solid-js";
-import { formatedNamespace } from "~/lib/state";
+import { formatedNamespace, isConfigured, rootToken } from "~/lib/state";
 import { ParseError } from "~/types";
 import { exploreSpace } from "~/lib/api";
 import { showToast } from "~/components/ui/Toast";
 import { treeStore } from "./components/expandableList/store";
+import {
+  AppError,
+  toToastOptions,
+  extractErrorInfo,
+  ErrorSeverity,
+} from "~/lib/error";
 
 type ExploreResponse = {
   id: string;
@@ -28,27 +34,57 @@ export const handleToggleIndent = () => setIsIndented((p) => !p);
 
 export const [subSpace, { refetch: refetchSubSpace, mutate: mutateSubSpace }] =
   createResource(
-    () => ({
-      path: formatedNamespace(),
-      expr: pattern(),
-      token: Uint8Array.from([]),
-    }),
+    () => {
+      if (!isConfigured() || !rootToken()) return null;
+
+      return {
+        path: formatedNamespace(),
+        expr: pattern(),
+        token: Uint8Array.from([]),
+      };
+    },
     async ({ path, expr, token }) => {
       try {
         const data = JSON.parse(
           await exploreSpace(path, expr, token)
         ) as ExploreResponse[];
         showToast({
-          title: "Success",
-          description: `Loaded ${data.length} nodes.`,
+          title: "Space Loaded",
+          description: `Successfully loaded ${data.length} node${data.length === 1 ? "" : "s"} from "${path || "root"}".`,
         });
         return data;
-      } catch (e) {
-        const msg =
-          e instanceof Error && e.message === "noRootToken"
-            ? "No token found, please add one in the Tokens page"
-            : "Failed to load space data.";
-        showToast({ title: "Error", description: msg, variant: "destructive" });
+      } catch (error) {
+        let displayTitle = "Load Failed";
+        let displayMessage = "An unexpected error occurred.";
+        if (error instanceof AppError) {
+          displayMessage = error.message;
+          displayTitle =
+            error.severity === ErrorSeverity.WARNING
+              ? "Input Error"
+              : "Load Failed";
+        } else if (error instanceof Error) {
+          if (
+            error.message.includes("fetch") ||
+            error.message.includes("network") ||
+            error.message.includes("Failed to fetch")
+          ) {
+            displayTitle = "Connection Error";
+            displayMessage =
+              "Could not connect to the server. Please verify the MORK server is running.";
+          } else {
+            displayMessage = `Failed to load space: ${error.message}`;
+          }
+        }
+        const errorInfo = extractErrorInfo(error, {
+          displayTitle,
+          displayMessage,
+          context: {
+            path,
+            expr,
+            timestamp: new Date().toISOString(),
+          },
+        });
+        showToast(toToastOptions(errorInfo));
         return [];
       }
     }
@@ -79,7 +115,39 @@ export const handleCollapseToRoot = () => {
   graphApi.collapseToRoot?.();
 };
 export const triggerViewportFill = async () => {
-  await graphApi.expandToFillViewport?.();
+  try {
+    await graphApi.expandToFillViewport?.();
+  } catch (error) {
+    let displayTitle = "Expansion Failed";
+    let displayMessage = "Failed to expand nodes to fill the viewport.";
+    if (error instanceof AppError) {
+      displayMessage = error.message;
+      displayTitle =
+        error.severity === ErrorSeverity.WARNING
+          ? "Input Error"
+          : "Expansion Failed";
+    } else if (error instanceof Error) {
+      if (
+        error.message.includes("fetch") ||
+        error.message.includes("network") ||
+        error.message.includes("Failed to fetch")
+      ) {
+        displayTitle = "Connection Error";
+        displayMessage =
+          "Could not connect to the server. Please verify the MORK server is running.";
+      } else {
+        displayMessage = `Expansion failed: ${error.message}`;
+      }
+    }
+    const errorInfo = extractErrorInfo(error, {
+      displayTitle,
+      displayMessage,
+      context: {
+        timestamp: new Date().toISOString(),
+      },
+    });
+    showToast(toToastOptions(errorInfo));
+  }
 };
 export const setupGraphApi = (api: typeof graphApi) => {
   graphApi = api;

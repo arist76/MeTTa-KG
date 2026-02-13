@@ -5,6 +5,12 @@ import { exploreSpace } from "~/lib/api";
 import { formatedNamespace } from "~/lib/state";
 import { showToast } from "~/components/ui/Toast";
 import { initNodesFromApiResponse } from "~/lib/space";
+import {
+  AppError,
+  ErrorSeverity,
+  toToastOptions,
+  extractErrorInfo,
+} from "~/lib/error";
 
 export interface FlatNode {
   node: SpaceNode;
@@ -274,11 +280,37 @@ export const treeStore = {
         setState("expandedNodes", (prev) => new Set(prev).add(nodePath));
       });
     } catch (error) {
-      const msg =
-        error instanceof Error && error.message === "noRootToken"
-          ? "Please set the token in the Tokens page."
-          : `Failed to expand node: ${error}`;
-      showToast({ title: "Error", description: msg, variant: "destructive" });
+      let displayTitle = "Expansion Failed";
+      let displayMessage = `Failed to expand node "${node.label}".`;
+      if (error instanceof AppError) {
+        displayMessage = error.message;
+        displayTitle =
+          error.severity === ErrorSeverity.WARNING
+            ? "Input Error"
+            : "Expansion Failed";
+      } else if (error instanceof Error) {
+        if (
+          error.message.includes("fetch") ||
+          error.message.includes("network") ||
+          error.message.includes("Failed to fetch")
+        ) {
+          displayTitle = "Connection Error";
+          displayMessage =
+            "Could not connect to the server. Please verify the MORK server is running.";
+        } else {
+          displayMessage = `Expansion failed: ${error.message}`;
+        }
+      }
+      const errorInfo = extractErrorInfo(error, {
+        displayTitle,
+        displayMessage,
+        context: {
+          nodePath,
+          nodeLabel: node.label,
+          timestamp: new Date().toISOString(),
+        },
+      });
+      showToast(toToastOptions(errorInfo));
     }
     restoreScroll();
   },
@@ -417,12 +449,37 @@ export const treeStore = {
           });
         }
       });
-    } catch (e) {
-      showToast({
-        title: "Expansion Error",
-        description: `Failed to expand recursively.\n ${e}`,
-        variant: "destructive",
+    } catch (error) {
+      let displayTitle = "Recursive Expansion Failed";
+      let displayMessage = "Failed to expand node recursively.";
+      if (error instanceof AppError) {
+        displayMessage = error.message;
+        displayTitle =
+          error.severity === ErrorSeverity.WARNING
+            ? "Input Error"
+            : "Expansion Failed";
+      } else if (error instanceof Error) {
+        if (
+          error.message.includes("fetch") ||
+          error.message.includes("network") ||
+          error.message.includes("Failed to fetch")
+        ) {
+          displayTitle = "Connection Error";
+          displayMessage =
+            "Could not connect to the server. Please verify the MORK server is running.";
+        } else {
+          displayMessage = `Recursive expansion failed: ${error.message}`;
+        }
+      }
+      const errorInfo = extractErrorInfo(error, {
+        displayTitle,
+        displayMessage,
+        context: {
+          startPath,
+          timestamp: new Date().toISOString(),
+        },
       });
+      showToast(toToastOptions(errorInfo));
     } finally {
       setState("expandingNodeId", null);
       restoreScroll();

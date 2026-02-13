@@ -12,8 +12,14 @@ import type { SpaceNode } from "~/lib/space";
 import { formatedNamespace } from "~/lib/state";
 import ExpressionListItem from "./ExpressionListItem";
 import { treeStore, type FlatNode } from "./store";
-import { showToast } from "~/components/ui/Toast";
 import { shouldFillViewport, setShouldFillViewport } from "../../lib";
+import { showToast } from "~/components/ui/Toast";
+import {
+  AppError,
+  ErrorSeverity,
+  toToastOptions,
+  extractErrorInfo,
+} from "~/lib/error";
 
 interface Props {
   data: { nodes: SpaceNode[]; prefix: string[] };
@@ -61,12 +67,37 @@ export default function ExpressionList(props: Props) {
       await treeStore.expandToFillViewport(targetCount, props.pattern, () =>
         flattenedNodes()
       );
-    } catch (e) {
-      showToast({
-        title: "Expansion Error",
-        description: `${e}`,
-        variant: "destructive",
+    } catch (error) {
+      let displayTitle = "Viewport Expansion Failed";
+      let displayMessage = "Failed to expand nodes to fill the viewport.";
+      if (error instanceof AppError) {
+        displayMessage = error.message;
+        displayTitle =
+          error.severity === ErrorSeverity.WARNING
+            ? "Input Error"
+            : "Expansion Failed";
+      } else if (error instanceof Error) {
+        if (
+          error.message.includes("fetch") ||
+          error.message.includes("network") ||
+          error.message.includes("Failed to fetch")
+        ) {
+          displayTitle = "Connection Error";
+          displayMessage =
+            "Could not connect to the server. Please verify the MORK server is running.";
+        } else {
+          displayMessage = `Viewport expansion failed: ${error.message}`;
+        }
+      }
+      const errorInfo = extractErrorInfo(error, {
+        displayTitle,
+        displayMessage,
+        context: {
+          pattern: props.pattern,
+          timestamp: new Date().toISOString(),
+        },
       });
+      showToast(toToastOptions(errorInfo));
     } finally {
       treeStore.setExpanding(false);
     }
