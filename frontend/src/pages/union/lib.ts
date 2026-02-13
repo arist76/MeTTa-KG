@@ -1,6 +1,12 @@
 import { createSignal } from "solid-js";
 import { union, isPathClear } from "~/lib/api";
 import { showToast } from "~/components/ui/Toast";
+import {
+  AppError,
+  ErrorSeverity,
+  extractErrorInfo,
+  toToastOptions,
+} from "~/lib/error";
 
 export const [isLoading, setIsLoading] = createSignal(false);
 export const [isPolling, setIsPolling] = createSignal(false);
@@ -9,6 +15,7 @@ export type setOperationInput = {
   pattern: string[];
   template: string[];
 };
+
 let pollingIntervalId: NodeJS.Timeout | null = null;
 
 export const stopPolling = () => {
@@ -21,65 +28,116 @@ export const executeUnion = async (
   unionQuery: setOperationInput,
   spacePath: string
 ) => {
-  if (unionQuery.pattern.length < 1) {
-    showToast({
-      title: "Error",
-      description: "Please enter more than one patterns",
-      variant: "destructive",
-    });
+  const patternCount = unionQuery.pattern.length;
+  const templateCount = unionQuery.template.length;
+
+  if (patternCount < 2) {
+    const errorInfo = extractErrorInfo(
+      new AppError(
+        `Union requires at least two patterns to combine. You have provided ${patternCount}.`,
+        { severity: ErrorSeverity.WARNING }
+      ),
+      { displayTitle: "Invalid Input" }
+    );
+    showToast(toToastOptions(errorInfo));
     return;
   }
 
-  if (unionQuery.template.length > 1) {
-    showToast({
-      title: "Error",
-      description: "Please enter single template namespace",
-      variant: "destructive",
-    });
+  if (templateCount !== 1) {
+    const errorInfo = extractErrorInfo(
+      new AppError(
+        `Please specify exactly one target namespace for the union result. You have provided ${templateCount}.`,
+        { severity: ErrorSeverity.WARNING }
+      ),
+      { displayTitle: "Invalid Input" }
+    );
+    showToast(toToastOptions(errorInfo));
     return;
   }
 
   setIsLoading(true);
   stopPolling();
+
   try {
     if (!(await isPathClear(spacePath))) {
-      showToast({
-        title: "Space Busy",
-        description: "The space is currently busy. Please wait.",
-        variant: "destructive",
-      });
-      setIsLoading(false);
+      const errorInfo = extractErrorInfo(
+        new AppError(
+          `Space "${spacePath}" is currently busy with another operation. Please wait for it to complete before starting the union.`,
+          {
+            severity: ErrorSeverity.WARNING,
+            context: { spacePath, patternCount, templateCount },
+          }
+        ),
+        { displayTitle: "Space Busy" }
+      );
+      showToast(toToastOptions(errorInfo));
       return;
     }
 
     showToast({
-      title: "Unification Initiated",
-      description: "Waiting for results...",
+      title: "Union Started",
+      description: `Combining ${patternCount} patterns into "${unionQuery.template[0]}". This may take a moment...`,
     });
 
     const success = await union(unionQuery);
 
-    setIsLoading(false);
     if (success) {
       showToast({
-        title: "Unification Complete",
-        description: "Operation completed successfully!",
+        title: "Union Complete",
+        description: `Successfully combined ${patternCount} patterns into "${unionQuery.template[0]}".`,
       });
     } else {
-      showToast({
-        title: "Unification Failed",
-        description: "Could not initiate the unification.",
-        variant: "destructive",
-      });
+      throw new AppError(
+        `Failed to complete union into "${unionQuery.template[0]}". ` +
+          `The server may be unavailable or one of the pattern namespaces may be invalid.`,
+        {
+          severity: ErrorSeverity.ERROR,
+          context: {
+            spacePath,
+            patterns: unionQuery.pattern,
+            target: unionQuery.template[0],
+            patternCount,
+          },
+        }
+      );
     }
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "An unexpected error occurred.";
-    showToast({
-      title: "Error",
-      description: errorMessage,
-      variant: "destructive",
+    let displayTitle = "Union Failed";
+    let displayMessage =
+      "An unexpected error occurred during the union operation.";
+
+    if (error instanceof AppError) {
+      displayMessage = error.message;
+      displayTitle =
+        error.severity === ErrorSeverity.WARNING
+          ? "Input Error"
+          : "Union Failed";
+    } else if (error instanceof Error) {
+      if (
+        error.message.includes("fetch") ||
+        error.message.includes("network") ||
+        error.message.includes("Failed to fetch")
+      ) {
+        displayTitle = "Connection Error";
+        displayMessage =
+          "Could not connect to the server. Please verify the MORK server is running.";
+      } else {
+        displayMessage = `Union failed: ${error.message}`;
+      }
+    }
+
+    const errorInfo = extractErrorInfo(error, {
+      displayTitle,
+      displayMessage,
+      context: {
+        spacePath,
+        patternCount,
+        target: unionQuery.template[0],
+        timestamp: new Date().toISOString(),
+      },
     });
+
+    showToast(toToastOptions(errorInfo));
   } finally {
     setIsLoading(false);
   }
