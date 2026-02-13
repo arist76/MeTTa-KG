@@ -7,7 +7,8 @@ import {
   Mm2InputMultiWithNamespace,
 } from "./types";
 import { CSVParserParameters } from "~/types";
-import { quoteFromBytes } from "./utils";
+import { quoteFromBytes, getHttpErrorMessage } from "./utils";
+import { AppError, ErrorSeverity } from "./error";
 
 export const API_URL =
   (window.location.origin || import.meta.env.VITE_BACKEND_URL) + "/api";
@@ -37,8 +38,19 @@ export async function request<T>(
 ): Promise<T> {
   const auth = rootToken();
 
+  // FIX: Ensure we don't strip the /api path.
+  // If 'url' starts with '/', remove it to append cleanly to API_URL
+  const cleanPath = url.startsWith("/") ? url.slice(1) : url;
+  const finalUrl = `${API_URL}/${cleanPath}`;
+
   if (!auth) {
-    throw new Error("noRootToken");
+    throw new AppError(
+      "No authentication token found. Please add a root token in the Tokens page.",
+      {
+        severity: ErrorSeverity.WARNING,
+        context: { url: finalUrl, operation: "request" },
+      }
+    );
   }
 
   const headers = {
@@ -46,28 +58,75 @@ export async function request<T>(
     Authorization: authOverride || auth,
   };
 
-  // FIX: Ensure we don't strip the /api path.
-  // If 'url' starts with '/', remove it to append cleanly to API_URL
-  const cleanPath = url.startsWith("/") ? url.slice(1) : url;
-  const finalUrl = `${API_URL}/${cleanPath}`;
-
   const response = await fetch(finalUrl, { ...options, headers });
 
+  // if (!response.ok) {
+  //   const contentType = response.headers.get("content-type");
+  //   let errorMessage = response.statusText;
+  //
+  //   if (contentType && contentType.includes("application/json")) {
+  //     try {
+  //       const errorData = await response.json();
+  //       errorMessage = errorData.message || errorData.error || errorMessage;
+  //     } catch {
+  //       // If JSON parsing fails, use statusText
+  //     }
+  //   } else {
+  //     try {
+  //       const errorText = await response.text();
+  //       if (errorText) errorMessage = errorText;
+  //     } catch {
+  //       // If text parsing fails, use statusText
+  //     }
+  //   }
+  //
+  //   throw new AppError(errorMessage, {
+  //     statusCode: response.status,
+  //     severity:
+  //       response.status >= 500 ? ErrorSeverity.ERROR : ErrorSeverity.WARNING,
+  //     context: {
+  //       url: finalUrl,
+  //       method: options.method,
+  //       shouldRetry: response.status >= 500 || response.status === 429,
+  //     },
+  //   });
+  // }
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      throw new Error("Unauthorized");
-    }
     const contentType = response.headers.get("content-type");
-    if (contentType && contentType.includes("application/json")) {
-      const errorData = await response.json();
-      const error = new Error(errorData.message || "An unknown error occurred");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (error as any).data = errorData;
-      throw error;
+    let errorMessage = response.statusText;
+    const errorContext: Record<string, unknown> = {
+      url: finalUrl,
+      method: options.method,
+      shouldRetry: response.status >= 500 || response.status === 429,
+    };
+    // Check if response is HTML (common for server error pages)
+    const isHtml = contentType?.includes("text/html");
+    if (isHtml) {
+      // Don't use HTML as error message - use clean status-based message
+      const errorText = await response.text().catch(() => "");
+      errorMessage = getHttpErrorMessage(response.status); // Clean message
+      errorContext.responseHtml = errorText.substring(0, 1000); // Store HTML for debugging
+    } else if (contentType?.includes("application/json")) {
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } catch {
+        // If JSON parsing fails, use statusText
+      }
     } else {
-      const errorText = await response.text();
-      throw new Error(errorText || response.statusText);
+      try {
+        const errorText = await response.text();
+        if (errorText) errorMessage = errorText;
+      } catch {
+        // If text parsing fails, use statusText
+      }
     }
+    throw new AppError(errorMessage, {
+      statusCode: response.status,
+      severity:
+        response.status >= 500 ? ErrorSeverity.ERROR : ErrorSeverity.WARNING,
+      context: errorContext,
+    });
   }
 
   const contentType = response.headers.get("content-type");
@@ -141,7 +200,10 @@ export const getToken = () => {
   return request<Token>("/token");
 };
 
-export const createFromCSV = (file: File, params: CSVParserParameters) => {
+export const createFromCSV = async (
+  file: File,
+  params: CSVParserParameters
+): Promise<any> => {
   const formData = new FormData();
   formData.append("file", file);
   const url = new URL(`${API_URL}/translations/csv`);
@@ -149,52 +211,154 @@ export const createFromCSV = (file: File, params: CSVParserParameters) => {
     params as any /* eslint-disable-line @typescript-eslint/no-explicit-any */
   ).toString();
 
-  return fetch(url.toString(), {
-    method: "POST",
-    body: formData,
-    headers: {
-      Authorization: `${localStorage.getItem("rootToken")}`,
-    },
-  }).then((response) => response.json());
+  try {
+    const response = await fetch(url.toString(), {
+      method: "POST",
+      body: formData,
+      headers: {
+        Authorization: `${localStorage.getItem("rootToken")}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new AppError(
+        errorData.message || `CSV translation failed: ${response.statusText}`,
+        {
+          statusCode: response.status,
+          severity: ErrorSeverity.ERROR,
+          context: { operation: "createFromCSV", fileName: file.name },
+        }
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError(
+      "Failed to process CSV file. Please check the file format.",
+      {
+        severity: ErrorSeverity.ERROR,
+        context: { operation: "createFromCSV", fileName: file.name },
+      }
+    );
+  }
 };
 
-export const createFromNT = (file: File) => {
+export const createFromNT = async (file: File): Promise<any> => {
   const formData = new FormData();
   formData.append("file", file);
 
-  return fetch(`${API_URL}/translations/nt`, {
-    method: "POST",
-    body: formData,
-    headers: {
-      Authorization: `${localStorage.getItem("rootToken")}`,
-    },
-  }).then((response) => response.json());
+  try {
+    const response = await fetch(`${API_URL}/translations/nt`, {
+      method: "POST",
+      body: formData,
+      headers: {
+        Authorization: `${localStorage.getItem("rootToken")}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new AppError(
+        errorData.message ||
+          `N-Triples translation failed: ${response.statusText}`,
+        {
+          statusCode: response.status,
+          severity: ErrorSeverity.ERROR,
+          context: { operation: "createFromNT", fileName: file.name },
+        }
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError(
+      "Failed to process N-Triples file. Please check the file format.",
+      {
+        severity: ErrorSeverity.ERROR,
+        context: { operation: "createFromNT", fileName: file.name },
+      }
+    );
+  }
 };
 
-export const createFromJsonLd = (file: File) => {
+export const createFromJsonLd = async (file: File): Promise<any> => {
   const formData = new FormData();
   formData.append("file", file);
 
-  return fetch(`${API_URL}/translations/jsonld`, {
-    method: "POST",
-    body: formData,
-    headers: {
-      Authorization: `${localStorage.getItem("rootToken")}`,
-    },
-  }).then((response) => response.json());
+  try {
+    const response = await fetch(`${API_URL}/translations/jsonld`, {
+      method: "POST",
+      body: formData,
+      headers: {
+        Authorization: `${localStorage.getItem("rootToken")}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new AppError(
+        errorData.message ||
+          `JSON-LD translation failed: ${response.statusText}`,
+        {
+          statusCode: response.status,
+          severity: ErrorSeverity.ERROR,
+          context: { operation: "createFromJsonLd", fileName: file.name },
+        }
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError(
+      "Failed to process JSON-LD file. Please check the file format.",
+      {
+        severity: ErrorSeverity.ERROR,
+        context: { operation: "createFromJsonLd", fileName: file.name },
+      }
+    );
+  }
 };
 
-export const createFromN3 = (file: File) => {
+export const createFromN3 = async (file: File): Promise<any> => {
   const formData = new FormData();
   formData.append("file", file);
 
-  return fetch(`${API_URL}/translations/n3`, {
-    method: "POST",
-    body: formData,
-    headers: {
-      Authorization: `${localStorage.getItem("rootToken")}`,
-    },
-  }).then((response) => response.json());
+  try {
+    const response = await fetch(`${API_URL}/translations/n3`, {
+      method: "POST",
+      body: formData,
+      headers: {
+        Authorization: `${localStorage.getItem("rootToken")}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new AppError(
+        errorData.message || `N3 translation failed: ${response.statusText}`,
+        {
+          statusCode: response.status,
+          severity: ErrorSeverity.ERROR,
+          context: { operation: "createFromN3", fileName: file.name },
+        }
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError(
+      "Failed to process N3 file. Please check the file format.",
+      {
+        severity: ErrorSeverity.ERROR,
+        context: { operation: "createFromN3", fileName: file.name },
+      }
+    );
+  }
 };
 
 export async function isPathClear(path: string): Promise<boolean> {
@@ -214,8 +378,11 @@ export async function isPathClear(path: string): Promise<boolean> {
     });
 
     return true;
-  } catch {
-    return true;
+  } catch (error) {
+    throw new AppError(`Failed to check if space "${path}" is ready.`, {
+      severity: ErrorSeverity.ERROR,
+      context: { operation: "isPathClear", path },
+    });
   }
 }
 
@@ -247,7 +414,10 @@ export async function importData(
           const file: File = data.get("file");
 
           if (!file) {
-            return { status: "error", message: "No file provided" };
+            throw new AppError("No file provided for upload.", {
+              severity: ErrorSeverity.WARNING,
+              context: { operation: "importData", type: "file", path },
+            });
           }
 
           const text = await file.text();
@@ -269,23 +439,34 @@ export async function importData(
             message: "File imported successfully",
           };
         } catch (err) {
-          return {
-            status: "error",
-            message: err instanceof Error ? err.message : String(err),
-          };
+          if (err instanceof AppError) throw err;
+          throw new AppError(
+            err instanceof Error ? err.message : "Failed to upload file",
+            {
+              severity: ErrorSeverity.ERROR,
+              context: { operation: "importData", type: "file", path },
+            }
+          );
         }
 
       default:
-        return {
-          status: "error",
-          message: `Unsupported import type: ${type}`,
-        };
+        throw new AppError(
+          `Unsupported import type: "${type}". Supported types are "text" and "file".`,
+          {
+            severity: ErrorSeverity.WARNING,
+            context: { operation: "importData", type, path },
+          }
+        );
     }
   } catch (error) {
-    return {
-      status: "error",
-      message: error instanceof Error ? error.message : "Failed to import data",
-    };
+    if (error instanceof AppError) throw error;
+    throw new AppError(
+      error instanceof Error ? error.message : "Failed to import data",
+      {
+        severity: ErrorSeverity.ERROR,
+        context: { operation: "importData", type, path },
+      }
+    );
   }
 }
 
@@ -328,7 +509,12 @@ export const createToken = async (
   shareWrite: boolean,
   shareShare: boolean
 ): Promise<Token> => {
-  if (!root) throw new Error("No root token");
+  if (!root) {
+    throw new AppError("No root token provided. Please authenticate first.", {
+      severity: ErrorSeverity.WARNING,
+      context: { operation: "createToken" },
+    });
+  }
 
   const newToken: Token = {
     id: 0,
@@ -373,7 +559,12 @@ export const refreshCodes = async (
 };
 
 export const deleteToken = (root: string | null, token_id: number) => {
-  if (!root) throw new Error("No root token");
+  if (!root) {
+    throw new AppError("No root token provided. Please authenticate first.", {
+      severity: ErrorSeverity.WARNING,
+      context: { operation: "deleteToken", tokenId: token_id },
+    });
+  }
   return request(`/tokens/${token_id}`, {
     method: "DELETE",
     headers: { Authorization: root },
@@ -381,7 +572,12 @@ export const deleteToken = (root: string | null, token_id: number) => {
 };
 
 export const deleteTokens = (root: string | null, token_ids: number[]) => {
-  if (!root) throw new Error("No root token");
+  if (!root) {
+    throw new AppError("No root token provided. Please authenticate first.", {
+      severity: ErrorSeverity.WARNING,
+      context: { operation: "deleteTokens", tokenCount: token_ids.length },
+    });
+  }
   return request<number>("/tokens", {
     method: "DELETE",
     headers: {
