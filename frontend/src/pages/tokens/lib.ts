@@ -8,6 +8,12 @@ import {
 import { Token } from "~/lib/types";
 import { showToast } from "~/components/ui/Toast";
 import { rootToken, setRootToken, isConfigured } from "~/lib/state";
+import {
+  AppError,
+  ErrorSeverity,
+  extractErrorInfo,
+  toToastOptions,
+} from "~/lib/error";
 
 export enum SortableColumns {
   TIMESTAMP,
@@ -47,25 +53,39 @@ export const [tokens, { mutate: mutateTokens, refetch: refetchTokens }] =
           });
           return fetchedTokens;
         } catch (e) {
+          let displayTitle = "Failed to Load Tokens";
+          let displayMessage =
+            "An unexpected error occurred while loading tokens.";
+
           if (e instanceof Error && e.message.includes("Unauthorized")) {
             setRootToken(null);
             localStorage.removeItem("rootToken");
-
-            showToast({
-              title: "Authentication Failed",
-              description:
-                "Invalid or expired token. Please enter a valid root token.",
-              variant: "destructive",
-            });
-          } else {
-            const errorMsg = e instanceof Error ? e.message : String(e);
-            if (!errorMsg.includes("404") || isConfigured()) {
-              showToast({
-                title: "Error",
-                description: `Failed to fetch tokens. ${errorMsg}`,
-                variant: "destructive",
-              });
+            displayTitle = "Authentication Failed";
+            displayMessage = "Your session has expired. Please log in again.";
+          } else if (e instanceof AppError) {
+            displayMessage = e.message;
+            displayTitle =
+              e.severity === ErrorSeverity.WARNING
+                ? "Input Error"
+                : "Failed to Load Tokens";
+          } else if (e instanceof Error) {
+            if (e.message.includes("fetch") || e.message.includes("network")) {
+              displayTitle = "Connection Error";
+              displayMessage =
+                "Could not connect to the server. Please verify the MORK server is running.";
+            } else {
+              displayMessage = `Failed to load tokens: ${e.message}`;
             }
+          }
+
+          const errorMsg = e instanceof Error ? e.message : String(e);
+          if (!errorMsg.includes("404") || isConfigured()) {
+            const errorInfo = extractErrorInfo(e, {
+              displayTitle,
+              displayMessage,
+              context: { action: "fetch", timestamp: new Date().toISOString() },
+            });
+            showToast(toToastOptions(errorInfo));
           }
           return [];
         }
@@ -132,16 +152,39 @@ export const handleRefresh = async () => {
     ]);
 
     showToast({
-      title: "Success",
-      description: `Refreshed ${refreshed.length} tokens.`,
+      title: "Tokens Refreshed",
+      description: `${refreshed.length} token(s) have new codes.`,
     });
     setSelectedTokens([]);
-  } catch {
-    showToast({
-      title: "Error",
-      description: "Failed to refresh tokens.",
-      variant: "destructive",
+  } catch (e) {
+    let displayTitle = "Refresh Failed";
+    let displayMessage =
+      "An unexpected error occurred while refreshing token codes.";
+
+    if (e instanceof AppError) {
+      displayMessage = e.message;
+      displayTitle =
+        e.severity === ErrorSeverity.WARNING ? "Input Error" : "Refresh Failed";
+    } else if (e instanceof Error) {
+      if (e.message.includes("fetch") || e.message.includes("network")) {
+        displayTitle = "Connection Error";
+        displayMessage =
+          "Could not connect to the server. Please verify the MORK server is running.";
+      } else {
+        displayMessage = `Failed to refresh tokens: ${e.message}`;
+      }
+    }
+
+    const errorInfo = extractErrorInfo(e, {
+      displayTitle,
+      displayMessage,
+      context: {
+        action: "refresh",
+        count: selectedTokens().length,
+        timestamp: new Date().toISOString(),
+      },
     });
+    showToast(toToastOptions(errorInfo));
   }
 };
 
@@ -162,16 +205,38 @@ export const handleDelete = async () => {
     await refetchTokens();
 
     showToast({
-      title: "Success",
-      description: `Deleted ${idsToDelete.length} token(s) and their children.`,
+      title: "Tokens Deleted",
+      description: `${idsToDelete.length} token(s) and their children removed.`,
     });
     setSelectedTokens([]);
-  } catch {
-    showToast({
-      title: "Error",
-      description: "Failed to delete tokens.",
-      variant: "destructive",
+  } catch (e) {
+    let displayTitle = "Delete Failed";
+    let displayMessage = "An unexpected error occurred while deleting tokens.";
+
+    if (e instanceof AppError) {
+      displayMessage = e.message;
+      displayTitle =
+        e.severity === ErrorSeverity.WARNING ? "Input Error" : "Delete Failed";
+    } else if (e instanceof Error) {
+      if (e.message.includes("fetch") || e.message.includes("network")) {
+        displayTitle = "Connection Error";
+        displayMessage =
+          "Could not connect to the server. Please verify the MORK server is running.";
+      } else {
+        displayMessage = `Failed to delete tokens: ${e.message}`;
+      }
+    }
+
+    const errorInfo = extractErrorInfo(e, {
+      displayTitle,
+      displayMessage,
+      context: {
+        action: "delete",
+        count: selectedTokens().length,
+        timestamp: new Date().toISOString(),
+      },
     });
+    showToast(toToastOptions(errorInfo));
   }
 };
 
