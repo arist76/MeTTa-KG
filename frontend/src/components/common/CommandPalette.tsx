@@ -1,4 +1,12 @@
-import { createSignal, onMount, Show, For, JSX } from "solid-js";
+import {
+  createSignal,
+  onMount,
+  Show,
+  For,
+  JSX,
+  lazy,
+  Suspense,
+} from "solid-js";
 import {
   CommandDialog,
   CommandInput,
@@ -12,12 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/Dialog";
-import LoadPage from "~/pages/load/Load";
-import UploadPage from "~/pages/upload/Upload";
-import ExportPage from "~/pages/export/Export";
-import ClearPage from "~/pages/clear/Clear";
-import TransformPage from "~/pages/transform/Transform";
-import TokensPage from "~/pages/tokens/Tokens";
 
 import Database from "lucide-solid/icons/database";
 import Upload from "lucide-solid/icons/upload";
@@ -25,6 +27,13 @@ import Download from "lucide-solid/icons/download";
 import Trash2 from "lucide-solid/icons/trash-2";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
 import Key from "lucide-solid/icons/key";
+
+const LoadPage = lazy(() => import("~/pages/load/Load"));
+const UploadPage = lazy(() => import("~/pages/upload/Upload"));
+const ExportPage = lazy(() => import("~/pages/export/Export"));
+const ClearPage = lazy(() => import("~/pages/clear/Clear"));
+const TransformPage = lazy(() => import("~/pages/transform/Transform"));
+const TokensPage = lazy(() => import("~/pages/tokens/Tokens"));
 
 interface Command {
   id: string;
@@ -226,14 +235,30 @@ export default function CommandPalette() {
                   <div class="absolute inset-0 overflow-y-auto scrollbar-thin scrollbar-track-neutral-950 scrollbar-thumb-neutral-700">
                     <div class="p-4 md:p-6 min-h-full flex justify-center">
                       <div class="w-full max-w-3xl">
-                        {selectedCommand()?.component()}
+                        <Suspense
+                          fallback={
+                            <div class="p-6 text-center text-sm text-neutral-400">
+                              Loading…
+                            </div>
+                          }
+                        >
+                          {selectedCommand()?.component()}
+                        </Suspense>
                       </div>
                     </div>
                   </div>
                 }
               >
                 <div class="absolute inset-0">
-                  {selectedCommand()?.component()}
+                  <Suspense
+                    fallback={
+                      <div class="p-6 text-center text-sm text-neutral-400">
+                        Loading…
+                      </div>
+                    }
+                  >
+                    {selectedCommand()?.component()}
+                  </Suspense>
                 </div>
               </Show>
             </div>
