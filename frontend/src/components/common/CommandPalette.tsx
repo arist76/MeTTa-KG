@@ -27,6 +27,9 @@ import Download from "lucide-solid/icons/download";
 import Trash2 from "lucide-solid/icons/trash-2";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
 import Key from "lucide-solid/icons/key";
+import GitMerge from "lucide-solid/icons/git-merge";
+import GitBranch from "lucide-solid/icons/git-branch";
+import Combine from "lucide-solid/icons/combine";
 
 const LoadPage = lazy(() => import("~/pages/load/Load"));
 const UploadPage = lazy(() => import("~/pages/upload/Upload"));
@@ -34,6 +37,11 @@ const ExportPage = lazy(() => import("~/pages/export/Export"));
 const ClearPage = lazy(() => import("~/pages/clear/Clear"));
 const TransformPage = lazy(() => import("~/pages/transform/Transform"));
 const TokensPage = lazy(() => import("~/pages/tokens/Tokens"));
+const UnionPage = lazy(() => import("~/pages/union/Union"));
+const CompositionPage = lazy(() => import("~/pages/composition/Composition"));
+const IntersectionPage = lazy(
+  () => import("~/pages/intersection/Intersection")
+);
 
 interface Command {
   id: string;
@@ -92,6 +100,30 @@ const commands: Command[] = [
     keywords: ["tokens", "auth", "authentication", "security"],
     icon: () => <Key class="w-4 h-4" />,
     component: () => <TokensPage />,
+  },
+  {
+    id: "union",
+    label: "Union",
+    description: "Combine multiple spaces",
+    keywords: ["union", "combine", "merge", "unify", "set"],
+    icon: () => <GitMerge class="w-4 h-4" />,
+    component: () => <UnionPage />,
+  },
+  {
+    id: "composition",
+    label: "Composition",
+    description: "Compose spaces together",
+    keywords: ["composition", "compose", "combine", "namespace"],
+    icon: () => <Combine class="w-4 h-4" />,
+    component: () => <CompositionPage />,
+  },
+  {
+    id: "intersection",
+    label: "Intersection",
+    description: "Find common data across spaces",
+    keywords: ["intersection", "intersect", "common", "overlap"],
+    icon: () => <GitBranch class="w-4 h-4" />,
+    component: () => <IntersectionPage />,
   },
 ];
 
