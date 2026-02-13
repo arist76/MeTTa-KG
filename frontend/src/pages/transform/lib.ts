@@ -3,6 +3,12 @@ import { transform, isPathClear } from "~/lib/api";
 import { Mm2InputMultiWithNamespace, Item } from "~/lib/types";
 import { showToast } from "~/components/ui/Toast";
 import { refreshSpace } from "../load/lib";
+import {
+  AppError,
+  ErrorSeverity,
+  extractErrorInfo,
+  toToastOptions,
+} from "~/lib/error";
 
 export const [isLoading, setIsLoading] = createSignal(false);
 export const [isPolling, setIsPolling] = createSignal(false);
@@ -24,16 +30,17 @@ export const startPolling = (spacePath: string) => {
         stopPolling();
         showToast({
           title: "Transform Completed",
-          description: "The space has been successfully transformed.",
+          description: `Successfully transformed data in "${spacePath}".`,
         });
         refreshSpace();
       }
-    } catch {
-      showToast({
-        title: "Polling Error",
-        description: "Failed to fetch transformation status.",
-        variant: "destructive",
+    } catch (error) {
+      const errorInfo = extractErrorInfo(error, {
+        displayTitle: "Connection Lost",
+        displayMessage: `Lost connection while monitoring transform progress for "${spacePath}". The operation may still be running in the background.`,
+        context: { spacePath, operation: "transform-polling" },
       });
+      showToast(toToastOptions(errorInfo));
       stopPolling();
     }
   }, 3000);
@@ -44,15 +51,29 @@ export const executeTransform = async (
   templates: Item[],
   spacePath: string
 ) => {
-  if (
-    !patterns.some((p) => p.value.trim()) ||
-    !templates.some((t) => t.value.trim())
-  ) {
-    showToast({
-      title: "Error",
-      description: "Please enter patterns and templates.",
-      variant: "destructive",
-    });
+  const patternCount = patterns.filter((p) => p.value.trim()).length;
+  const templateCount = templates.filter((t) => t.value.trim()).length;
+
+  if (patternCount === 0) {
+    const errorInfo = extractErrorInfo(
+      new AppError(
+        "Please enter at least one pattern to match data for transformation.",
+        { severity: ErrorSeverity.WARNING }
+      ),
+      { displayTitle: "Missing Patterns" }
+    );
+    showToast(toToastOptions(errorInfo));
+    return;
+  }
+  if (templateCount === 0) {
+    const errorInfo = extractErrorInfo(
+      new AppError(
+        "Please enter at least one template to match data for transformation.",
+        { severity: ErrorSeverity.WARNING }
+      ),
+      { displayTitle: "Missing Template" }
+    );
+    showToast(toToastOptions(errorInfo));
     return;
   }
 
@@ -61,11 +82,17 @@ export const executeTransform = async (
 
   try {
     if (!(await isPathClear(spacePath))) {
-      showToast({
-        title: "Space Busy",
-        description: "The space is currently busy. Please wait.",
-        variant: "destructive",
-      });
+      const errorInfo = extractErrorInfo(
+        new AppError(
+          `Space "${spacePath}" is currently busy with another operation. Please wait for it to complete before starting the transform.`,
+          {
+            severity: ErrorSeverity.WARNING,
+            context: { spacePath, patternCount, templateCount },
+          }
+        ),
+        { displayTitle: "Space Busy" }
+      );
+      showToast(toToastOptions(errorInfo));
       setIsLoading(false);
       return;
     }
@@ -91,20 +118,54 @@ export const executeTransform = async (
       });
       startPolling(spacePath);
     } else {
-      showToast({
-        title: "Transform Failed",
-        description: "Could not initiate the transformation.",
-        variant: "destructive",
-      });
+      throw new AppError(
+        `Failed to start transform in "${spacePath}". ` +
+          `The server may be unavailable or the pattern/template configuration may be invalid.`,
+        {
+          severity: ErrorSeverity.ERROR,
+          context: {
+            spacePath,
+            patternCount,
+            templateCount,
+            patterns: patterns.map((p) => p.value),
+            templates: templates.map((t) => t.value),
+          },
+        }
+      );
     }
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "An unexpected error occurred.";
-    showToast({
-      title: "Error",
-      description: errorMessage,
-      variant: "destructive",
+    let displayTitle = "Transform Failed";
+    let displayMessage = "An unexpected error occurred during transformation.";
+    if (error instanceof AppError) {
+      displayMessage = error.message;
+      displayTitle =
+        error.severity === ErrorSeverity.WARNING
+          ? "Input Error"
+          : "Transform Failed";
+    } else if (error instanceof Error) {
+      if (
+        error.message.includes("fetch") ||
+        error.message.includes("network") ||
+        error.message.includes("Failed to fetch")
+      ) {
+        displayTitle = "Connection Error";
+        displayMessage =
+          "Could not connect to the server. Please verify the MORK server is running.";
+      } else {
+        displayMessage = `Transform failed: ${error.message}`;
+      }
+    }
+    const errorInfo = extractErrorInfo(error, {
+      displayTitle,
+      displayMessage,
+      context: {
+        spacePath,
+        patternCount,
+        templateCount,
+        timestamp: new Date().toISOString(),
+      },
     });
+    showToast(toToastOptions(errorInfo));
   } finally {
     setIsLoading(false);
   }
