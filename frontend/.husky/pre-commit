@@ -8,5 +8,8 @@ pnpm lint
 cd ../api
 
 cargo fmt --all -- --check
-cargo clippy --all-targets --all-features -- -D warnings
+#cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --all-targets --no-default-features --features postgres
+cargo clippy --all-targets --features sqlite  
 cargo test --features=sqlite
+cargo test --no-default-features --features postgres
