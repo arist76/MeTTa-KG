@@ -27,7 +27,7 @@ urlencoding = "2.1.3"
 openssl = { version = "0.10.72", features = ["vendored"] }
 pq-sys = { version = "0.6", features = ["bundled"] }
 url = "2.5.4"
-clap = { version = "4.5.47", features = ["derive"] }
+clap = { version = "4.5.47", features = ["derive", "env", "help"] }
 rust-embed = "8.0.0"
 tokio = { version = "1.38.0", features = ["rt", "macros", "time", "process"] }
 tempfile = "3.10.1"
@@ -38,7 +38,7 @@ httpmock = "0.7.0"
 serial_test = "3.0"
 
 [features]
-default = ["sqlite"]
+default = ["sqlite", "mork", "frontend"]
 sqlite = [
     "diesel/sqlite",
     "diesel/chrono",
@@ -50,6 +50,9 @@ postgres = [
     "diesel/chrono",
     "diesel_migrations/postgres"
 ]
+mork = []
+frontend = []
+server = ["postgres"]
 integration-tests = []
 
 [profile.dist]
