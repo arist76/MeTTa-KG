@@ -92,33 +92,6 @@ export const formatedNamespace = createMemo(() => {
   return namespace().join("/");
 });
 
-// export const checkConfiguration = async () => {
-//   const sessionConfigured = localStorage.getItem("mettakg_configured");
-//   console.log(
-//     "checkConfiguration: localStorage=",
-//     sessionConfigured,
-//     "fetching /api/tokens"
-//   );
-//   if (sessionConfigured === "true") {
-//     setIsConfigured(true);
-//     return true;
-//   }
-//   try {
-//     const res = await fetch(import.meta.env.VITE_API_URL + "/api/tokens");
-//
-//     if (res.ok || res.status === 401) {
-//       setIsConfigured(true);
-//       return true;
-//     }
-//
-//     setIsConfigured(false);
-//     return false;
-//   } catch {
-//     setIsConfigured(false);
-//     return false;
-//   }
-// };
-
 export const initializeConfig = async (): Promise<AppConfig> => {
   const apiBaseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
 

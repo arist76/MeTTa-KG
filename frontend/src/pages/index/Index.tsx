@@ -142,30 +142,6 @@ const AppLayout = (
   const [isChecked, setIsChecked] = createSignal(false);
   const navigate = useNavigate();
 
-  // onMount(async () => {
-  //   const configured = await checkConfiguration();
-  //   setIsChecked(true);
-  //   console.log(
-  //     "AppLayout: configured=",
-  //     configured,
-  //     "isConfigured=",
-  //     isConfigured(),
-  //     "path=",
-  //     window.location.pathname
-  //   );
-  //
-  //   if (!configured) {
-  //     showToast({
-  //       title: "Configuration Required",
-  //       description: "Please configure the database and server settings.",
-  //       variant: "destructive",
-  //       duration: 5000,
-  //     });
-  //     navigate("/", { replace: true });
-  //   }
-  // });
-  //
-
   onMount(async () => {
     const config = await initializeConfig();
     setIsChecked(true);
