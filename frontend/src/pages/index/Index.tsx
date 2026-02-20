@@ -14,7 +14,7 @@ import Trash2 from "lucide-solid/icons/trash-2";
 import CommandPalette from "~/components/common/CommandPalette";
 import UnionPage from "../union/Union";
 import { showToast } from "~/components/ui/Toast";
-import { checkConfiguration, isConfigured } from "~/lib/state";
+import { isConfigured, initializeConfig } from "~/lib/state";
 
 const LoadPage = lazy(() => import("../load/Load"));
 const UploadPage = lazy(() => import("../upload/Upload"));
@@ -142,14 +142,38 @@ const AppLayout = (
   const [isChecked, setIsChecked] = createSignal(false);
   const navigate = useNavigate();
 
+  // onMount(async () => {
+  //   const configured = await checkConfiguration();
+  //   setIsChecked(true);
+  //   console.log(
+  //     "AppLayout: configured=",
+  //     configured,
+  //     "isConfigured=",
+  //     isConfigured(),
+  //     "path=",
+  //     window.location.pathname
+  //   );
+  //
+  //   if (!configured) {
+  //     showToast({
+  //       title: "Configuration Required",
+  //       description: "Please configure the database and server settings.",
+  //       variant: "destructive",
+  //       duration: 5000,
+  //     });
+  //     navigate("/", { replace: true });
+  //   }
+  // });
+  //
+
   onMount(async () => {
-    const configured = await checkConfiguration();
+    const config = await initializeConfig();
     setIsChecked(true);
 
-    if (!configured) {
+    if (!config.isConfigured) {
       showToast({
         title: "Configuration Required",
-        description: "Please configure the database and server settings.",
+        description: config.error || "Please configure the database and server",
         variant: "destructive",
         duration: 5000,
       });
