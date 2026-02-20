@@ -9,7 +9,5 @@ pub struct Cli {
 
 #[derive(Debug, Clone)]
 pub struct AppConfig {
-    pub database_url: String,
-    pub mork_server_url: String,
     pub mettakg_api_url: String,
 }
