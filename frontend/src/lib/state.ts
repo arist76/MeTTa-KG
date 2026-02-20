@@ -10,6 +10,14 @@ export interface NamespaceTab {
   label: string;
 }
 
+export interface AppConfig {
+  apiBaseUrl: string;
+  dbType: "sqlite" | "postgres" | null;
+  isConfigured: boolean;
+  isSetupServer: boolean;
+  error?: string;
+}
+
 const storedNamespace = localStorage.getItem("tokenNamespace");
 const initialNamespace = storedNamespace ? JSON.parse(storedNamespace) : [""];
 
@@ -58,6 +66,7 @@ export {
   isConfigured,
   setTabs,
   setActiveTabId,
+  setIsConfigured,
 };
 
 export const setRootToken = (token: string | null) => {
@@ -83,21 +92,127 @@ export const formatedNamespace = createMemo(() => {
   return namespace().join("/");
 });
 
-export const checkConfiguration = async () => {
-  try {
-    const res = await fetch("/api/tokens");
+// export const checkConfiguration = async () => {
+//   const sessionConfigured = localStorage.getItem("mettakg_configured");
+//   console.log(
+//     "checkConfiguration: localStorage=",
+//     sessionConfigured,
+//     "fetching /api/tokens"
+//   );
+//   if (sessionConfigured === "true") {
+//     setIsConfigured(true);
+//     return true;
+//   }
+//   try {
+//     const res = await fetch(import.meta.env.VITE_API_URL + "/api/tokens");
+//
+//     if (res.ok || res.status === 401) {
+//       setIsConfigured(true);
+//       return true;
+//     }
+//
+//     setIsConfigured(false);
+//     return false;
+//   } catch {
+//     setIsConfigured(false);
+//     return false;
+//   }
+// };
 
-    if (res.ok || res.status === 401) {
-      setIsConfigured(true);
-      return true;
+export const initializeConfig = async (): Promise<AppConfig> => {
+  const apiBaseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+  try {
+    const buildInfoRes = await fetch(`${apiBaseUrl}/api/build-info`, {
+      cache: "no-store",
+    });
+
+    if (!buildInfoRes.ok) {
+      return {
+        apiBaseUrl,
+        dbType: null,
+        isConfigured: false,
+        isSetupServer: false,
+        error: "Backend unreachable",
+      };
     }
 
-    setIsConfigured(false);
-    return false;
+    const buildInfo = await buildInfoRes.json();
+    const dbType = buildInfo.db_type as "sqlite" | "postgres";
+
+    if (dbType === "postgres") {
+      setIsConfigured(true);
+      localStorage.setItem("mettakg_configured", "true");
+      return {
+        apiBaseUrl,
+        dbType,
+        isConfigured: true,
+        isSetupServer: false,
+      };
+    }
+
+    try {
+      const apiRes = await fetch(`${apiBaseUrl}/api/tokens`, {
+        cache: "no-store",
+      });
+
+      const isConfigured = apiRes.status === 401;
+      const isSetupServer = apiRes.status === 404;
+
+      if (isConfigured) {
+        setIsConfigured(true);
+        localStorage.setItem("mettakg_configured", "true");
+      }
+
+      return {
+        apiBaseUrl,
+        dbType,
+        isConfigured,
+        isSetupServer,
+      };
+    } catch {
+      return {
+        apiBaseUrl,
+        dbType,
+        isConfigured: false,
+        isSetupServer: false,
+        error: "Setup server running, API not ready",
+      };
+    }
   } catch {
-    setIsConfigured(false);
-    return false;
+    return {
+      apiBaseUrl,
+      dbType: null,
+      isConfigured: false,
+      isSetupServer: false,
+      error: "Failed to connect to backend",
+    };
   }
+};
+
+export const pollUntillConfigured = async (
+  onReady: () => void,
+  onError: (msg: string) => void,
+  maxAttempts = 60
+): Promise<void> => {
+  let attempts = 0;
+
+  const check = async () => {
+    attempts++;
+    const config = await initializeConfig();
+    if (config.isConfigured) {
+      onReady();
+      return;
+    }
+    if (attempts >= maxAttempts) {
+      onError("Server failed to start within timeout");
+      return;
+    }
+
+    setTimeout(check, 1000);
+  };
+
+  check();
 };
 
 export const addTab = (namespace: string[], label?: string) => {
