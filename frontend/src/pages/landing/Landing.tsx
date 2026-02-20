@@ -1,5 +1,5 @@
 import { createSignal, onMount } from "solid-js";
-import { useNavigate } from "@solidjs/router";
+// import { useNavigate } from "@solidjs/router";
 import {
   Card,
   CardDescription,
@@ -31,46 +31,36 @@ import Network from "lucide-solid/icons/network";
 import Plus from "lucide-solid/icons/plus";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
 import AlertTriangle from "lucide-solid/icons/alert-triangle";
-import { checkConfiguration } from "~/lib/state";
+import {
+  initializeConfig,
+  setIsConfigured,
+  pollUntillConfigured,
+} from "~/lib/state";
 import previewImage from "~/assets/preview.png";
 
 export default function Landing() {
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
   const [dbUrl, setDbUrl] = createSignal("");
   const [morkUrl, setMorkUrl] = createSignal("http://127.0.0.1:8001");
   const [isLoading, setIsLoading] = createSignal(false);
   const [isConfigOpen, setIsConfigOpen] = createSignal(false);
   const [dbType, setDbType] = createSignal<"sqlite" | "postgres">("sqlite");
-  const [detectedMorkProcess, setDetectedMorkProcess] = createSignal<
+  const [detectedMorkProcess, _setDetectedMorkProcess] = createSignal<
     string | null
   >(null);
-  const [isMorkRunning, setIsMorkRunning] = createSignal(false);
+  const [isMorkRunning, _setIsMorkRunning] = createSignal(false);
   const [overrideMork, setOverrideMork] = createSignal(false);
-  const navigate = useNavigate();
+  // const navigate = useNavigate();
+  //
 
   onMount(async () => {
-    const configured = await checkConfiguration();
-    if (configured) {
-      navigate("/explore", { replace: true });
-    } else {
-      try {
-        const res = await fetch("/build-info");
-        if (res.ok) {
-          const data = await res.json();
-          setDbType(data.db_type);
-          setDetectedMorkProcess(data.port_8001_process);
-          setIsMorkRunning(data.is_mork);
+    const config = await initializeConfig();
 
-          // If port 8001 is blocked by something that isn't Mork, suggest 8002
-          if (data.port_8001_process && !data.is_mork) {
-            setMorkUrl("http://127.0.0.1:8002");
-          } else if (data.db_type === "sqlite" && !dbUrl()) {
-            setDbUrl("mettakg.db");
-          }
-        }
-      } catch (e) {
-        console.error("Failed to fetch build info", e);
-      }
+    if (config.error) {
+      return;
     }
+
+    setDbType(config.dbType || "sqlite");
   });
 
   const handleSubmit = async (e: Event) => {
@@ -107,21 +97,31 @@ export default function Landing() {
       formData.append("database_url", dbUrl());
       formData.append("mork_server_url", morkUrl());
 
-      const response = await fetch("/submit", {
+      const response = await fetch(`${apiUrl}/submit`, {
         method: "POST",
         body: formData,
       });
 
       if (response.ok || response.redirected) {
+        setIsConfigured(true);
         showToast({
           title: "Configuration Saved",
           description: "Server is restarting with new settings...",
           variant: "default",
         });
-
-        setTimeout(() => {
-          window.location.href = "/explore";
-        }, 2000);
+        pollUntillConfigured(
+          () => {
+            window.location.href = "/explore";
+          },
+          (errorMsg) => {
+            setIsLoading(false);
+            showToast({
+              title: "Error",
+              description: errorMsg,
+              variant: "destructive",
+            });
+          }
+        );
       } else {
         throw new Error("Submission failed");
       }
@@ -189,9 +189,17 @@ export default function Landing() {
               <Button
                 size="lg"
                 class="h-12 px-8 text-lg gap-2 shadow-lg shadow-primary/20"
-                onClick={() => setIsConfigOpen(true)}
+                // onClick={() => setIsConfigOpen(true)}
+                onClick={() => {
+                  if (dbType() === "postgres") {
+                    window.location.href = "/explore";
+                  } else {
+                    setIsConfigOpen(true);
+                  }
+                }}
               >
-                Get Started <ArrowRight class="w-5 h-5" />
+                {dbType() === "postgres" ? "Enter Application" : "Get Started"}{" "}
+                <ArrowRight class="w-5 h-5" />
               </Button>
             </div>
           </div>
