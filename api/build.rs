@@ -1,19 +1,14 @@
-use std::{env, fs, path::PathBuf, process::Command};
+use std::{env, fs, panic, path::PathBuf, process::Command};
 
-fn main() {
-    eprintln!("[TRACE] Building MeTTa-KG with embedded assets...");
-
+fn build_frontend() {
     let frontend_dir = PathBuf::from("../frontend");
     if frontend_dir.exists() {
-        eprintln!(
-            "[TRACE] Frontend directory found at: {}",
-            frontend_dir.display()
-        );
+        eprint!("[TRACE] frontend dir found at: {}", frontend_dir.display());
         let npm = "npm";
         let pnpm = "pnpm";
 
         if Command::new(pnpm).args(["--version"]).status().is_err() {
-            eprintln!("[TRACE] pnpm not found, installing globally...");
+            eprintln!("[TRACE] pnpm not found, install globally...");
             let install_pnpm_status = Command::new(npm)
                 .args(["install", "-g", "pnpm"])
                 .status()
@@ -23,48 +18,49 @@ fn main() {
             }
             eprintln!("[TRACE] pnpm installed successfully");
         } else {
-            eprintln!("[TRACE] pnpm already available");
+            eprintln!("[TRACE] pnpm already installed");
         }
 
-        eprintln!("[TRACE] Installing frontend dependencies...");
+        eprintln!("[TRACE] installing frontend dependencies");
         let install_status = Command::new(pnpm)
             .args(["install"])
             .current_dir(&frontend_dir)
             .status()
-            .expect("failed to run npm install");
+            .expect("failed to run pnpm install");
         if !install_status.success() {
-            panic!("npm install failed");
+            panic!("pnpm could not install frontend dependencies");
         }
-        eprintln!("[TRACE] Frontend dependencies installed");
+        eprintln!("[TRACE] Frontend dependencies installed successfully");
 
         eprintln!("[TRACE] Building frontend...");
-        let status = Command::new(pnpm)
+        let build_status = Command::new(pnpm)
             .args(["run", "build"])
             .current_dir(&frontend_dir)
             .status()
-            .expect("failed to run frontend build");
-        if !status.success() {
-            panic!("frontend build failed");
+            .expect("failed to run pnpm build");
+        if !build_status.success() {
+            panic!("pnpm could not build frontend");
         }
-        eprintln!("[TRACE] Frontend build completed successfully");
+        eprintln!("[TRACE] Frontend built successfully");
 
-        let out_dir: PathBuf = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-        let ui_dist = out_dir.join("ui-dist");
-        eprintln!("[TRACE] Cleaning and preparing UI distribution directory...");
+        let out_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+        let ui_dist = out_dir.join("ui-dist/");
+        eprintln!("[TRACE] Cleaning and preparing UI dist directory");
         let _ = fs::remove_dir_all(&ui_dist);
-        fs::create_dir_all(&ui_dist).expect("failed to create ui-dist");
 
         let dist_dir = frontend_dir.join("dist");
         eprintln!("[TRACE] Copying frontend assets to ui-dist...");
-        copy_dir_all(&dist_dir, &ui_dist).expect("failed to copy frontend dist to ui-dist");
+        copy_dir_all(&dist_dir, &ui_dist).expect("failed to copy frontend dist to ui dist");
         eprintln!("[TRACE] Frontend assets embedded successfully");
     } else {
-        eprintln!("[TRACE] Frontend directory not found, skipping frontend build");
+        eprintln!("[TRACE] Frontend directory not found");
     }
+}
 
-    eprintln!("[TRACE] Setting up MORK server binary...");
-    let mork_bin_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("mork-bin");
-    let mork_binary_path = mork_bin_dir.join("mork-server");
+fn setup_mork_binary() {
+    eprintln!("[TRACE] Setting up mork binary...");
+    let mork_binary_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("mork-bin");
+    let mork_binary_path = mork_binary_dir.join("mork-server");
 
     if mork_binary_path.exists() {
         eprintln!(
@@ -72,29 +68,51 @@ fn main() {
             mork_binary_path.display()
         );
     } else {
-        eprintln!(
-            "[TRACE] MORK binary not found at: {}",
-            mork_binary_path.display()
-        );
+        panic!("Mork binary not found at specified directory");
     }
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        if mork_binary_path.exists() {
-            eprintln!("[TRACE] Setting executable permissions for MORK binary...");
-            let mut perms = fs::metadata(&mork_binary_path).unwrap().permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&mork_binary_path, perms).unwrap();
-            eprintln!("[TRACE] MORK binary permissions set");
-        }
+        eprintln!("[TRACE] Setting executable permission for MORK binary");
+        let mut perms = fs::metadata(&mork_binary_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&mork_binary_path, perms).unwrap();
+        eprintln!("[TRACE] MORK binary permission set");
     }
-
-    eprintln!("[TRACE] Build configuration complete");
     println!(
         "cargo:rustc-env=MORK_BINARY_PATH={}",
         mork_binary_path.display()
     );
+}
+
+fn main() {
+    eprintln!("[TRACE] Building Metta-KG...");
+
+    let features = env::var("CARGO_CFG_FEATURE").unwrap_or_default();
+    let frontend_enabled = features.split(',').any(|f| f.trim() == "frontend");
+    let mork_enabled = features.split(',').any(|f| f.trim() == "mork");
+
+    eprintln!(
+        "[TRACE] Features - frontend: {}, mork: {}",
+        frontend_enabled, mork_enabled
+    );
+
+    if frontend_enabled {
+        eprintln!("[TRACE] Building with embedded frontend");
+        build_frontend();
+    } else {
+        eprintln!("[TRACE] Building without embedded frontend");
+    }
+
+    if mork_enabled {
+        eprintln!("[TRACE] Building with mork embedded");
+        setup_mork_binary();
+    } else {
+        eprintln!("[TRACE] Building without mork embedded");
+    }
+
+    eprintln!("[TRACE] Build configuration complete");
 }
 
 fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
