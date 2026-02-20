@@ -30,7 +30,7 @@ async fn test_explore_success() {
         then.status(200).body("(explore result)");
     });
 
-    let config = metta_kg::cli::AppConfig {
+    let config = metta_kg::AppConfig {
         database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
         mork_server_url: server.base_url(),
         mettakg_api_url: "http://localhost:8000".to_string(),
@@ -72,7 +72,7 @@ async fn test_non_existent_namespace() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    let config = metta_kg::cli::AppConfig {
+    let config = metta_kg::AppConfig {
         database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
         mork_server_url: server.base_url(),
         mettakg_api_url: "http://localhost:8000".to_string(),
@@ -120,7 +120,7 @@ async fn test_existing_empty_namespace() {
         then.status(200).body("(explore result)");
     });
 
-    let config = metta_kg::cli::AppConfig {
+    let config = metta_kg::AppConfig {
         database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
         mork_server_url: server.base_url(),
         mettakg_api_url: "http://localhost:8000".to_string(),
@@ -169,7 +169,7 @@ async fn test_non_empty_namespace() {
         then.status(200).body("(explore result)");
     });
 
-    let config = metta_kg::cli::AppConfig {
+    let config = metta_kg::AppConfig {
         database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
         mork_server_url: server.base_url(),
         mettakg_api_url: "http://localhost:8000".to_string(),
@@ -218,7 +218,7 @@ async fn test_different_namespaces() {
         then.status(200).body("(explore result)");
     });
 
-    let config = metta_kg::cli::AppConfig {
+    let config = metta_kg::AppConfig {
         database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
         mork_server_url: server.base_url(),
         mettakg_api_url: "http://localhost:8000".to_string(),
@@ -267,7 +267,7 @@ async fn test_namespace_mismatch() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    let config = metta_kg::cli::AppConfig {
+    let config = metta_kg::AppConfig {
         database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
         mork_server_url: server.base_url(),
         mettakg_api_url: "http://localhost:8000".to_string(),

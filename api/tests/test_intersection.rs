@@ -34,7 +34,7 @@ async fn test_intersection_success() {
         then.status(200).body("Transform successful");
     });
 
-    let config = metta_kg::cli::AppConfig {
+    let config = metta_kg::AppConfig {
         database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
         mork_server_url: server.base_url(),
         mettakg_api_url: "http://localhost:8000".to_string(),
@@ -76,7 +76,7 @@ async fn test_intersection_unauthorized_namespace() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    let config = metta_kg::cli::AppConfig {
+    let config = metta_kg::AppConfig {
         database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
         mork_server_url: server.base_url(),
         mettakg_api_url: "http://localhost:8000".to_string(),
@@ -115,7 +115,7 @@ async fn test_intersection_bad_request_single_source() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    let config = metta_kg::cli::AppConfig {
+    let config = metta_kg::AppConfig {
         database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
         mork_server_url: server.base_url(),
         mettakg_api_url: "http://localhost:8000".to_string(),
