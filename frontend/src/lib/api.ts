@@ -197,11 +197,11 @@ export const createFromJson = (file: File) => {
 
   return fetch(`${API_URL}/translations/json`, {
     method: "POST",
-    body: file,
+    body: formData,
     headers: {
       Authorization: `${localStorage.getItem("rootToken")}`,
     },
-  }).then((response) => response.json());
+  }).then((response) => response.text());
 };
 
 export async function isPathClear(path: string): Promise<boolean> {

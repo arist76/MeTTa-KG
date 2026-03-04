@@ -81,19 +81,12 @@ pub async fn create(
             let direction = (parameters.direction as u8).to_string();
             let delimiter = parameters.delimiter;
 
-            let output = Command::new("./venv/bin/python")
+            Command::new("./venv/bin/python")
                 .arg("translations/src/csv_to_metta_run.py")
                 .arg(&path)
                 .arg(&direction)
                 .arg(&delimiter)
-                .output();
-
-            match output {
-                Ok(output) => {
-                    Ok(output.status)
-                }
-                Err(e) => Err(e),
-            }
+                .status()
         }
         ParserParameters {
             csv_parameters: None,
