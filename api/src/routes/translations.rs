@@ -207,17 +207,18 @@ pub async fn create_from_n3(
 }
 
 pub fn convert_metta_to_json(metta_content: String) -> Result<String, std::io::Error> {
-    run_python_conversion("translations/src/metta_to_json_run.py", metta_content)
+    run_python_conversion("translations/src/metta_to_json_run.py", metta_content, "json")
 }
 
 pub fn convert_metta_to_csv(metta_content: String) -> Result<String, std::io::Error> {
-    run_python_conversion("translations/src/metta_to_csv_run.py", metta_content)
+    run_python_conversion("translations/src/metta_to_csv_run.py", metta_content, "csv")
 }
 
-fn run_python_conversion(script_path: &str, content: String) -> Result<String, std::io::Error> {
+fn run_python_conversion(script_path: &str, content: String, extension: &str) -> Result<String, std::io::Error> {
     let id = Uuid::new_v4();
+    let _ = fs::create_dir_all("temp");
     let temp_path = format!("temp/export-{id}.metta");
-    let output_path = format!("temp/export-{id}.json");
+    let output_path = format!("temp/export-{id}.{extension}");
     
     {
         let mut file = fs::File::create(&temp_path)?;
