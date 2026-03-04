@@ -3,8 +3,9 @@ import { showToast } from "~/components/ui/Toast";
 import { exportSpace } from "~/lib/api";
 import { Mm2Input } from "~/lib/types";
 
+export type ExportFormat = "metta" | "json" | "csv" | "raw";
 export const [uri, setUri] = createSignal("");
-export const [format, setFormat] = createSignal("metta");
+export const [format, setFormat] = createSignal<ExportFormat>("metta");
 export const [isLoading, setIsLoading] = createSignal(false);
 export const [pattern, setPattern] = createSignal("$x\n\n\n");
 export const [template, setTemplate] = createSignal("$x\n\n\n");
@@ -24,7 +25,10 @@ export const handleExport = async (spacePath: string) => {
 
   try {
     const exportResponse = await exportSpace(spacePath, exportInput);
-    setResult(exportResponse || "()");
+    
+    const defaultResult = exportInput.format === "Metta" ? "()" : "";
+    setResult(exportResponse || defaultResult);
+    
     showToast({
       title: "Export Complete",
       description: `Exported data with pattern: ${exportInput.pattern}`,
