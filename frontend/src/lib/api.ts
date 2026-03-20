@@ -191,17 +191,33 @@ export const createFromN3 = (file: File) => {
   }).then((response) => response.json());
 };
 
-export const createFromJson = (file: File) => {
-  const formData = new FormData();
-  formData.append("file", file);
+export const createFromJson = async (file: File): Promise<string> => {
+  const rawText = await file.text();
 
-  return fetch(`${API_URL}/translations/json`, {
+  const response = await fetch(`${API_URL}/translations/json`, {
     method: "POST",
-    body: formData,
+    body: rawText,
     headers: {
       Authorization: `${localStorage.getItem("rootToken")}`,
     },
-  }).then((response) => response.text());
+  });
+
+  const body = await response.text();
+
+  if (!response.ok) {
+    const trimmedBody = body.trim();
+    throw new Error(
+      trimmedBody.length > 0
+        ? `JSON translation failed (${response.status}): ${trimmedBody.slice(0, 240)}`
+        : `JSON translation failed (${response.status}): empty response body`
+    );
+  }
+
+  try {
+    return JSON.parse(body) as string;
+  } catch {
+    return body;
+  }
 };
 
 export async function isPathClear(path: string): Promise<boolean> {
