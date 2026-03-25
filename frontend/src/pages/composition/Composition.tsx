@@ -9,11 +9,11 @@ import {
   CardDescription,
   CardContent,
 } from "~/components/ui/Card";
-import { formatedNamespace } from "~/lib/state";
 import { getAllTokens } from "~/lib/api";
 import { rootToken, tokenRootNamespace } from "~/lib/state";
 import {
   isLoading,
+  isAppBusy,
   isPolling,
   executeComposition,
   stopPolling,
@@ -80,7 +80,7 @@ const CompositionPage: Component = () => {
   const handleComposition = () => {
     const compositionQueryInput: setOperationInput =
       buildCompositionSetInput(state);
-    executeComposition(compositionQueryInput, formatedNamespace());
+    executeComposition(compositionQueryInput);
   };
 
   const addSource = () => {
@@ -203,7 +203,7 @@ const CompositionPage: Component = () => {
 
         <Button
           onClick={handleComposition}
-          disabled={isLoading() || isPolling() || !canCompose()}
+          disabled={isAppBusy() || !canCompose()}
           class="inline-flex items-center justify-center w-[180px] h-10 mt-4"
         >
           <Show when={isLoading() || isPolling()}>

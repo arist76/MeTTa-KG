@@ -1,5 +1,5 @@
 import { Route, Router } from "@solidjs/router";
-import { createSignal, For } from "solid-js";
+import { createSignal, For, Show, onMount } from "solid-js";
 import LoadPage from "../load/Load";
 import UploadPage from "../upload/Upload";
 import TransformPage from "../transform/Transform";
@@ -19,6 +19,7 @@ import NotImplemented from "~/components/common/NotImplemented";
 import Trash2 from "lucide-solid/icons/trash-2";
 import CommandPalette from "~/components/common/CommandPalette";
 import UnionPage from "../union/Union";
+import { initSSE, isCommandRunning, commandProgress } from "~/lib/sse";
 
 export const sidebarSections = [
   {
@@ -158,6 +159,14 @@ const AppLayout = (
                     </div>
                 </div> */}
           <Header />
+          <Show when={isCommandRunning()}>
+            <div class="w-full h-1 bg-gray-200">
+              <div
+                class="h-full bg-green-500 transition-all duration-300"
+                style={{ width: `${commandProgress()}%` }}
+              ></div>
+            </div>
+          </Show>
 
           <div class="flex-1 w-full pl-4 pt-2 overflow-y-scroll">
             {props.children}
@@ -173,6 +182,10 @@ const NotImplementedWrapper = (name: string) => () => (
 );
 
 const App = () => {
+  onMount(() => {
+    initSSE();
+  });
+
   return (
     <div class="flex">
       <div class="flex-1 flex flex-col">
