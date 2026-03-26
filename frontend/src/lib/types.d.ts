@@ -26,6 +26,7 @@ export interface ExploreDetail {
 export interface Mm2Input {
   pattern: string[] | string;
   template: string[] | string;
+  format?: string;
 }
 export interface Mm2CellValue {
   value: string;

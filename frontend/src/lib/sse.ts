@@ -90,7 +90,7 @@ export const initSSE = () => {
     // We use a functional update to ensure we're working with the latest value
     setCommandProgress((prev) => {
       if (prev >= 90) return prev;
-      return prev + 5;
+      return prev + 10;
     });
   };
 

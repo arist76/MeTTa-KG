@@ -6,6 +6,8 @@ use url::Url;
 
 use rocket::response::status::Custom;
 use rocket::serde::json;
+use rocket::serde::json::serde_json;
+use rocket::serde::json::serde_json::json;
 use rocket::{get, post, Data, State};
 use std::path::PathBuf;
 use tokio::sync::broadcast;
@@ -82,6 +84,7 @@ impl SourceTargetPermissions for Mm2InputMultiWithNamespace {
 pub struct Mm2Input {
     pub pattern: String,
     pub template: String,
+    pub format: Option<ExportFormat>,
 }
 
 #[derive(Default, Serialize, Deserialize, Clone)]
@@ -238,16 +241,22 @@ pub async fn explore(
 
 /// Performs an export operation on the `<path..>` space. Get the result that
 /// matches the `<pattern>` by incrementally traversing the resulting space.
+use crate::routes::translations;
 #[post("/spaces/export/<path..>", data = "<export_input>")]
 pub async fn export(
     token: Token,
     path: PathBuf,
     export_input: Json<Mm2Input>,
     state: &State<SseState>,
-) -> Result<Json<String>, Status> {
+) -> Result<Json<String>, Custom<Json<serde_json::Value>>> {
     if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_read {
-        return Err(Status::Unauthorized);
+        return Err(Custom(
+            Status::Unauthorized,
+            Json(json!({ "message": "Unauthorized" })),
+        ));
     }
+
+    let requested_format = export_input.format.clone().unwrap_or(ExportFormat::Metta);
 
     let mork_api_client = MorkApiClient::new();
     let request = ExportRequest::new()
@@ -257,9 +266,11 @@ pub async fn export(
         .format(ExportFormat::Metta);
 
     let broadcaster = state.broadcaster.clone();
+
     let _ = broadcaster.send(ServerEvent::Started {
         command: "EXPORT".to_string(),
     });
+
     let _ = broadcaster.send(ServerEvent::Log {
         message: "Starting export operation...".to_string(),
     });
@@ -273,12 +284,14 @@ pub async fn export(
         tokio::select! {
             res = &mut dispatch_future => break res,
             _ = interval.tick() => {
-                let _ = broadcaster.send(ServerEvent::Log { message: "Exporting...".to_string() });
+                let _ = broadcaster.send(ServerEvent::Log {
+                    message: "Exporting...".to_string()
+                });
             }
         }
     };
 
-    match result {
+    let mork_response = match result {
         Ok(data) => {
             let _ = broadcaster.send(ServerEvent::Log {
                 message: "Export completed successfully.".to_string(),
@@ -286,17 +299,35 @@ pub async fn export(
             let _ = broadcaster.send(ServerEvent::Success {
                 message: "Export done".to_string(),
             });
-            Ok(Json(data))
+            data
         }
         Err(e) => {
-            let _ = broadcaster.send(ServerEvent::Log {
-                message: format!("Error during export: {:?}", e),
-            });
             let _ = broadcaster.send(ServerEvent::Error {
                 message: format!("{:?}", e),
             });
-            Err(e)
+
+            return Err(Custom(e, Json(json!({ "message": "Mork API Error" }))));
         }
+    };
+
+    match requested_format {
+        ExportFormat::Json => translations::convert_metta_to_json(mork_response)
+            .map(Json)
+            .map_err(|e| {
+                Custom(
+                    Status::UnprocessableEntity,
+                    Json(json!({ "message": format!("Incompatible metta file: {}", e) })),
+                )
+            }),
+        ExportFormat::Csv => translations::convert_metta_to_csv(mork_response)
+            .map(Json)
+            .map_err(|e| {
+                Custom(
+                    Status::UnprocessableEntity,
+                    Json(json!({ "message": format!("Incompatible metta file: {}", e) })),
+                )
+            }),
+        _ => Ok(Json(mork_response)),
     }
 }
 
