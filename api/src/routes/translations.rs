@@ -7,6 +7,8 @@ use std::fs;
 use std::process::Command;
 use uuid::Uuid;
 
+use std::io::Write;
+
 #[derive(FromFormField, Copy, Clone)]
 pub enum CSVParseDirection {
     Row = 1,
@@ -202,4 +204,43 @@ pub async fn create_from_n3(
     )
     .await
     .map(Json)
+}
+
+pub fn convert_metta_to_json(metta_content: String) -> Result<String, std::io::Error> {
+    run_python_conversion("translations/src/metta_to_json_run.py", metta_content, "json")
+}
+
+pub fn convert_metta_to_csv(metta_content: String) -> Result<String, std::io::Error> {
+    run_python_conversion("translations/src/metta_to_csv_run.py", metta_content, "csv")
+}
+
+fn run_python_conversion(script_path: &str, content: String, extension: &str) -> Result<String, std::io::Error> {
+    let id = Uuid::new_v4();
+    let _ = fs::create_dir_all("temp");
+    let temp_path = format!("temp/export-{id}.metta");
+    let output_path = format!("temp/export-{id}.{extension}");
+    
+    {
+        let mut file = fs::File::create(&temp_path)?;
+        file.write_all(content.as_bytes())?;
+    }
+    
+    let output = Command::new("./venv/bin/python")
+        .arg(script_path)
+        .arg(&temp_path)
+        .arg(&output_path)
+        .output()?;
+
+    // Clean up temp file
+    let _ = fs::remove_file(temp_path);
+
+    if output.status.success() {
+        let result = fs::read_to_string(&output_path)?;
+        let _ = fs::remove_file(output_path);
+        Ok(result)
+    } else {
+        let _ = fs::remove_file(output_path);
+        let err = String::from_utf8_lossy(&output.stderr).to_string();
+        Err(std::io::Error::new(std::io::ErrorKind::Other, err))
+    }
 }

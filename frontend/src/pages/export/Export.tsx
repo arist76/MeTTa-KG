@@ -25,6 +25,7 @@ import {
   result,
   exportError,
   handleExport,
+  ExportFormat,
 } from "./lib";
 
 const ExportPage: Component = () => {
@@ -72,7 +73,7 @@ const ExportPage: Component = () => {
 
           <TextField class="space-y-2">
             <TextFieldLabel for="export-format">Format</TextFieldLabel>
-            <Select
+            <Select<ExportFormat>
               options={["metta", "json", "csv", "raw"]}
               value={format()}
               onChange={setFormat}
@@ -122,6 +123,7 @@ const ExportPage: Component = () => {
               title="Export Result"
               data={exportError() ? exportError()!.message : result()}
               status={exportError() ? "error" : "success"}
+              format={format()}
             />
           </div>
         </Show>

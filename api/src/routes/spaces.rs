@@ -6,6 +6,8 @@ use url::Url;
 
 use rocket::response::status::Custom;
 use rocket::serde::json;
+use rocket::serde::json::serde_json;
+use rocket::serde::json::serde_json::json;
 use rocket::{get, post, Data};
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration, Instant};
@@ -79,6 +81,7 @@ impl SourceTargetPermissions for Mm2InputMultiWithNamespace {
 pub struct Mm2Input {
     pub pattern: String,
     pub template: String,
+    pub format: Option<ExportFormat>,
 }
 
 #[derive(Default, Serialize, Deserialize, Clone)]
@@ -226,15 +229,18 @@ pub async fn explore(
 
 /// Performs an export operation on the `<path..>` space. Get the result that
 /// matches the `<pattern>` by incrementally traversing the resulting space.
+use crate::routes::translations;
 #[post("/spaces/export/<path..>", data = "<export_input>")]
 pub async fn export(
     token: Token,
     path: PathBuf,
     export_input: Json<Mm2Input>,
-) -> Result<Json<String>, Status> {
+) -> Result<Json<String>, Custom<Json<serde_json::Value>>> {
     if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_read {
-        return Err(Status::Unauthorized);
+        return Err(Custom(Status::Unauthorized, Json(json!({ "message": "Unauthorized" }))));
     }
+
+    let requested_format = export_input.format.clone().unwrap_or(ExportFormat::Metta);
 
     let mork_api_client = MorkApiClient::new();
     let request = ExportRequest::new()
@@ -243,9 +249,27 @@ pub async fn export(
         .template(export_input.template.clone())
         .format(ExportFormat::Metta);
 
-    match mork_api_client.dispatch(request).await {
-        Ok(data) => Ok(Json(data)),
-        Err(e) => Err(e),
+    let mork_response = match mork_api_client.dispatch(request).await {
+        Ok(data) => data,
+        Err(status) => return Err(Custom(status, Json(json!({ "message": "Mork API Error" })))),
+    };
+
+    match requested_format {
+        ExportFormat::Json => {
+            translations::convert_metta_to_json(mork_response)
+                .map(Json)
+                .map_err(|e| {
+                    Custom(Status::UnprocessableEntity, Json(json!({ "message": format!("Incompatible metta file: {}", e) })))
+                })
+        },
+        ExportFormat::Csv => {
+            translations::convert_metta_to_csv(mork_response)
+                .map(Json)
+                .map_err(|e| {
+                    Custom(Status::UnprocessableEntity, Json(json!({ "message": format!("Incompatible metta file: {}", e) })))
+                })
+        },
+        _ => Ok(Json(mork_response)),
     }
 }
 
