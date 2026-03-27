@@ -2,11 +2,13 @@ import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { exportSpace } from "~/lib/api";
 import { Mm2Input } from "~/lib/types";
+import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
 
 export type ExportFormat = "metta" | "json" | "csv" | "raw";
 export const [uri, setUri] = createSignal("");
 export const [format, setFormat] = createSignal<ExportFormat>("metta");
-export const [isLoading, setIsLoading] = createSignal(false);
+export const isLoading = () => isCommandActive("EXPORT");
+export const isAppBusy = isAnyCommandActive;
 export const [pattern, setPattern] = createSignal("$x\n\n\n");
 export const [template, setTemplate] = createSignal("$x\n\n\n");
 export const [result, setResult] = createSignal<string | null>(null);
@@ -19,16 +21,15 @@ export const handleExport = async (spacePath: string) => {
     format: format().charAt(0).toUpperCase() + format().slice(1),
   };
 
-  setIsLoading(true);
   setResult(null);
   setExportError(null);
 
   try {
     const exportResponse = await exportSpace(spacePath, exportInput);
-    
+
     const defaultResult = exportInput.format === "Metta" ? "()" : "";
     setResult(exportResponse || defaultResult);
-    
+
     showToast({
       title: "Export Complete",
       description: `Exported data with pattern: ${exportInput.pattern}`,
@@ -48,7 +49,5 @@ export const handleExport = async (spacePath: string) => {
       description: errorMessage,
       variant: "destructive",
     });
-  } finally {
-    setIsLoading(false);
   }
 };

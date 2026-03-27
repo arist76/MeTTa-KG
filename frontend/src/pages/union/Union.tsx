@@ -9,11 +9,11 @@ import {
   CardDescription,
   CardContent,
 } from "~/components/ui/Card";
-import { formatedNamespace } from "~/lib/state";
 import { getAllTokens } from "~/lib/api";
 import { rootToken, tokenRootNamespace } from "~/lib/state";
 import {
   isLoading,
+  isAppBusy,
   isPolling,
   executeUnion,
   stopPolling,
@@ -78,7 +78,7 @@ const UnionPage: Component = () => {
 
   const handleUnion = () => {
     const unionQueryInput: setOperationInput = buildUnionSetInput(state);
-    executeUnion(unionQueryInput, formatedNamespace());
+    executeUnion(unionQueryInput);
   };
 
   const addPattern = () => {
@@ -208,7 +208,7 @@ const UnionPage: Component = () => {
 
         <Button
           onClick={handleUnion}
-          disabled={isLoading() || isPolling() || !canUnion()}
+          disabled={isAppBusy() || isPolling() || !canUnion()}
           class="inline-flex items-center justify-center w-[180px] h-10 mt-4"
         >
           <Show when={isLoading() || isPolling()}>

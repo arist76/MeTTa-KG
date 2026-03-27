@@ -207,24 +207,32 @@ pub async fn create_from_n3(
 }
 
 pub fn convert_metta_to_json(metta_content: String) -> Result<String, std::io::Error> {
-    run_python_conversion("translations/src/metta_to_json_run.py", metta_content, "json")
+    run_python_conversion(
+        "translations/src/metta_to_json_run.py",
+        metta_content,
+        "json",
+    )
 }
 
 pub fn convert_metta_to_csv(metta_content: String) -> Result<String, std::io::Error> {
     run_python_conversion("translations/src/metta_to_csv_run.py", metta_content, "csv")
 }
 
-fn run_python_conversion(script_path: &str, content: String, extension: &str) -> Result<String, std::io::Error> {
+fn run_python_conversion(
+    script_path: &str,
+    content: String,
+    extension: &str,
+) -> Result<String, std::io::Error> {
     let id = Uuid::new_v4();
     let _ = fs::create_dir_all("temp");
     let temp_path = format!("temp/export-{id}.metta");
     let output_path = format!("temp/export-{id}.{extension}");
-    
+
     {
         let mut file = fs::File::create(&temp_path)?;
         file.write_all(content.as_bytes())?;
     }
-    
+
     let output = Command::new("./venv/bin/python")
         .arg(script_path)
         .arg(&temp_path)
@@ -241,6 +249,6 @@ fn run_python_conversion(script_path: &str, content: String, extension: &str) ->
     } else {
         let _ = fs::remove_file(output_path);
         let err = String::from_utf8_lossy(&output.stderr).to_string();
-        Err(std::io::Error::new(std::io::ErrorKind::Other, err))
+        Err(std::io::Error::other(err))
     }
 }
