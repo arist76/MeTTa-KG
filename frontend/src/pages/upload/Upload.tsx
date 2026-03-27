@@ -19,9 +19,12 @@ import {
   setTextContent,
   textFormat,
   setTextFormat,
+  fileFormat,
+  setFileFormat,
   activeTab,
   setActiveTab,
   isLoading,
+  isAppBusy,
   isFileUploadImplemented,
   handleFileSelect,
   handleImport,
@@ -75,6 +78,8 @@ export const UploadPage: Component = () => {
                 isLoading={isLoading()}
                 isFileUploadImplemented={isFileUploadImplemented}
                 formatFileSize={formatFileSize}
+                format={fileFormat()}
+                onFormatChange={setFileFormat}
               />
             </TabsContent>
 
@@ -92,7 +97,7 @@ export const UploadPage: Component = () => {
           <Show when={activeTab() !== "file" || isFileUploadImplemented}>
             <Button
               onClick={handleImportClick}
-              disabled={isLoading() || !isFormValid()}
+              disabled={isAppBusy() || !isFormValid()}
               class="mt-4 px-6"
             >
               <Show

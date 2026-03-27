@@ -18,6 +18,7 @@ import {
   format,
   setFormat,
   isLoading,
+  isAppBusy,
   pattern,
   setPattern,
   template,
@@ -29,6 +30,7 @@ import {
   setMaxWrite,
   isInputValid,
   handleInput,
+  ExportFormat,
 } from "./lib";
 
 const ExportPage: Component = () => {
@@ -77,11 +79,11 @@ const ExportPage: Component = () => {
           <div class="flex-grow">
           <TextField class="space-y-2">
             <TextFieldLabel for="export-format">Format</TextFieldLabel>
-            <Select
+            <Select<ExportFormat>
               options={["metta", "json", "csv", "raw"]}
               value={format()}
               onChange={setFormat}
-              disabled={isLoading()}
+              disabled={isAppBusy()}
               placeholder="Select a format"
               itemComponent={(props) => (
                 <SelectItem item={props.item}>
@@ -140,6 +142,7 @@ const ExportPage: Component = () => {
               title="Export Result"
               data={exportError() ? exportError()!.message : result()}
               status={exportError() ? "error" : "success"}
+              format={format()}
             />
           </div>
         </Show>

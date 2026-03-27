@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { importData, uploadTextToSpace, importSpace } from "~/lib/api";
+import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
 import { refreshSpace } from "../load/lib";
 
 type UploadResult =
@@ -9,26 +10,43 @@ type UploadResult =
   | { data: string; status: "success" }
   | { error: string };
 
+export interface FileState {
+  name: string;
+  size: number;
+  type: string;
+  content: ArrayBuffer;
+}
+
 export const [uri, setUri] = createSignal("");
 export const [urlFormat, setUrlFormat] = createSignal("metta");
-export const [selectedFile, setSelectedFile] = createSignal<File | null>(null);
+export const [selectedFile, setSelectedFile] = createSignal<FileState | null>(
+  null
+);
 export const [textContent, setTextContent] = createSignal(`()`);
 export const [textFormat, setTextFormat] = createSignal("metta");
+export const [fileFormat, setFileFormat] = createSignal("metta");
 export const [activeTab, setActiveTab] = createSignal("url");
-export const [isLoading, setIsLoading] = createSignal(false);
+export const isLoading = () =>
+  isCommandActive("IMPORT") || isCommandActive("UPLOAD");
+export const isAppBusy = isAnyCommandActive;
 export const [result, setResult] = createSignal<UploadResult>(null);
 
-export const isFileUploadImplemented = false;
+export const isFileUploadImplemented = true;
 
-export const handleFileSelect = (event: Event) => {
+export const handleFileSelect = async (event: Event) => {
   const file = (event.target as HTMLInputElement).files?.[0];
   if (file) {
-    setSelectedFile(file);
+    const buffer = await file.arrayBuffer();
+    setSelectedFile({
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      content: buffer,
+    });
   }
 };
 
 export const handleImport = async (spacePath: string) => {
-  setIsLoading(true);
   setResult(null);
 
   try {
@@ -53,17 +71,18 @@ export const handleImport = async (spacePath: string) => {
         const response = await importSpace(spacePath, uri());
 
         if (response) {
-          setResult("Successfully imported to space");
+          setResult("Import initiated successfully");
           showToast({
-            title: "Import Successful",
-            description: `Data was imported from "${uri()}".`,
+            title: "Import Started",
+            description: `Data import from "${uri()}" has started.`,
           });
-          setTimeout(() => refreshSpace(), 1000);
+
+          refreshSpace();
         } else {
-          setResult({ error: "Error importing to space" });
+          setResult({ error: "Error initiating import" });
           showToast({
             title: "Import Failed",
-            description: "Could not import from URL.",
+            description: "Could not initiate import.",
             variant: "destructive",
           });
         }
@@ -71,7 +90,8 @@ export const handleImport = async (spacePath: string) => {
       }
 
       case "file": {
-        if (!selectedFile()) {
+        const fileState = selectedFile();
+        if (!fileState) {
           showToast({
             title: "No File Selected",
             description: "Please select a file.",
@@ -80,13 +100,24 @@ export const handleImport = async (spacePath: string) => {
           return;
         }
         const formData = new FormData();
-        formData.append("file", selectedFile()!);
-        const response = await importData("file", formData, "metta");
+        formData.append(
+          "file",
+          new File([fileState.content], fileState.name, {
+            type: fileState.type,
+          })
+        );
+
+        const response = await importData(
+          "file",
+          formData,
+          fileFormat(),
+          spacePath
+        );
         if (response.status === "success") {
           setResult({ data: response.data, status: "success" });
           showToast({
-            title: "File Uploaded",
-            description: `File "${selectedFile()!.name}" uploaded.`,
+            title: "File Upload Started",
+            description: `File "${fileState.name}" upload started.`,
           });
           refreshSpace();
         } else {
@@ -122,13 +153,14 @@ export const handleImport = async (spacePath: string) => {
         const cleanText = textContent()
           .replace(/[\r\n]+/g, "\n")
           .trim();
-        const response = await uploadTextToSpace(spacePath, cleanText);
-        setResult({ data: response, status: "success" });
+
+        await uploadTextToSpace(spacePath, cleanText);
+
+        setResult({ data: "Upload initiated", status: "success" });
         showToast({
-          title: "Text Uploaded",
-          description: `Text was uploaded to the "${spacePath}" space.`,
+          title: "Text Upload Started",
+          description: `Text upload to "${spacePath}" started.`,
         });
-        refreshSpace();
         break;
       }
 
@@ -144,8 +176,6 @@ export const handleImport = async (spacePath: string) => {
       description: errorMessage,
       variant: "destructive",
     });
-  } finally {
-    setIsLoading(false);
   }
 };
 

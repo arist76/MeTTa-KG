@@ -27,6 +27,7 @@ export interface Mm2Input {
   pattern: string[] | string;
   template: string[] | string;
   max_write?: number | null;
+  format?: string;
 }
 export interface Mm2CellValue {
   value: string;

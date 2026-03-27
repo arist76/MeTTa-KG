@@ -2,10 +2,13 @@ import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { exportSpace } from "~/lib/api";
 import { Mm2Input } from "~/lib/types";
+import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
 
+export type ExportFormat = "metta" | "json" | "csv" | "raw";
 export const [uri, setUri] = createSignal("");
-export const [format, setFormat] = createSignal("metta");
-export const [isLoading, setIsLoading] = createSignal(false);
+export const [format, setFormat] = createSignal<ExportFormat>("metta");
+export const isLoading = () => isCommandActive("EXPORT");
+export const isAppBusy = isAnyCommandActive;
 export const [pattern, setPattern] = createSignal("$x\n\n\n");
 export const [template, setTemplate] = createSignal("$x\n\n\n");
 export const [result, setResult] = createSignal<string | null>(null);
@@ -17,38 +20,37 @@ export const handleExport = async (spacePath: string) => {
     pattern: pattern().trim() || "$x",
     template: template().trim() || "$x",
     max_write: maxWrite(),
+    format: format().charAt(0).toUpperCase() + format().slice(1),
   };
 
-  setIsLoading(true);
   setResult(null);
   setExportError(null);
 
   try {
-    if (format() !== "metta") {
-      showToast({
-        title: "Format Not Supported Yet",
-        description: `${format()} format not supported yet. Please use metta format.`,
-        variant: "destructive",
-      });
-      return;
-    }
     const exportResponse = await exportSpace(spacePath, exportInput);
-      setResult(exportResponse || "()");
-      showToast({
-        title: "Export Complete",
-        description: `Exported data with pattern: ${exportInput.pattern}`,
-      });
+
+    const defaultResult = exportInput.format === "Metta" ? "()" : "";
+    setResult(exportResponse || defaultResult);
+
+    showToast({
+      title: "Export Complete",
+      description: `Exported data with pattern: ${exportInput.pattern}`,
+    });
   } catch (e) {
     const error = e instanceof Error ? e : new Error("Failed to export data");
     setExportError(error);
-    setResult(error.message);
+
+    let errorMessage = error.message;
+    if (errorMessage.includes("Incompatible metta file")) {
+      errorMessage = "Incompatible metta file";
+    }
+
+    setResult(null);
     showToast({
       title: "Error",
-      description: error.message,
+      description: errorMessage,
       variant: "destructive",
     });
-  } finally {
-    setIsLoading(false);
   }
 };
 
