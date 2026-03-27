@@ -13,11 +13,13 @@ export const [pattern, setPattern] = createSignal("$x\n\n\n");
 export const [template, setTemplate] = createSignal("$x\n\n\n");
 export const [result, setResult] = createSignal<string | null>(null);
 export const [exportError, setExportError] = createSignal<Error | null>(null);
+export const [maxWrite, setMaxWrite] = createSignal<number | null>(null);
 
 export const handleExport = async (spacePath: string) => {
   const exportInput: Mm2Input = {
     pattern: pattern().trim() || "$x",
     template: template().trim() || "$x",
+    max_write: maxWrite(),
     format: format().charAt(0).toUpperCase() + format().slice(1),
   };
 
@@ -51,3 +53,13 @@ export const handleExport = async (spacePath: string) => {
     });
   }
 };
+
+export const isInputValid = (val: number | null) => {
+  return val !== null && val >= 1;
+  };
+
+export const handleInput = (e: InputEvent) => {
+    const raw = (e.currentTarget as HTMLInputElement).value;
+    const val = Number(raw);
+    setMaxWrite(val);
+  };

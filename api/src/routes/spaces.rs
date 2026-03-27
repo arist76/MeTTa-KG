@@ -84,6 +84,7 @@ impl SourceTargetPermissions for Mm2InputMultiWithNamespace {
 pub struct Mm2Input {
     pub pattern: String,
     pub template: String,
+    pub max_write: Option<usize>,
     pub format: Option<ExportFormat>,
 }
 
@@ -263,7 +264,8 @@ pub async fn export(
         .namespace(path)
         .pattern(export_input.pattern.clone())
         .template(export_input.template.clone())
-        .format(ExportFormat::Metta);
+        .format(ExportFormat::Metta)
+        .max_write(export_input.max_write.clone());
 
     let broadcaster = state.broadcaster.clone();
 

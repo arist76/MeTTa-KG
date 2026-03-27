@@ -1,7 +1,7 @@
 import { Show, Component } from "solid-js";
 import { Button } from "~/components/ui/Button";
 import { CommandCard } from "~/components/common/CommandCard";
-import { TextField, TextFieldLabel } from "~/components/ui/TextField";
+import { TextField, TextFieldLabel, TextFieldInput } from "~/components/ui/TextField";
 import {
   Select,
   SelectContent,
@@ -26,6 +26,10 @@ import {
   result,
   exportError,
   handleExport,
+  maxWrite,
+  setMaxWrite,
+  isInputValid,
+  handleInput,
   ExportFormat,
 } from "./lib";
 
@@ -71,7 +75,8 @@ const ExportPage: Component = () => {
           {/*     disabled={isLoading()} */}
           {/*   /> */}
           {/* </TextField> */}
-
+          <div class="flex items-end gap-4">
+          <div class="flex-grow">
           <TextField class="space-y-2">
             <TextFieldLabel for="export-format">Format</TextFieldLabel>
             <Select<ExportFormat>
@@ -95,11 +100,24 @@ const ExportPage: Component = () => {
             </Select>
           </TextField>
         </div>
+          <TextField class="space-y-2">
+            <TextFieldLabel for="max-write">Max Records</TextFieldLabel>
+              <TextFieldInput
+                id="max-write"
+                type="number"
+                value={maxWrite() ?? setMaxWrite(15)}
+                onInput={handleInput}
+                disabled={isLoading()}
+              />
+          </TextField>
+
+          </div>
+        </div>
 
         <div class="mt-4">
           <Button
             onClick={() => handleExport(formatedNamespace())}
-            disabled={isAppBusy() || !pattern().trim() || !template().trim()}
+            disabled={isLoading() || !pattern().trim() || !template().trim() || !isInputValid(maxWrite())}
             class="w-36"
           >
             <Show
