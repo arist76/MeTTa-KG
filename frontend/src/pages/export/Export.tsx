@@ -1,7 +1,7 @@
 import { Show, Component } from "solid-js";
 import { Button } from "~/components/ui/Button";
 import { CommandCard } from "~/components/common/CommandCard";
-import { TextField, TextFieldLabel } from "~/components/ui/TextField";
+import { TextField, TextFieldLabel, TextFieldInput } from "~/components/ui/TextField";
 import {
   Select,
   SelectContent,
@@ -18,6 +18,7 @@ import {
   format,
   setFormat,
   isLoading,
+  isAppBusy,
   pattern,
   setPattern,
   template,
@@ -26,6 +27,11 @@ import {
   exportError,
   handleExport,
   handleDownload,
+  maxWrite,
+  setMaxWrite,
+  isInputValid,
+  handleInput,
+  ExportFormat,
 } from "./lib";
 
 const ExportPage: Component = () => {
@@ -70,14 +76,15 @@ const ExportPage: Component = () => {
           {/*     disabled={isLoading()} */}
           {/*   /> */}
           {/* </TextField> */}
-
+          <div class="flex items-end gap-4">
+          <div class="flex-grow">
           <TextField class="space-y-2">
             <TextFieldLabel for="export-format">Format</TextFieldLabel>
-            <Select
+            <Select<ExportFormat>
               options={["metta", "json", "csv", "raw"]}
               value={format()}
               onChange={setFormat}
-              disabled={!!isLoading()}
+              disabled={!!isLoading() || isAppBusy()}
               placeholder="Select a format"
               itemComponent={(props) => (
                 <SelectItem item={props.item}>
@@ -94,11 +101,24 @@ const ExportPage: Component = () => {
             </Select>
           </TextField>
         </div>
+          <TextField class="space-y-2">
+            <TextFieldLabel for="max-write">Max Records</TextFieldLabel>
+              <TextFieldInput
+                id="max-write"
+                type="number"
+                value={maxWrite() ?? setMaxWrite(15)}
+                onInput={handleInput}
+                disabled={isLoading()}
+              />
+          </TextField>
+
+          </div>
+        </div>
 
         <div class="mt-4 flex justify-between items-center">
           <Button
             onClick={() => handleExport(formatedNamespace())}
-            disabled={!!isLoading() || !pattern().trim() || !template().trim()}
+            disabled={!!isLoading() || !pattern().trim() || !template().trim() || !isInputValid(maxWrite())}
             class="w-36"
           >
             <Show

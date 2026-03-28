@@ -2,19 +2,24 @@ import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { exportSpace } from "~/lib/api";
 import { Mm2Input } from "~/lib/types";
+import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
 
+export type ExportFormat = "metta" | "json" | "csv" | "raw";
 export const [uri, setUri] = createSignal("");
-export const [format, setFormat] = createSignal("metta");
 export const [isLoading, setIsLoading] = createSignal<false | "export" | "download">(false);
+export const [format, setFormat] = createSignal<ExportFormat>("metta");
+export const isAppBusy = isAnyCommandActive;
 export const [pattern, setPattern] = createSignal("$x\n\n\n");
 export const [template, setTemplate] = createSignal("$x\n\n\n");
 export const [result, setResult] = createSignal<string | null>(null);
 export const [exportError, setExportError] = createSignal<Error | null>(null);
+export const [maxWrite, setMaxWrite] = createSignal<number | null>(null);
 
 export const handleExport = async (spacePath: string) => {
   const exportInput: Mm2Input = {
     pattern: pattern().trim() || "$x",
     template: template().trim() || "$x",
+    max_write: maxWrite(),
     format: format().charAt(0).toUpperCase() + format().slice(1),
   };
 
@@ -24,7 +29,10 @@ export const handleExport = async (spacePath: string) => {
 
   try {
     const exportResponse = await exportSpace(spacePath, exportInput);
-    setResult(exportResponse || "()");
+
+    const defaultResult = exportInput.format === "Metta" ? "()" : "";
+    setResult(exportResponse || defaultResult);
+
     showToast({
       title: "Export Complete",
       description: `Exported data with pattern: ${exportInput.pattern}`,
@@ -44,8 +52,6 @@ export const handleExport = async (spacePath: string) => {
       description: errorMessage,
       variant: "destructive",
     });
-  } finally {
-    setIsLoading(false);
   }
 };
 
@@ -102,3 +108,12 @@ export const handleDownload = async (spacePath: string) => {
     setIsLoading(false);
   }
 };
+export const isInputValid = (val: number | null) => {
+  return val !== null && val >= 1;
+  };
+
+export const handleInput = (e: InputEvent) => {
+    const raw = (e.currentTarget as HTMLInputElement).value;
+    const val = Number(raw);
+    setMaxWrite(val);
+  };

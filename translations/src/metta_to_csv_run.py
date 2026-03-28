@@ -3,11 +3,9 @@ import os
 import hyperon
 from io import StringIO
 import csv
+from typing import Any
 
-# Add current directory to path to allow importing sibling modules
-# Add current directory and src directory to path to allow importing modules
 sys.path.append(os.path.dirname(__file__))
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 
 def metta_to_list(metta_string):
@@ -21,7 +19,7 @@ def metta_to_list(metta_string):
         result.append(atom.get_children())
     return result
 
-def matrix_to_csv_str(m: list[list[any]]) -> str:
+def matrix_to_csv_str(m: list[list[Any]]) -> str:
     si = StringIO()
     writer = csv.writer(si, delimiter=',', quotechar='\'', quoting=csv.QUOTE_NONE, escapechar='\'')
     for row in m:
@@ -47,9 +45,8 @@ if __name__ == "__main__":
         
         # Parse MeTTa content
         matrix = metta_to_list(content)
-        # metta = parse_metta(content)
 
-        # # Convert matrix to CSV string
+        # Convert matrix to CSV string
         csv_output = matrix_to_csv_str(matrix)
         
         with open(output_filename, 'w') as f:
