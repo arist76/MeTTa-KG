@@ -13,16 +13,11 @@ import {
   CommandItem,
   CommandList,
 } from "~/components/ui/Command";
-import { getAllTokens } from "~/lib/api";
-import {
-  rootToken,
-  namespace,
-  setNamespace,
-  tokenRootNamespace,
-} from "~/lib/state";
+import { addTab } from "~/lib/state";
 
 import Folder from "lucide-solid/icons/folder";
 import Home from "lucide-solid/icons/home";
+import ChevronRight from "lucide-solid/icons/chevron-right";
 
 type TreeNode = {
   name: string;
@@ -31,26 +26,50 @@ type TreeNode = {
   description: string;
 };
 
-export default function NameSpace() {
+type NamespaceTreeNode = Map<string, NamespaceTreeNode>;
+
+type Token = {
+  namespace: string;
+  description: string;
+};
+
+interface NameSpaceProps {
+  namespace: string[];
+  setNamespace: (ns: string[]) => void;
+  rootToken: boolean;
+  tokenRootNamespace: () => string[];
+  getAllTokens: () => Promise<Token[]>;
+}
+
+export default function NameSpace(props: NameSpaceProps) {
   const [isExploring, setIsExploring] = createSignal(false);
   const [availablePaths, setAvailablePaths] = createSignal<TreeNode[]>([]);
   const [isLoading, setIsLoading] = createSignal(false);
+  const [contextMenu, setContextMenu] = createSignal<{
+    x: number;
+    y: number;
+    path: string;
+  } | null>(null);
+  const [modifierKeyPressed, setModifierKeyPressed] = createSignal(false);
 
   const navigateTo = (index: number) => {
-    const minIndex = tokenRootNamespace().length - 1;
+    const minIndex = props.tokenRootNamespace().length - 1;
     const targetIndex = Math.max(index, minIndex);
-    setNamespace((ns) => ns.slice(0, targetIndex + 1));
+    const newNamespace = props.namespace.slice(0, targetIndex + 1);
+    props.setNamespace(newNamespace);
+    setContextMenu(null);
   };
-  const discoverPaths = async () => {
-    if (!rootToken()) return;
 
+  const discoverPaths = async () => {
+    if (!props.rootToken) return;
     setIsExploring(true);
     setIsLoading(true);
-
     try {
-      const allTokens = await getAllTokens();
+      const allTokens = await props.getAllTokens();
       const currentPath =
-        namespace().length <= 1 ? "/" : "/" + namespace().slice(1).join("/");
+        props.namespace.length <= 1
+          ? "/"
+          : "/" + props.namespace.slice(1).join("/");
 
       const normalizePath = (p: string) =>
         p.length > 1 && p.endsWith("/") ? p.slice(0, -1) : p;
@@ -59,10 +78,7 @@ export default function NameSpace() {
         allTokens.map((t) => [normalizePath(t.namespace), t.description])
       );
 
-      const treeRoot = new Map<
-        string,
-        any /* eslint-disable-line @typescript-eslint/no-explicit-any */
-      >();
+      const treeRoot = new Map<string, NamespaceTreeNode>();
       const descendantPaths = new Set<string>();
       for (const t of allTokens) {
         if (
@@ -81,13 +97,7 @@ export default function NameSpace() {
         const parts = relativePath.split("/").filter((p) => p.length > 0);
         parts.forEach((part) => {
           if (!currentNode.has(part)) {
-            currentNode.set(
-              part,
-              new Map<
-                string,
-                any /* eslint-disable-line @typescript-eslint/no-explicit-any */
-              >()
-            );
+            currentNode.set(part, new Map<string, NamespaceTreeNode>());
           }
           currentNode = currentNode.get(part)!;
         });
@@ -95,10 +105,7 @@ export default function NameSpace() {
 
       const flattenedTree: TreeNode[] = [];
       const flatten = (
-        node: Map<
-          string,
-          any /* eslint-disable-line @typescript-eslint/no-explicit-any */
-        >,
+        node: NamespaceTreeNode,
         path: string[],
         parentPrefix: string
       ) => {
@@ -113,7 +120,6 @@ export default function NameSpace() {
             name,
             fullPath,
             linePrefix: parentPrefix + connector,
-            // Look up the description using the same normalization
             description: descriptionMap.get(normalizePath(fullPath)) || "",
           });
 
@@ -122,7 +128,7 @@ export default function NameSpace() {
         });
       };
 
-      const basePath = namespace().slice(1);
+      const basePath = props.namespace.slice(1);
       flatten(treeRoot, basePath, "");
 
       setAvailablePaths(flattenedTree);
@@ -136,45 +142,104 @@ export default function NameSpace() {
 
   const selectPath = (fullPath: string) => {
     const pathArray = fullPath.split("/").filter((p) => p.length > 0);
-    setNamespace(["", ...pathArray]);
+    if (modifierKeyPressed()) {
+      addTab(["", ...pathArray]);
+    } else {
+      props.setNamespace(["", ...pathArray]);
+    }
     setIsExploring(false);
+    setModifierKeyPressed(false);
   };
+
+  const handleRightClick = (e: MouseEvent, fullPath: string) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, path: fullPath });
+  };
+
+  const openInNewTab = (fullPath: string) => {
+    const pathArray = fullPath.split("/").filter((p) => p.length > 0);
+    addTab(["", ...pathArray]);
+    setContextMenu(null);
+  };
+
+  const closeContextMenu = () => setContextMenu(null);
 
   return (
     <>
       <div>
-        <Show when={rootToken()}>
+        <Show when={props.rootToken}>
           <Breadcrumb>
-            <BreadcrumbList class="flex items-center">
-              <For each={namespace()}>
+            <BreadcrumbList class="flex items-center gap-0.5">
+              <For each={props.namespace}>
                 {(ns, index) => (
                   <>
                     <BreadcrumbItem>
                       <BreadcrumbLink
                         as="button"
                         onClick={() => navigateTo(index())}
-                        class="text-neutral-300 hover:text-primary transition-colors max-w-[150px] truncate flex items-center"
+                        class="transition-all duration-200 max-w-[150px] truncate flex items-center gap-1 px-2 py-1 rounded text-xs font-medium uppercase tracking-wider"
+                        style={{
+                          color:
+                            index() === props.namespace.length - 1
+                              ? "#00d4ff"
+                              : "#8892a4",
+                          background: "transparent",
+                        }}
+                        onMouseEnter={(e: MouseEvent) => {
+                          (e.currentTarget as HTMLElement).style.color =
+                            "#00d4ff";
+                          (e.currentTarget as HTMLElement).style.background =
+                            "rgba(0,212,255,0.06)";
+                        }}
+                        onMouseLeave={(e: MouseEvent) => {
+                          (e.currentTarget as HTMLElement).style.color =
+                            index() === props.namespace.length - 1
+                              ? "#00d4ff"
+                              : "#8892a4";
+                          (e.currentTarget as HTMLElement).style.background =
+                            "transparent";
+                        }}
                         title={index() === 0 ? "Spaces" : ns}
                       >
                         {index() === 0 ? (
-                          <Home class="inline-block w-4 h-4" />
+                          <Home
+                            class="inline-block w-3.5 h-3.5"
+                            color="#00d4ff"
+                          />
                         ) : (
                           ns
                         )}
                       </BreadcrumbLink>
                     </BreadcrumbItem>
-                    <BreadcrumbSeparator />
+                    <BreadcrumbSeparator>
+                      <ChevronRight
+                        class="w-3 h-3"
+                        color="rgba(0,212,255,0.3)"
+                      />
+                    </BreadcrumbSeparator>
                   </>
                 )}
               </For>
               <BreadcrumbItem>
                 <button
                   onClick={discoverPaths}
-                  class="ml-1 p-1 rounded text-neutral-400 hover:bg-neutral-800 hover:text-primary transition-colors"
+                  class="px-1.5 py-0.5 rounded text-xs font-mono transition-all duration-200"
+                  style={{ color: "rgba(0,212,255,0.45)" }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.color = "#00d4ff";
+                    (e.currentTarget as HTMLElement).style.background =
+                      "rgba(0,212,255,0.08)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.color =
+                      "rgba(0,212,255,0.45)";
+                    (e.currentTarget as HTMLElement).style.background =
+                      "transparent";
+                  }}
                   title="Show available subspaces"
                   aria-label="Show available subspaces"
                 >
-                  ...
+                  ···
                 </button>
               </BreadcrumbItem>
             </BreadcrumbList>
@@ -182,7 +247,7 @@ export default function NameSpace() {
         </Show>
 
         <CommandDialog open={isExploring()} onOpenChange={setIsExploring}>
-          <CommandInput placeholder="Type to filter or select a space..." />
+          <CommandInput placeholder="Filter spaces..." />
           <CommandList>
             <Show
               when={!isLoading()}
@@ -194,16 +259,24 @@ export default function NameSpace() {
                   <CommandItem
                     class="flex justify-between items-center w-full"
                     onSelect={() => selectPath(item.fullPath)}
+                    onMouseDown={(e: MouseEvent) => {
+                      setModifierKeyPressed(e.ctrlKey || e.metaKey);
+                    }}
+                    onContextMenu={(e) => handleRightClick(e, item.fullPath)}
                   >
                     <div class="flex items-center font-mono text-sm whitespace-pre">
-                      <span class="text-muted-foreground">
+                      <span style={{ color: "rgba(0,212,255,0.35)" }}>
                         {item.linePrefix}
                       </span>
-                      <Folder class="mr-2 h-4 w-4 flex-shrink-0 text-muted-foreground" />
-                      <span class="font-sans">{item.name}</span>
+                      <Folder
+                        class="mr-2 h-3.5 w-3.5 flex-shrink-0"
+                        color="#00b894"
+                      />
+                      <span class="font-sans text-xs">{item.name}</span>
                     </div>
                     <span
-                      class="text-xs text-muted-foreground truncate ml-4"
+                      class="text-xs truncate ml-4"
+                      style={{ color: "#8892a4" }}
                       title={item.description}
                     >
                       {item.description.length > 20
@@ -216,6 +289,42 @@ export default function NameSpace() {
             </Show>
           </CommandList>
         </CommandDialog>
+
+        {/* Context Menu */}
+        <Show when={contextMenu()}>
+          {(menu) => (
+            <div
+              class="fixed rounded-lg shadow-2xl z-50 py-1 overflow-hidden glass-card"
+              style={{
+                left: `${menu().x}px`,
+                top: `${menu().y}px`,
+                "min-width": "160px",
+              }}
+            >
+              <button
+                class="block w-full px-4 py-2 text-left text-xs font-medium uppercase tracking-wide transition-all duration-150"
+                style={{ color: "#c4cfdf" }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.color = "#00d4ff";
+                  (e.currentTarget as HTMLElement).style.background =
+                    "rgba(0,212,255,0.06)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.color = "#c4cfdf";
+                  (e.currentTarget as HTMLElement).style.background =
+                    "transparent";
+                }}
+                onClick={() => openInNewTab(menu().path)}
+              >
+                Open in New Tab
+              </button>
+            </div>
+          )}
+        </Show>
+
+        <Show when={contextMenu()}>
+          <div class="fixed inset-0 z-40" onClick={closeContextMenu} />
+        </Show>
       </div>
     </>
   );
