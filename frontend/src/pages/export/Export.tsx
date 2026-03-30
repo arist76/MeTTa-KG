@@ -26,6 +26,7 @@ import {
   result,
   exportError,
   handleExport,
+  handleDownload,
   maxWrite,
   setMaxWrite,
   isInputValid,
@@ -83,7 +84,7 @@ const ExportPage: Component = () => {
               options={["metta", "json", "csv", "raw"]}
               value={format()}
               onChange={setFormat}
-              disabled={isAppBusy()}
+              disabled={!!isLoading() || isAppBusy()}
               placeholder="Select a format"
               itemComponent={(props) => (
                 <SelectItem item={props.item}>
@@ -114,18 +115,37 @@ const ExportPage: Component = () => {
           </div>
         </div>
 
-        <div class="mt-4">
+        <div class="mt-4 flex justify-between items-center">
           <Button
             onClick={() => handleExport(formatedNamespace())}
-            disabled={isLoading() || !pattern().trim() || !template().trim() || !isInputValid(maxWrite())}
+            disabled={!!isLoading() || !pattern().trim() || !template().trim() || !isInputValid(maxWrite())}
             class="w-36"
           >
             <Show
-              when={isLoading()}
+              when={isLoading() === "export"}
               fallback={
                 <>
                   <Download class="mr-2 h-4 w-4" />
                   Export Data
+                </>
+              }
+            >
+              <Loader2 class="mr-2 h-4 w-4 animate-spin" />
+              Exporting...
+            </Show>
+          </Button>
+
+          <Button
+            onClick={() => handleDownload(formatedNamespace())}
+            disabled={!!isLoading() || !pattern().trim() || !template().trim()}
+            class="w-37"
+          >
+            <Show
+              when={isLoading() === "download"}
+              fallback={
+                <>
+                  <Download class="mr-2 h-4 w-4" />
+                  Export to File
                 </>
               }
             >
