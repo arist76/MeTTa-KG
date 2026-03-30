@@ -4,11 +4,7 @@ import { ParseError } from "~/types";
 import { exploreSpace } from "~/lib/api";
 import { showToast } from "~/components/ui/Toast";
 
-type ExploreResponse = {
-  id: string;
-  name: string;
-  children: ExploreResponse[];
-};
+import { ExploreResponse } from "~/lib/space";
 
 let graphApi: {
   expandAll?: () => void;
@@ -28,8 +24,7 @@ export const [subSpace, { refetch: refetchSubSpace }] = createResource(
   }),
   async ({ path, expr, token }) => {
     try {
-      const responseString = await exploreSpace(path, expr, token);
-      const data: ExploreResponse[] = JSON.parse(responseString);
+      const data = await exploreSpace(path, expr, token) as unknown as ExploreResponse[];
       showToast({
         title: "Success",
         description: `Loaded ${data.length} nodes.`,
@@ -72,3 +67,8 @@ export const handleCollapseToRoot = () => graphApi.collapseToRoot?.();
 export const setupGraphApi = (api: typeof graphApi) => {
   graphApi = api;
 };
+
+// Indentation defaults
+export const [isIndented, setIsIndented] = createSignal(false);
+export const handleToggleIndent = () => setIsIndented(!isIndented());
+
