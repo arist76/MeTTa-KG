@@ -612,6 +612,10 @@ impl ExportRequest {
         self.format = Some(format);
         self
     }
+    pub fn max_write(mut self, max: Option<usize>) -> Self {
+        self.max_write = max.map(|m| m.saturating_sub(1));
+        self
+    }
 }
 
 impl Request for ExportRequest {

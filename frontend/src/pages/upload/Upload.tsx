@@ -24,6 +24,7 @@ import {
   activeTab,
   setActiveTab,
   isLoading,
+  isAppBusy,
   isFileUploadImplemented,
   handleFileSelect,
   handleImport,
@@ -96,7 +97,7 @@ export const UploadPage: Component = () => {
           <Show when={activeTab() !== "file" || isFileUploadImplemented}>
             <Button
               onClick={handleImportClick}
-              disabled={isLoading() || !isFormValid()}
+              disabled={isAppBusy() || !isFormValid()}
               class="mt-4 px-6"
             >
               <Show

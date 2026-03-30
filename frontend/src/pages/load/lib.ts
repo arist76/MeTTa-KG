@@ -1,9 +1,15 @@
-import { createSignal, createResource } from "solid-js";
+import {
+  createSignal,
+  createResource,
+  createRoot,
+  createEffect,
+} from "solid-js";
 import { formatedNamespace } from "~/lib/state";
 import { ParseError } from "~/types";
 import { exploreSpace } from "~/lib/api";
 import { showToast } from "~/components/ui/Toast";
 import { treeStore } from "./components/expandableList/store";
+import { isCommandRunning } from "~/lib/sse";
 
 type ExploreResponse = {
   id: string;
@@ -54,7 +60,20 @@ export const [subSpace, { refetch: refetchSubSpace, mutate: mutateSubSpace }] =
     }
   );
 
-export const refreshSpace = () => {
+export const refreshSpace = async () => {
+  // If a command is running, wait for it to finish
+  if (isCommandRunning()) {
+    await new Promise<void>((resolve) => {
+      createRoot((dispose) => {
+        createEffect(() => {
+          if (!isCommandRunning()) {
+            dispose();
+            resolve();
+          }
+        });
+      });
+    });
+  }
   mutateSubSpace([]);
   treeStore.reset();
   return refetchSubSpace();

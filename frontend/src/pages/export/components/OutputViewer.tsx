@@ -14,6 +14,34 @@ interface OutputViewerProps {
 }
 
 export function OutputViewer(props: OutputViewerProps): JSX.Element {
+  const formatData = createMemo(() => {
+    if (props.data === null || props.data === undefined) return "No output";
+    if (typeof props.data === "string" && props.data.trim() === "")
+      return "Empty response";
+
+    switch (props.format) {
+      case "json":
+        try {
+          const parsed =
+            typeof props.data === "string"
+              ? JSON.parse(props.data)
+              : props.data;
+          return JSON.stringify(parsed, null, 2);
+        } catch {
+          return typeof props.data === "string"
+            ? props.data
+            : JSON.stringify(props.data, null, 2);
+        }
+      case "text":
+      case "metta":
+      default:
+        if (typeof props.data === "object") {
+          return JSON.stringify(props.data, null, 2);
+        }
+        return String(props.data);
+    }
+  });
+
   const statusStyles = createMemo(() => {
     switch (props.status) {
       case "success":

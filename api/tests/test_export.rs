@@ -36,6 +36,7 @@ async fn test_export_success() {
     let export_input = Mm2Input {
         pattern: "$x".to_string(),
         template: "($x)".to_string(),
+        format: None,
     };
 
     let response = client
@@ -71,6 +72,7 @@ async fn test_non_existent_namespace() {
     let export_input = Mm2Input {
         pattern: "$x".to_string(),
         template: "($x)".to_string(),
+        format: None,
     };
 
     // Path does not start with /test/
@@ -112,6 +114,7 @@ async fn test_existing_empty_namespace() {
     let export_input = Mm2Input {
         pattern: "$x".to_string(),
         template: "($x)".to_string(),
+        format: None,
     };
 
     let response = client
@@ -154,6 +157,7 @@ async fn test_non_empty_namespace() {
     let export_input = Mm2Input {
         pattern: "$x".to_string(),
         template: "($x)".to_string(),
+        format: None,
     };
 
     let response = client
@@ -196,6 +200,7 @@ async fn test_different_namespaces() {
     let export_input = Mm2Input {
         pattern: "$x".to_string(),
         template: "($x)".to_string(),
+        format: None,
     };
 
     // Export from ns1
@@ -238,6 +243,7 @@ async fn test_namespace_mismatch() {
     let export_input = Mm2Input {
         pattern: "$x".to_string(),
         template: "($x)".to_string(),
+        format: None,
     };
 
     // Path does not start with /test/
