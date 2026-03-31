@@ -73,7 +73,7 @@ export default function Header() {
             class="flex items-center justify-center w-8 h-8 rounded text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors duration-200 ml-1"
             title={`Switch to ${colorMode() === 'light' ? 'dark' : 'light'} mode`}
           >
-            {colorMode() === "dark" || colorMode() === "system" ? (
+            {colorMode() === "dark" ? (
               <Sun class="w-4 h-4" />
             ) : (
               <Moon class="w-4 h-4" />
