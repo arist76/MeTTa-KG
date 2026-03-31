@@ -18,48 +18,39 @@ export default function Sidebar({
       <div
         class="relative flex flex-col w-64 h-full dot-grid"
         style={{
-          background: "var(--sidebar-bg, #080c18)",
-          "border-right":
-            "1px solid var(--sidebar-border, rgba(0,212,255,0.1))",
+          background: "var(--sidebar-bg)",
+          "border-right": "1px solid var(--sidebar-border)",
         }}
       >
         {/* Subtle top gradient accent */}
         <div
           class="absolute top-0 left-0 right-0 h-px"
           style={{
-            background:
-              "linear-gradient(90deg, transparent, #00d4ff 50%, transparent)",
+            background: "linear-gradient(90deg, transparent, hsl(var(--primary)) 50%, transparent)",
           }}
         />
 
         {/* Logo */}
         <div
-          class="px-4 pt-5 pb-4 border-b"
-          style={{ "border-color": "rgba(0,212,255,0.08)" }}
+          class="px-4 pt-5 pb-4 border-b border-border"
         >
           <div class="flex items-center gap-3">
             <div
-              class="flex items-center justify-center w-9 h-9 rounded-lg animate-glow-pulse"
-              style={{
-                background: "rgba(0,212,255,0.08)",
-                border: "1px solid rgba(0,212,255,0.3)",
-              }}
+              class="flex items-center justify-center w-9 h-9 rounded-lg animate-glow-pulse border border-primary/20 bg-primary/5"
             >
-              <Network class="h-5 w-5" style={{ color: "#00d4ff" }} />
+              <Network class="h-5 w-5 text-primary" />
             </div>
             <div>
               <h1
-                class="font-bold text-base tracking-widest neon-text"
-                style={{ "font-family": "Inter, sans-serif" }}
+                class="font-bold text-base tracking-widest neon-text font-sans"
               >
                 METTA-KG
               </h1>
               <div class="flex items-center gap-1.5 mt-0.5">
                 <span
-                  class="w-1.5 h-1.5 rounded-full animate-status-pulse"
-                  style={{ background: "#00b894" }}
+                  class="w-1.5 h-1.5 rounded-full animate-status-pulse bg-[#00b894]"
                 />
-                <p class="text-xs tracking-wider" style={{ color: "#4a5568" }}>
+                <p class="text-xs tracking-wider text-muted-foreground">
                   VERSION 0.1.0
                 </p>
               </div>
@@ -75,14 +66,12 @@ export default function Sidebar({
             ) => (
               <div>
                 <h3
-                  class="text-xs font-semibold uppercase tracking-widest mb-2 px-2"
-                  style={{ color: "rgba(0,212,255,0.45)" }}
+                  class="text-xs font-semibold uppercase tracking-widest mb-2 px-2 text-primary/60"
                 >
                   {section.title}
                 </h3>
                 <div
-                  class="h-px mb-3 mx-2"
-                  style={{ background: "rgba(0,212,255,0.07)" }}
+                  class="h-px mb-3 mx-2 bg-border"
                 />
                 <div class="space-y-0.5">
                   {section.items.map(
@@ -100,22 +89,18 @@ export default function Sidebar({
                               ${
                                 isActive()
                                   ? "sidebar-nav-active"
-                                  : "text-[#8892a4] hover:text-[#c4cfdf] hover:bg-[rgba(0,212,255,0.04)]"
+                                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
                               }
                             `}
                             style={
                               isActive()
-                                ? {
-                                    "border-left": "2px solid #00d4ff",
-                                    color: "#00d4ff",
-                                  }
+                                ? {}
                                 : { "border-left": "2px solid transparent" }
                             }
                             onClick={() => setActiveTab(item.id)}
                           >
                             <span
-                              class="flex items-center justify-center w-4 h-4 flex-shrink-0"
-                              style={isActive() ? { color: "#00d4ff" } : {}}
+                              class={`flex items-center justify-center w-4 h-4 flex-shrink-0 ${isActive() ? "text-primary" : ""}`}
                             >
                               {typeof Icon === "function" &&
                               Icon.name === undefined ? (
@@ -129,10 +114,9 @@ export default function Sidebar({
                             </span>
                             {isActive() && (
                               <span
-                                class="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                                class="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-primary"
                                 style={{
-                                  background: "#00d4ff",
-                                  "box-shadow": "0 0 6px #00d4ff",
+                                  "box-shadow": "0 0 6px hsl(var(--primary))",
                                 }}
                               />
                             )}
@@ -149,12 +133,10 @@ export default function Sidebar({
 
         {/* Footer */}
         <div
-          class="px-4 py-3 border-t"
-          style={{ "border-color": "rgba(0,212,255,0.08)" }}
+          class="px-4 py-3 border-t border-border"
         >
           <p
-            class="text-xs text-center"
-            style={{ color: "rgba(0,212,255,0.25)" }}
+            class="text-xs text-center text-muted-foreground"
           >
             MeTTa Knowledge Graph
           </p>
