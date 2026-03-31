@@ -26,10 +26,9 @@ const NamespaceTabs: Component<NamespaceTabsProps> = (props) => {
 
   return (
     <div
-      class={`flex items-center h-9 ${props.class || ""}`}
+      class={`flex items-center h-9 border-b border-primary/10 ${props.class || ""}`}
       style={{
-        background: "var(--tab-bg, #080c18)",
-        "border-bottom": "1px solid rgba(0,212,255,0.1)",
+        background: "var(--tab-bg)",
       }}
     >
       {/* Scrollable tab area */}
@@ -45,31 +44,26 @@ const NamespaceTabs: Component<NamespaceTabsProps> = (props) => {
                   group flex-shrink-0 h-full border-r uppercase
                   ${
                     activeTabId() === tab.id
-                      ? ""
-                      : "text-[#4a5568] hover:text-[#c4cfdf]"
+                      ? "tab-active"
+                      : "text-muted-foreground hover:text-primary border-primary/10 bg-transparent"
                   }
                 `}
                 style={
                   activeTabId() === tab.id
                     ? {
-                        "border-top": "2px solid #00d4ff",
-                        "border-right": "1px solid rgba(0,212,255,0.15)",
-                        background: "rgba(0,212,255,0.06)",
-                        color: "#e2e8f0",
-                        "box-shadow": "inset 0 1px 0 rgba(0,212,255,0.1)",
+                        "border-right": "1px solid hsl(var(--primary) / 0.15)",
+                        "box-shadow": "inset 0 1px 0 hsl(var(--primary) / 0.1)",
                       }
                     : {
                         "border-top": "2px solid transparent",
-                        "border-right": "1px solid rgba(0,212,255,0.08)",
-                        background: "transparent",
+                        "border-right": "1px solid hsl(var(--primary) / 0.08)",
                       }
                 }
               >
                 <span class="flex-1 text-center truncate">{tab.label}</span>
                 {tabs().length > 1 && (
                   <X
-                    class="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity hover:opacity-100 flex-shrink-0"
-                    color="#00d4ff"
+                    class="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity hover:opacity-100 flex-shrink-0 text-primary"
                     onClick={(e) => handleCloseTab(e, tab.id)}
                   />
                 )}
@@ -82,7 +76,7 @@ const NamespaceTabs: Component<NamespaceTabsProps> = (props) => {
         <div
           class="absolute top-0 right-0 h-full w-8 pointer-events-none"
           style={{
-            background: "linear-gradient(to right, transparent, #080c18 85%)",
+            background: "linear-gradient(to right, transparent, var(--tab-bg) 85%)",
           }}
         />
       </div>
@@ -90,20 +84,7 @@ const NamespaceTabs: Component<NamespaceTabsProps> = (props) => {
       {/* Add tab */}
       <button
         onClick={handleAddTab}
-        class="flex items-center justify-center w-9 h-full transition-all duration-200 flex-shrink-0"
-        style={{
-          color: "#4a5568",
-          "border-left": "1px solid rgba(0,212,255,0.08)",
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLElement).style.color = "#00d4ff";
-          (e.currentTarget as HTMLElement).style.background =
-            "rgba(0,212,255,0.06)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLElement).style.color = "#4a5568";
-          (e.currentTarget as HTMLElement).style.background = "transparent";
-        }}
+        class="flex items-center justify-center w-9 h-full transition-all duration-200 flex-shrink-0 border-l border-primary/10 text-muted-foreground hover:text-primary hover:bg-primary/5"
         title="New tab"
       >
         <Plus class="w-3.5 h-3.5" />
