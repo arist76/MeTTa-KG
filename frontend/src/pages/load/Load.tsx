@@ -31,7 +31,7 @@ const LoadPage = () => {
   return (
     <div
       class="relative h-full w-full"
-      style={{ background: "var(--bg-primary, #0a0e1a)" }}
+      style={{ background: "var(--bg-primary)" }}
     >
       {/* Pattern Editor Card — glass overlay in bottom-right */}
       <div
@@ -48,33 +48,18 @@ const LoadPage = () => {
       >
         {/* Card header */}
         <div
-          class="flex items-center justify-between px-3 py-2 border-b flex-shrink-0"
-          style={{
-            background: "rgba(0,212,255,0.04)",
-            "border-color": "rgba(0,212,255,0.12)",
-          }}
+          class="flex items-center justify-between px-3 py-2 border-b border-primary/10 flex-shrink-0 bg-primary/5"
         >
-          <div class="flex items-center gap-2">
-            <Activity class="w-3.5 h-3.5" color="#00d4ff" />
+          <div class="flex items-center gap-2 text-primary">
+            <Activity class="w-3.5 h-3.5" />
             <h3
               class="text-xs font-semibold tracking-widest uppercase"
-              style={{ color: "#00d4ff" }}
             >
               Pattern
             </h3>
           </div>
           <button
-            class="flex h-5 w-5 cursor-pointer items-center justify-center rounded transition-all duration-200"
-            style={{ color: "#8892a4" }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color = "#00d4ff";
-              (e.currentTarget as HTMLElement).style.background =
-                "rgba(0,212,255,0.08)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color = "#8892a4";
-              (e.currentTarget as HTMLElement).style.background = "transparent";
-            }}
+            class="flex h-5 w-5 cursor-pointer items-center justify-center rounded transition-all duration-200 text-muted-foreground hover:text-primary hover:bg-primary/10"
             onClick={toggleMinimize}
           >
             {isMinimized() ? (
@@ -121,22 +106,17 @@ const LoadPage = () => {
             <div class="flex flex-col items-center justify-center h-full w-full gap-4">
               {/* Glowing icon */}
               <div
-                class="w-16 h-16 rounded-2xl flex items-center justify-center animate-glow-pulse"
-                style={{
-                  background: "rgba(0,212,255,0.06)",
-                  border: "1px solid rgba(0,212,255,0.2)",
-                }}
+                class="w-16 h-16 rounded-2xl flex items-center justify-center animate-glow-pulse border border-primary/20 bg-primary/5"
               >
-                <Activity class="w-7 h-7" color="#00d4ff" />
+                <Activity class="w-7 h-7 text-primary" />
               </div>
               <div class="text-center">
                 <p
-                  class="text-sm font-semibold uppercase tracking-widest mb-1"
-                  style={{ color: "#00d4ff" }}
+                  class="text-sm font-semibold uppercase tracking-widest mb-1 text-primary"
                 >
                   No Data Loaded
                 </p>
-                <p class="text-xs" style={{ color: "#8892a4" }}>
+                <p class="text-xs text-muted-foreground">
                   Enter a MeTTa pattern above and press Load
                 </p>
               </div>
