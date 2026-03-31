@@ -265,7 +265,7 @@ pub async fn export(
         .pattern(export_input.pattern.clone())
         .template(export_input.template.clone())
         .format(ExportFormat::Metta)
-        .max_write(export_input.max_write.clone());
+        .max_write(export_input.max_write);
 
     let broadcaster = state.broadcaster.clone();
 
