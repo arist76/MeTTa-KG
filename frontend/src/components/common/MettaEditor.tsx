@@ -1,14 +1,16 @@
-import { Component, onMount, createSignal, createEffect, Show } from "solid-js";
-import { ParseError } from "../../types";
-import { EditorView, basicSetup } from "codemirror";
-import { EditorState } from "@codemirror/state";
 import {
-  syntaxHighlighting,
-  defaultHighlightStyle,
-} from "@codemirror/language";
-import { mettaLanguage } from "../../syntax/mettaLanguage";
+  Component,
+  createSignal,
+  createEffect,
+  onMount,
+  onCleanup,
+  Show,
+} from "solid-js";
+import { ParseError } from "../../types";
+import { highlightText } from "./syntaxHighlighter";
+import "./syntax-theme.css";
 
-// Component Prop Interfaces
+// Component Prop Interfaces - Same API as original
 export interface MettaEditorProps {
   initialText: string;
   onTextChange: (text: string) => void;
@@ -20,133 +22,131 @@ export interface MettaEditorProps {
 const MettaEditor: Component<MettaEditorProps> = (props) => {
   const [text, setText] = createSignal(props.initialText);
   const [realTimeErrors, setRealTimeErrors] = createSignal<ParseError[]>([]);
-  let editorRef: HTMLDivElement | undefined;
-  let editorView: EditorView | undefined;
+  const [highlightedHtml, setHighlightedHtml] = createSignal("");
+  const [lineCount, setLineCount] = createSignal(1);
 
-  // Handle text changes from CodeMirror
-  const handleTextChange = (textValue: string) => {
-    setText(textValue);
-    props.onTextChange(textValue);
+  let textareaRef: HTMLTextAreaElement | undefined;
+  let highlightRef: HTMLPreElement | undefined;
+  let lineNumbersRef: HTMLDivElement | undefined;
+  let containerRef: HTMLDivElement | undefined;
 
-    // Perform real-time validation
-    // const validation = validateSyntax(textValue);
-    // setRealTimeErrors([...validation.errors, ...validation.warnings]);
+  // Update syntax highlighting when text changes
+  createEffect(() => {
+    const currentText = text();
+    const html = highlightText(currentText);
+    setHighlightedHtml(html);
+    setLineCount(currentText.split("\n").length);
+  });
+
+  // Handle text changes from textarea
+  const handleInput = (e: Event) => {
+    const target = e.target as HTMLTextAreaElement;
+    const newText = target.value;
+    setText(newText);
+    props.onTextChange(newText);
     setRealTimeErrors([]);
   };
 
-  onMount(() => {
-    if (!editorRef) return;
+  // Sync scroll between textarea and highlight layer
+  const handleScroll = (e: Event) => {
+    const target = e.target as HTMLTextAreaElement;
+    if (highlightRef && lineNumbersRef) {
+      highlightRef.scrollTop = target.scrollTop;
+      highlightRef.scrollLeft = target.scrollLeft;
+      lineNumbersRef.scrollTop = target.scrollTop;
+    }
+  };
 
-    // Create CodeMirror editor
-    const state = EditorState.create({
-      doc: props.initialText,
-      extensions: [
-        basicSetup,
-        mettaLanguage,
-        syntaxHighlighting(defaultHighlightStyle),
-        EditorView.updateListener.of((update) => {
-          if (update.docChanged) {
-            const newText = update.state.doc.toString();
-            handleTextChange(newText);
-          }
-        }),
-        EditorView.theme({
-          "&": {
-            fontSize: "13px",
-            fontFamily:
-              "'Courier New', Consolas, 'Liberation Mono', Menlo, Courier, monospace",
-            lineHeight: "1.5",
-            background: "hsl(var(--background))",
-            color: "hsl(var(--foreground))",
-            border: "none",
-            outline: "none",
-          },
-          ".cm-content": {
-            padding: "8px",
-            whiteSpace: "pre",
-            wordWrap: "break-word",
-            tabSize: "2",
-            background: "hsl(var(--background))",
-            color: "hsl(var(--foreground))",
-            lineHeight: "1.5",
-          },
-          ".cm-gutters": {
-            borderRight: "1px solid hsl(var(--border))",
-            fontFamily:
-              "'Courier New', Consolas, 'Liberation Mono', Menlo, Courier, monospace",
-            fontSize: "13px",
-            lineHeight: "1.5",
-            padding: "0px 4px",
-            background: "hsl(var(--muted))",
-            color: "hsl(var(--muted-foreground))",
-          },
-          ".cm-gutterElement": {
-            textAlign: "right",
-            paddingRight: "0px",
-          },
-          ".cm-activeLineGutter": {
-            background: "hsl(var(--accent))",
-            color: "hsl(var(--accent-foreground))",
-            fontWeight: "600",
-          },
-          ".cm-activeLine": {
-            background: "hsl(var(--accent) / 0.1)",
-          },
-          ".cm-selectionBackground": {
-            background: "hsl(var(--primary) / 0.2)",
-          },
-          ".cm-cursor": {
-            borderLeft: "2px solid hsl(var(--primary))",
-          },
-          ".cm-focused": {
-            outline: "none",
-          },
-          ".cm-editor": {
-            background: "hsl(var(--background))",
-          },
-          ".cm-scroller": {
-            background: "hsl(var(--background))",
-          },
-          // Error and warning lines with theme colors
-          ".cm-line.error-line": {
-            backgroundColor: "hsl(var(--destructive) / 0.1) !important",
-            borderLeft: "3px solid hsl(var(--destructive)) !important",
-            paddingLeft: "5px !important",
-            marginLeft: "-8px !important",
-          },
-          ".cm-line.warning-line": {
-            backgroundColor: "hsl(var(--warning) / 0.1) !important",
-            borderLeft: "3px solid hsl(var(--warning) / 0.8) !important",
-            paddingLeft: "5px !important",
-            marginLeft: "-8px !important",
-          },
-        }),
-      ],
-    });
+  // Handle tab key for indentation
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const target = e.target as HTMLTextAreaElement;
+      const start = target.selectionStart;
+      const end = target.selectionEnd;
+      const value = target.value;
 
-    editorView = new EditorView({
-      state,
-      parent: editorRef,
-    });
-  });
+      // Insert 2 spaces for tab
+      const newValue = value.substring(0, start) + "  " + value.substring(end);
+      setText(newValue);
+      props.onTextChange(newText());
 
-  // Update editor content when props change (only on initial load)
+      // Restore cursor position
+      requestAnimationFrame(() => {
+        if (textareaRef) {
+          textareaRef.selectionStart = start + 2;
+          textareaRef.selectionEnd = start + 2;
+        }
+      });
+    }
+  };
+
+  // Sync text when props.initialText changes (only on initial load)
   createEffect(() => {
-    if (editorView && props.initialText !== text()) {
-      // Only update if the editor is empty (initial load)
-      if (editorView.state.doc.length === 0) {
-        const transaction = editorView.state.update({
-          changes: {
-            from: 0,
-            to: 0,
-            insert: props.initialText,
-          },
-        });
-        editorView.dispatch(transaction);
-        setText(props.initialText);
-      }
+    const initialText = props.initialText;
+    if (
+      textareaRef &&
+      initialText !== text() &&
+      textareaRef.value !== initialText
+    ) {
+      setText(initialText);
+      textareaRef.value = initialText;
     }
   });
+
+  // Handle paste with proper formatting
+  const handlePaste = (e: ClipboardEvent) => {
+    e.preventDefault();
+    const pastedText = e.clipboardData?.getData("text/plain") || "";
+    const target = e.target as HTMLTextAreaElement;
+    const start = target.selectionStart;
+    const end = target.selectionEnd;
+    const currentValue = target.value;
+
+    const newValue =
+      currentValue.substring(0, start) +
+      pastedText +
+      currentValue.substring(end);
+    setText(newValue);
+    props.onTextChange(newValue);
+
+    requestAnimationFrame(() => {
+      if (textareaRef) {
+        textareaRef.selectionStart = start + pastedText.length;
+        textareaRef.selectionEnd = start + pastedText.length;
+      }
+    });
+  };
+
+  // Get error/warning lines from parseErrors
+  const getErrorLines = () => {
+    const errors = new Set<number>();
+    const warnings = new Set<number>();
+
+    for (const error of props.parseErrors) {
+      if (error.severity === "error") {
+        errors.add(error.line);
+      } else {
+        warnings.add(error.line);
+      }
+    }
+
+    return { errors, warnings };
+  };
+
+  // Generate line numbers
+  const lineNumbers = () => {
+    const numbers: number[] = [];
+    for (let i = 1; i <= Math.max(lineCount(), 1); i++) {
+      numbers.push(i);
+    }
+    return numbers;
+  };
+
+  const { errors: errorLines, warnings: warningLines } = getErrorLines();
+
+  const lineHeight = 19.5;
+  const padding = 8;
 
   return (
     <div class="flex flex-col h-full w-full box-border">
@@ -162,9 +162,147 @@ const MettaEditor: Component<MettaEditorProps> = (props) => {
       </h3>
 
       {/* Editor Container */}
-      <div class="relative flex-1 min-h-0 mb-2 border border-border rounded bg-background overflow-hidden transition-all duration-300 ease-linear">
-        {/* CodeMirror Editor */}
-        <div ref={editorRef} class="h-full w-full bg-background" />
+      <div
+        ref={containerRef}
+        class="relative flex-1 min-h-0 mb-2 border border-border rounded bg-background transition-all duration-300 ease-linear"
+        style={{ overflow: "auto" }}
+      >
+        <div class="flex" style={{ "min-height": "100%" }}>
+          {/* Line Numbers */}
+          <div
+            ref={lineNumbersRef}
+            class="flex-shrink-0 select-none border-r border-border bg-muted"
+            style={{
+              width: "48px",
+              "font-family":
+                "'Courier New', Consolas, 'Liberation Mono', Menlo, Courier, monospace",
+              "font-size": "13px",
+              "line-height": `${lineHeight}px`,
+              color: "hsl(var(--muted-foreground))",
+              padding: `${padding}px 8px`,
+              "text-align": "right",
+            }}
+          >
+            {lineNumbers().map((num) => (
+              <div
+                style={{
+                  height: `${lineHeight}px`,
+                  color: errorLines.has(num)
+                    ? "hsl(var(--destructive))"
+                    : warningLines.has(num)
+                      ? "hsl(38 92% 50%)"
+                      : "hsl(var(--muted-foreground))",
+                  "font-weight":
+                    errorLines.has(num) || warningLines.has(num)
+                      ? "600"
+                      : "normal",
+                }}
+              >
+                {num}
+              </div>
+            ))}
+          </div>
+
+          {/* Editor Area */}
+          <div class="relative flex-1" style={{ position: "relative" }}>
+            {/* Syntax Highlighted Layer */}
+            <pre
+              ref={highlightRef}
+              class="absolute m-0 pointer-events-none overflow-hidden"
+              style={{
+                top: `${padding}px`,
+                left: `${padding}px`,
+                right: `${padding}px`,
+                bottom: `${padding}px`,
+                "font-family":
+                  "'Courier New', Consolas, 'Liberation Mono', Menlo, monospace",
+                "font-size": "13px",
+                "line-height": `${lineHeight}px`,
+                "tab-size": "2",
+                "white-space": "pre",
+                "word-wrap": "normal",
+                "overflow-wrap": "normal",
+                background: "transparent",
+                color: "hsl(var(--foreground))",
+                "z-index": "0",
+              }}
+              aria-hidden="true"
+            >
+              <code
+                innerHTML={highlightedHtml()}
+                style={{ display: "block" }}
+              />
+            </pre>
+
+            {/* Textarea Layer */}
+            <textarea
+              ref={textareaRef}
+              value={text()}
+              onInput={handleInput}
+              onScroll={handleScroll}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              spellcheck={false}
+              class="absolute m-0 resize-none outline-none border-none"
+              style={{
+                top: `${padding}px`,
+                left: `${padding}px`,
+                right: `${padding}px`,
+                bottom: `${padding}px`,
+                "font-family":
+                  "'Courier New', Consolas, 'Liberation Mono', Menlo, monospace",
+                "font-size": "13px",
+                "line-height": `${lineHeight}px`,
+                "tab-size": "2",
+                "white-space": "pre",
+                "word-wrap": "normal",
+                "overflow-wrap": "normal",
+                background: "transparent",
+                color: "transparent",
+                "caret-color": "hsl(var(--foreground))",
+                "z-index": 1,
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Error line highlights overlay */}
+        <div
+          class="absolute pointer-events-none"
+          style={{
+            top: `${padding}px`,
+            left: "48px",
+            right: `${padding}px`,
+            bottom: `${padding}px`,
+            "z-index": 2,
+          }}
+        >
+          <style>{`
+            .highlight-line {
+              position: absolute;
+              left: 0;
+              right: 0;
+              height: ${lineHeight}px;
+              pointer-events: none;
+            }
+            .highlight-line.error {
+              background-color: hsl(var(--destructive) / 0.1);
+              border-left: 3px solid hsl(var(--destructive));
+            }
+            .highlight-line.warning {
+              background-color: hsl(38 92% 50% / 0.1);
+              border-left: 3px solid hsl(38 92% 50% / 0.8);
+            }
+          `}</style>
+          {props.parseErrors.map((error) => (
+            <div
+              class={`highlight-line ${error.severity}`}
+              style={{
+                top: `${(error.line - 1) * lineHeight}px`,
+              }}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Action Buttons */}
@@ -172,47 +310,18 @@ const MettaEditor: Component<MettaEditorProps> = (props) => {
         <div class="mb-2 flex gap-2 flex-shrink-0 items-center">
           <button
             class="px-2 py-1 text-xs border border-border rounded-sm bg-background text-foreground cursor-pointer transition-all duration-200 ease-linear hover:bg-accent hover:border-primary"
-            onClick={() => {
-              props.onPatternLoad(text());
-            }}
+            onClick={() => props.onPatternLoad(text())}
           >
             Visualize
           </button>
         </div>
       </Show>
-
-      {/* Error Display Panel - Commented out as in original */}
-      {/* 
-      {(realTimeErrors().length > 0 || props.parseErrors.length > 0) && (
-        <div class="max-h-30 overflow-y-auto border border-border rounded bg-card flex-shrink-0 transition-all duration-300 ease-linear">
-          <div class="p-2 text-xs font-semibold bg-muted text-muted-foreground border-b border-border">
-            Issues ({realTimeErrors().filter(e => e.severity === 'error').length + props.parseErrors.filter(e => e.severity === 'error').length} errors, {realTimeErrors().filter(e => e.severity === 'warning').length + props.parseErrors.filter(e => e.severity === 'warning').length} warnings)
-          </div>
-          <div class="p-1">
-            <For each={[...realTimeErrors(), ...props.parseErrors]}>
-              {(error) => (
-                <div class={`p-1 px-2 my-0.5 border-l-2 rounded-sm text-xs leading-tight transition-all duration-300 ease-linear ${
-                  error.severity === 'error' 
-                    ? 'border-l-destructive bg-destructive/10' 
-                    : 'border-l-yellow-500 bg-yellow-500/10'
-                }`}>
-                  <div class={`font-semibold mb-0.5 ${
-                    error.severity === 'error' ? 'text-destructive' : 'text-yellow-600'
-                  }`}>
-                    {error.severity === 'error' ? '⚠️' : '⚡'} Line {error.line}:{error.column}
-                  </div>
-                  <div class="text-foreground">
-                    {error.message}
-                  </div>
-                </div>
-              )}
-            </For>
-          </div>
-        </div>
-      )}
-      */}
     </div>
   );
 };
 
 export default MettaEditor;
+
+// Export syntax highlighting utilities for external use
+export { highlightText, tokenize, tokenizeLine } from "./syntaxHighlighter";
+export type { Token, TokenType } from "./syntaxHighlighter";
