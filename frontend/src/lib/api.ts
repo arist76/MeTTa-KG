@@ -291,7 +291,7 @@ export async function importData(
               contentType = "text/csv";
             }
           }
-          
+
           const resp = await request<string>(`/spaces/upload${path}`, {
             method: "POST",
             headers: { "Content-Type": contentType },

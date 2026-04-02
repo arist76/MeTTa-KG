@@ -155,14 +155,14 @@ export const handleImport = async (spacePath: string) => {
             type: fileState.type,
           })
         );
-        
+
         const response = await importData(
           "file",
           formData,
           fileFormat(),
           spacePath
         );
-        
+
         if (response.status === "success") {
           setResult({ data: response.data, status: "success" });
           showToast({
