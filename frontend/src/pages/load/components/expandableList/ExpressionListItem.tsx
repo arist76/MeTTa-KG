@@ -28,12 +28,14 @@ export default function ExpressionListItem(props: ExpressionListItemProps) {
         width: "100%",
         height: `${props.virtualItem.size}px`,
         transform: `translateY(${props.virtualItem.start}px)`,
-        "background-color": props.isCursor ? "#2a2d2e" : "transparent",
+        "background-color": props.isCursor
+          ? "hsl(var(--accent) / 0.1)"
+          : "transparent",
         "border-left": props.isCursor
-          ? "2px solid #007acc"
+          ? "2px solid hsl(var(--primary))"
           : "2px solid transparent",
       }}
-      class="flex items-center cursor-pointer hover:bg-[#2a2d2e] transition-colors"
+      class="flex items-center cursor-pointer hover:bg-muted/50 transition-colors"
       onClick={(e) => props.onClick(e)}
     >
       {/* Line number gutter */}
@@ -41,7 +43,9 @@ export default function ExpressionListItem(props: ExpressionListItemProps) {
         class="flex-shrink-0 text-right pr-2 select-none text-xs leading-6"
         style={{
           width: "40px",
-          color: props.isCursor ? "#c6c6c6" : "#858585",
+          color: props.isCursor
+            ? "hsl(var(--foreground))"
+            : "hsl(var(--muted-foreground))",
         }}
       >
         {props.virtualItem.index + 1}
@@ -52,7 +56,7 @@ export default function ExpressionListItem(props: ExpressionListItemProps) {
         class="w-px flex-shrink-0"
         style={{
           height: "100%",
-          "background-color": "#3e3e3e",
+          "background-color": "hsl(var(--border))",
         }}
       />
 
@@ -74,7 +78,7 @@ export default function ExpressionListItem(props: ExpressionListItemProps) {
                 style={{
                   left: `${60 + i() * 16 + 8}px`,
                   width: "1px",
-                  "background-color": "#404040",
+                  "background-color": "hsl(var(--border) / 0.5)",
                 }}
               />
             )}
@@ -87,7 +91,7 @@ export default function ExpressionListItem(props: ExpressionListItemProps) {
             <svg
               class="w-3 h-3 transition-transform"
               style={{
-                color: "#c5c5c5",
+                color: "hsl(var(--muted-foreground))",
                 transform: props.isExpanded ? "rotate(90deg)" : "rotate(0deg)",
               }}
               fill="currentColor"
@@ -100,17 +104,19 @@ export default function ExpressionListItem(props: ExpressionListItemProps) {
             <div
               class="w-1 h-1 rounded-full"
               style={{
-                "background-color": "#6e6e6e",
+                "background-color": "hsl(var(--muted-foreground))",
               }}
             />
           </Show>
         </div>
 
-        {/* Node label with syntax-like coloring */}
+        {/* Node label */}
         <div
           class="flex-1 text-sm leading-6 truncate"
           style={{
-            color: props.canExpand ? "#4ec9b0" : "#9cdcfe",
+            color: props.canExpand
+              ? "hsl(var(--primary))"
+              : "hsl(var(--foreground))",
             "font-size": "13px",
           }}
         >
@@ -121,13 +127,13 @@ export default function ExpressionListItem(props: ExpressionListItemProps) {
         <Show when={props.isExpandingToLeaf}>
           <div class="flex-shrink-0 ml-2 flex items-center">
             <div
-              class="w-3 h-3 border border-t-transparent rounded-full animate-spin"
+              class="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin"
               style={{
-                "border-color": "#4ec9b0",
+                "border-color": "hsl(var(--primary))",
                 "border-top-color": "transparent",
               }}
             />
-            <span class="ml-1 text-xs" style={{ color: "#4ec9b0" }}>
+            <span class="ml-1 text-xs" style={{ color: "hsl(var(--primary))" }}>
               Expanding...
             </span>
           </div>
