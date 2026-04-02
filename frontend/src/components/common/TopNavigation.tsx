@@ -42,8 +42,6 @@ export default function TopNavigation(props: TopNavigationProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = createSignal(false);
   const [commandOpen, setCommandOpen] = createSignal(false);
 
-  // Note: Keyboard shortcuts are handled by CommandPalette component
-
   const handleNavClick = (id: string) => {
     props.setActiveTab(id);
     setMobileMenuOpen(false);
