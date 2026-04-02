@@ -14,34 +14,6 @@ interface OutputViewerProps {
 }
 
 export function OutputViewer(props: OutputViewerProps): JSX.Element {
-  const formatData = createMemo(() => {
-    if (props.data === null || props.data === undefined) return "No output";
-    if (typeof props.data === "string" && props.data.trim() === "")
-      return "Empty response";
-
-    switch (props.format) {
-      case "json":
-        try {
-          const parsed =
-            typeof props.data === "string"
-              ? JSON.parse(props.data)
-              : props.data;
-          return JSON.stringify(parsed, null, 2);
-        } catch {
-          return typeof props.data === "string"
-            ? props.data
-            : JSON.stringify(props.data, null, 2);
-        }
-      case "text":
-      case "metta":
-      default:
-        if (typeof props.data === "object") {
-          return JSON.stringify(props.data, null, 2);
-        }
-        return String(props.data);
-    }
-  });
-
   const statusStyles = createMemo(() => {
     switch (props.status) {
       case "success":
@@ -97,8 +69,8 @@ export function OutputViewer(props: OutputViewerProps): JSX.Element {
       </CardHeader>
       <CardContent>
         <div class="min-h-[120px] max-h-[600px] w-full rounded-md border border-border bg-muted p-4 overflow-auto">
-          <Show 
-            when={typeof Content() !== 'string'}
+          <Show
+            when={typeof Content() !== "string"}
             fallback={
               <pre class="text-sm font-mono whitespace-pre-wrap text-foreground">
                 {Content()}
