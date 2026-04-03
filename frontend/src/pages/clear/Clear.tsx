@@ -4,7 +4,13 @@ import { CommandCard } from "~/components/common/CommandCard";
 import MettaEditor from "~/components/common/MettaEditor";
 import Loader2 from "lucide-solid/icons/loader-2";
 import { formatedNamespace } from "~/lib/state";
-import { expression, setExpression, isLoading, handleClear } from "./lib";
+import {
+  expression,
+  setExpression,
+  isLoading,
+  handleClear,
+  isAppBusy,
+} from "./lib";
 
 const ClearPage: Component = () => {
   return (
@@ -25,7 +31,7 @@ const ClearPage: Component = () => {
           <div class="flex items-center gap-4 pt-2">
             <Button
               onClick={() => handleClear(formatedNamespace())}
-              disabled={isLoading() || !expression().trim()}
+              disabled={isAppBusy() || isLoading() || !expression().trim()}
               variant="destructive"
               class="w-36"
             >
