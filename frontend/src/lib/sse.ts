@@ -42,8 +42,6 @@ export const initSSE = () => {
   const eventsUrl = new URL("/events", API_URL).toString();
   eventSource = new EventSource(eventsUrl);
 
-  eventSource.onopen = () => {};
-
   eventSource.onmessage = (event) => {
     const data = event.data;
 
