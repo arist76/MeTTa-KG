@@ -17,10 +17,7 @@ export const stopPolling = () => {
   setIsPolling(false);
 };
 
-export const executeUnion = async (
-  unionQuery: setOperationInput,
-  _spacePath: string
-) => {
+export const executeUnion = async (unionQuery: setOperationInput) => {
   if (unionQuery.pattern.length < 1) {
     showToast({
       title: "Error",
