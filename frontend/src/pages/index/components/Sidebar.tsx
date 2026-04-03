@@ -98,7 +98,7 @@ export default function Sidebar({
 
           {/* Settings at Bottom */}
           <div class="pt-4 border-t border-border mt-auto">
-            <Settings />
+            <Settings showLabel />
           </div>
         </div>
       </div>

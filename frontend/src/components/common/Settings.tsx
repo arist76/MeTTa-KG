@@ -38,7 +38,11 @@ import {
   type LayoutMode,
 } from "~/lib/theme";
 
-export default function Settings() {
+interface SettingsProps {
+  showLabel?: boolean;
+}
+
+export default function Settings(props: SettingsProps) {
   const [open, setOpen] = createSignal(false);
 
   const accentColorKeys = Object.keys(
@@ -81,8 +85,16 @@ export default function Settings() {
   return (
     <Dialog open={open()} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" class="relative">
+        <Button
+          variant="ghost"
+          size={props.showLabel ? "default" : "icon"}
+          class={`relative ${props.showLabel ? "w-full justify-start" : ""}`}
+          data-settings-trigger
+        >
           <SettingsIcon class="h-5 w-5" />
+          <Show when={props.showLabel}>
+            <span class="text-sm font-medium">Settings</span>
+          </Show>
           <Show when={glowEnabled()}>
             <span class="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-primary animate-pulse" />
           </Show>
@@ -114,13 +126,13 @@ export default function Settings() {
               <For each={accentColorKeys}>
                 {(key) => {
                   const color = accentColors[key];
-                  const isSelected = currentAccent() === key;
+                  const isSelected = () => currentAccent() === key;
 
                   return (
                     <button
                       onClick={() => handleAccentChange(key)}
                       class={`relative flex items-center gap-3 rounded-lg border p-3 transition-all ${
-                        isSelected
+                        isSelected()
                           ? "border-primary bg-primary/10"
                           : "border-border bg-card hover:border-primary/50"
                       }`}
@@ -133,7 +145,7 @@ export default function Settings() {
                         }}
                       />
                       <span class="text-sm font-medium">{color.name}</span>
-                      <Show when={isSelected}>
+                      <Show when={isSelected()}>
                         <Check class="absolute right-3 top-3 h-4 w-4 text-primary" />
                       </Show>
                     </button>
@@ -340,21 +352,21 @@ export default function Settings() {
               <For each={patternKeys}>
                 {(key) => {
                   const pattern = backgroundPatterns[key];
-                  const isSelected = backgroundPattern() === key;
+                  const isSelected = () => backgroundPattern() === key;
                   const Icon = patternIcons[key] || Image;
 
                   return (
                     <button
                       onClick={() => handlePatternChange(key)}
                       class={`relative flex flex-col items-center gap-2 rounded-lg border p-3 text-center transition-all ${
-                        isSelected
+                        isSelected()
                           ? "border-primary bg-primary/10"
                           : "border-border bg-card hover:border-primary/50"
                       }`}
                     >
                       <div
                         class={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                          isSelected
+                          isSelected()
                             ? "bg-primary/20 text-primary"
                             : "bg-muted text-muted-foreground"
                         }`}
@@ -367,7 +379,7 @@ export default function Settings() {
                           {pattern.description}
                         </p>
                       </div>
-                      <Show when={isSelected}>
+                      <Show when={isSelected()}>
                         <Check class="absolute right-2 top-2 h-3 w-3 text-primary" />
                       </Show>
                     </button>

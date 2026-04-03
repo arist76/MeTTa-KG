@@ -1,4 +1,4 @@
-import { createSignal, createEffect, createRoot } from "solid-js";
+import { createSignal, createRenderEffect, createRoot } from "solid-js";
 
 // Accent color definitions
 export const accentColors = {
@@ -211,7 +211,7 @@ const initTheme = () => {
 
   // Set up reactive effect to persist and apply changes
   createRoot(() => {
-    createEffect(() => {
+    createRenderEffect(() => {
       currentAccent();
       glowEnabled();
       layoutMode();
