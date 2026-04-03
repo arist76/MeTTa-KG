@@ -2,7 +2,7 @@ import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { exportSpace } from "~/lib/api";
 import { Mm2Input } from "~/lib/types";
-import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
+import { isAnyCommandActive } from "~/lib/sse";
 
 export type ExportFormat = "metta" | "json" | "csv" | "raw";
 export const [uri, setUri] = createSignal("");
@@ -54,6 +54,8 @@ export const handleExport = async (spacePath: string) => {
       description: errorMessage,
       variant: "destructive",
     });
+  } finally {
+    setIsLoading(false);
   }
 };
 

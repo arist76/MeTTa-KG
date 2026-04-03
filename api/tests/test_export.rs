@@ -37,6 +37,7 @@ async fn test_export_success() {
         pattern: "$x".to_string(),
         template: "($x)".to_string(),
         format: None,
+        max_write: None,
     };
 
     let response = client
@@ -73,6 +74,7 @@ async fn test_non_existent_namespace() {
         pattern: "$x".to_string(),
         template: "($x)".to_string(),
         format: None,
+        max_write: None,
     };
 
     // Path does not start with /test/
@@ -115,6 +117,7 @@ async fn test_existing_empty_namespace() {
         pattern: "$x".to_string(),
         template: "($x)".to_string(),
         format: None,
+        max_write: None,
     };
 
     let response = client
@@ -158,6 +161,7 @@ async fn test_non_empty_namespace() {
         pattern: "$x".to_string(),
         template: "($x)".to_string(),
         format: None,
+        max_write: None,
     };
 
     let response = client
@@ -201,6 +205,7 @@ async fn test_different_namespaces() {
         pattern: "$x".to_string(),
         template: "($x)".to_string(),
         format: None,
+        max_write: None,
     };
 
     // Export from ns1
@@ -244,6 +249,7 @@ async fn test_namespace_mismatch() {
         pattern: "$x".to_string(),
         template: "($x)".to_string(),
         format: None,
+        max_write: None,
     };
 
     // Path does not start with /test/
