@@ -63,6 +63,8 @@ export const handleExport = async (spacePath: string) => {
       description: errorMessage,
       variant: "destructive",
     });
+  } finally {
+    setIsLoading(false);
   }
 };
 
