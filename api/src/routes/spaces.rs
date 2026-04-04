@@ -319,9 +319,6 @@ pub async fn export(
             let _ = broadcaster.send(ServerEvent::Log {
                 message: "Export completed successfully.".to_string(),
             });
-            let _ = broadcaster.send(ServerEvent::Success {
-                message: "Export done".to_string(),
-            });
             data
         }
         Err(e) => {
@@ -333,25 +330,41 @@ pub async fn export(
         }
     };
 
-    match requested_format {
+    let emit_incompatible_sse = |message: String| {
+        let _ = broadcaster.send(ServerEvent::Error { message });
+    };
+
+    let response = match requested_format {
         ExportFormat::Json => translations::convert_metta_to_json(mork_response)
             .map(Json)
             .map_err(|e| {
+                let message = format!("Incompatible metta file: {}", e);
+                emit_incompatible_sse(message.clone());
                 Custom(
                     Status::UnprocessableEntity,
-                    Json(json!({ "message": format!("Incompatible metta file: {}", e) })),
+                    Json(json!({ "message": message })),
                 )
             }),
         ExportFormat::Csv => translations::convert_metta_to_csv(mork_response)
             .map(Json)
             .map_err(|e| {
+                let message = format!("Incompatible metta file: {}", e);
+                emit_incompatible_sse(message.clone());
                 Custom(
                     Status::UnprocessableEntity,
-                    Json(json!({ "message": format!("Incompatible metta file: {}", e) })),
+                    Json(json!({ "message": message })),
                 )
             }),
         _ => Ok(Json(mork_response)),
+    };
+
+    if response.is_ok() {
+        let _ = broadcaster.send(ServerEvent::Success {
+            message: "Export done".to_string(),
+        });
     }
+
+    response
 }
 
 #[post("/spaces/clear/<path..>?<expr>")]
