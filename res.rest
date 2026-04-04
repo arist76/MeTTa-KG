@@ -1,0 +1,82 @@
+### Scheduler validation for Mork write serialization
+### Requires: VS Code REST Client extension
+### Steps:
+### 1) Fill @authToken and @spacePrefix.
+### 2) Run "SSE Stream" first and keep it open.
+### 3) Quickly run "Write A - Upload" and then "Write B - Clear".
+### 4) In SSE output, confirm B reports waiting and completes after A.
+
+@host=http://localhost:8000
+@authToken=200003ee-c651-4069-8b7f-2ad9fb46c3ab
+@spacePrefix=YOUR_TOKEN_NAMESPACE_PREFIX
+@space={{spacePrefix}}scheduler-test
+
+### SSE Stream (open first)
+GET {{host}}/events
+Accept: text/event-stream
+
+### Optional: verify token is valid
+GET {{host}}/token
+authorization: {{authToken}}
+
+### Write A - Upload (start this first)
+POST {{host}}/spaces/upload/{{space}}
+authorization: {{authToken}}
+Content-Type: text/plain
+
+(parent alice bob)
+(parent bob carol)
+(parent carol dave)
+(parent dave erin)
+(parent erin frank)
+(parent frank grace)
+(parent grace helen)
+(parent helen ian)
+(parent ian jane)
+(parent jane kate)
+(parent kate leo)
+(parent leo mia)
+(parent mia noah)
+(parent noah olivia)
+(parent olivia paul)
+(parent paul quinn)
+(parent quinn rose)
+(parent rose sam)
+(parent sam tina)
+(parent tina uma)
+(parent uma victor)
+(parent victor wendy)
+(parent wendy xavier)
+(parent xavier yara)
+(parent yara zane)
+
+### Write B - Clear (run immediately after Write A)
+POST {{host}}/spaces/clear/{{space}}?expr=%24x
+authorization: {{authToken}}
+
+### Optional: trigger two uploads back-to-back (another queue test)
+POST {{host}}/spaces/upload/{{space}}
+authorization: {{authToken}}
+Content-Type: text/plain
+
+(edge a b)
+(edge b c)
+(edge c d)
+
+###
+POST {{host}}/spaces/upload/{{space}}
+authorization: {{authToken}}
+Content-Type: text/plain
+
+(edge d e)
+(edge e f)
+(edge f g)
+
+### Expected SSE order (approx):
+### - PROCESS_STARTED:UPLOAD
+### - ...logs...
+### - PROCESS_STARTED:CLEAR
+### - Write queue busy, waiting for turn...
+### - PROCESS_EXIT_SUCCESS (for first)
+### - ...CLEAR logs...
+### - PROCESS_EXIT_SUCCESS (for second)

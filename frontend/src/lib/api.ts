@@ -253,7 +253,7 @@ export async function importData(
           } else if (format === "csv") {
             contentType = "text/csv";
           }
-          const resp = await request<string>(`/spaces/upload${path}`, {
+          const resp = await request<boolean>(`/spaces/upload${path}`, {
             method: "POST",
             headers: { "Content-Type": contentType },
             body: text,
@@ -288,8 +288,8 @@ export async function importData(
 export const uploadTextToSpace = (
   path: string,
   data: string
-): Promise<string> => {
-  return request<string>(`/spaces/upload${path}`, {
+): Promise<boolean> => {
+  return request<boolean>(`/spaces/upload${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: data,
