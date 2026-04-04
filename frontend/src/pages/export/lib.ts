@@ -2,14 +2,15 @@ import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { exportSpace } from "~/lib/api";
 import { Mm2Input } from "~/lib/types";
-import { isAnyCommandActive } from "~/lib/sse";
+import { isAnyCommandActive, isCommandActive } from "~/lib/sse";
 
 export type ExportFormat = "metta" | "json" | "csv" | "raw";
 export const [uri, setUri] = createSignal("");
-export const [isLoading, setIsLoading] = createSignal<
+export const [activeExportAction, setActiveExportAction] = createSignal<
   false | "export" | "download"
 >(false);
 export const [format, setFormat] = createSignal<ExportFormat>("metta");
+export const isLoading = () => isCommandActive("EXPORT");
 export const isAppBusy = isAnyCommandActive;
 export const [pattern, setPattern] = createSignal("$x\n\n\n");
 export const [template, setTemplate] = createSignal("$x\n\n\n");
@@ -25,7 +26,7 @@ export const handleExport = async (spacePath: string) => {
     format: format().charAt(0).toUpperCase() + format().slice(1),
   };
 
-  setIsLoading("export");
+  setActiveExportAction("export");
   setResult(null);
   setExportError(null);
 
@@ -55,7 +56,7 @@ export const handleExport = async (spacePath: string) => {
       variant: "destructive",
     });
   } finally {
-    setIsLoading(false);
+    setActiveExportAction(false);
   }
 };
 
@@ -67,7 +68,7 @@ export const handleDownload = async (spacePath: string) => {
     format: currentFormat.charAt(0).toUpperCase() + currentFormat.slice(1),
   };
 
-  setIsLoading("download");
+  setActiveExportAction("download");
   setResult(null);
   setExportError(null);
 
@@ -109,7 +110,7 @@ export const handleDownload = async (spacePath: string) => {
       variant: "destructive",
     });
   } finally {
-    setIsLoading(false);
+    setActiveExportAction(false);
   }
 };
 export const isInputValid = (val: number | null) => {
