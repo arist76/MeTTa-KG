@@ -16,7 +16,7 @@ export const [pattern, setPattern] = createSignal("$x\n\n\n");
 export const [template, setTemplate] = createSignal("$x\n\n\n");
 export const [result, setResult] = createSignal<string | null>(null);
 export const [exportError, setExportError] = createSignal<Error | null>(null);
-export const [maxWrite, setMaxWrite] = createSignal<number | null>(null);
+export const [maxWrite, setMaxWrite] = createSignal<number | null>(15);
 
 export const handleExport = async (spacePath: string) => {
   const exportInput: Mm2Input = {

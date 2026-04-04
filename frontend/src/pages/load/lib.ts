@@ -64,9 +64,22 @@ export const refreshSpace = async () => {
   // If a command is running, wait for it to finish
   if (isCommandRunning()) {
     await new Promise<void>((resolve) => {
+      let settled = false;
+      let disposeRoot = () => {};
+
+      const timeoutId = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        disposeRoot();
+        resolve();
+      }, 10000);
+
       createRoot((dispose) => {
+        disposeRoot = dispose;
         createEffect(() => {
-          if (!isCommandRunning()) {
+          if (!isCommandRunning() && !settled) {
+            settled = true;
+            clearTimeout(timeoutId);
             dispose();
             resolve();
           }
