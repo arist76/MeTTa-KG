@@ -21,7 +21,7 @@ import {
   isPolling,
   executeIntersection,
   stopPolling,
-  isAppBusy,
+  isQueued,
 } from "./lib";
 
 const IntersectionPage: Component = () => {
@@ -181,7 +181,7 @@ const IntersectionPage: Component = () => {
           </div>
           <Button
             class="w-full mt-4"
-            disabled={!canSubmit() || isLoading() || isPolling() || isAppBusy()}
+            disabled={!canSubmit() || isLoading() || isPolling()}
             onClick={handleIntersection}
           >
             <Show when={isLoading() || isPolling()}>
@@ -208,7 +208,9 @@ const IntersectionPage: Component = () => {
                 </Show>
               }
             >
-              Processing...
+              <Show when={isQueued()} fallback={"Processing..."}>
+                Queued...
+              </Show>
             </Show>
           </Button>
         </div>

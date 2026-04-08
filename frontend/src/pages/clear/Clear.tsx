@@ -4,7 +4,13 @@ import { CommandCard } from "~/components/common/CommandCard";
 import MettaEditor from "~/components/common/MettaEditor";
 import Loader2 from "lucide-solid/icons/loader-2";
 import { formatedNamespace } from "~/lib/state";
-import { expression, setExpression, isLoading, handleClear } from "./lib";
+import {
+  expression,
+  setExpression,
+  isLoading,
+  isQueued,
+  handleClear,
+} from "./lib";
 
 const ClearPage: Component = () => {
   return (
@@ -31,7 +37,9 @@ const ClearPage: Component = () => {
             >
               <Show when={isLoading()} fallback={"Clear Data"}>
                 <Loader2 class="animate-spin mr-2" />
-                Clearing...
+                <Show when={isQueued()} fallback={"Clearing..."}>
+                  Queued...
+                </Show>
               </Show>
             </Button>
             <p class="text-sm text-muted-foreground">

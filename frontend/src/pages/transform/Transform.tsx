@@ -16,7 +16,7 @@ import {
   isPolling,
   executeTransform,
   stopPolling,
-  isAppBusy,
+  isQueued,
 } from "./lib";
 import Copy from "lucide-solid/icons/copy";
 import Check from "lucide-solid/icons/check";
@@ -180,7 +180,7 @@ const TransformPage: Component = () => {
 
         <Button
           onClick={handleTransform}
-          disabled={isAppBusy() || isPolling() || !canTransform()}
+          disabled={isLoading() || isPolling() || !canTransform()}
           class="inline-flex items-center justify-center w-[180px] h-10 mt-4"
         >
           <Show when={isLoading() || isPolling()}>
@@ -207,7 +207,9 @@ const TransformPage: Component = () => {
               </Show>
             }
           >
-            Transforming...
+            <Show when={isQueued()} fallback={"Transforming..."}>
+              Queued...
+            </Show>
           </Show>
         </Button>
       </CommandCard>

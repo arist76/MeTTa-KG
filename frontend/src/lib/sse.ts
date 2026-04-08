@@ -22,6 +22,9 @@ export const [commandLogs, setCommandLogs] = createSignal<string[]>([]);
 export const isCommandActive = (type: CommandType) => activeCommand() === type;
 export const isAnyCommandActive = () => activeCommand() !== null;
 export const isCommandRunning = isAnyCommandActive;
+export const isCommandQueued = (type: CommandType) =>
+  isCommandActive(type) &&
+  commandLogs().some((line) => line.includes("waiting for turn"));
 
 let eventSource: EventSource | null = null;
 

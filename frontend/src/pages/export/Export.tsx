@@ -22,7 +22,7 @@ import {
   format,
   setFormat,
   isLoading,
-  isAppBusy,
+  isQueued,
   pattern,
   setPattern,
   template,
@@ -89,7 +89,7 @@ const ExportPage: Component = () => {
                   options={["metta", "json", "csv", "raw"]}
                   value={format()}
                   onChange={setFormat}
-                  disabled={!!isLoading() || isAppBusy()}
+                  disabled={!!isLoading()}
                   placeholder="Select a format"
                   itemComponent={(props) => (
                     <SelectItem item={props.item}>
@@ -123,7 +123,7 @@ const ExportPage: Component = () => {
           <Button
             onClick={() => handleExport(formatedNamespace())}
             disabled={
-              isAppBusy() ||
+              isLoading() ||
               !pattern().trim() ||
               !template().trim() ||
               !isInputValid(maxWrite())
@@ -140,13 +140,15 @@ const ExportPage: Component = () => {
               }
             >
               <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-              Exporting...
+              <Show when={isQueued()} fallback={"Exporting..."}>
+                Queued...
+              </Show>
             </Show>
           </Button>
 
           <Button
             onClick={() => handleDownload(formatedNamespace())}
-            disabled={isAppBusy() || !pattern().trim() || !template().trim()}
+            disabled={isLoading() || !pattern().trim() || !template().trim()}
             class="w-37"
           >
             <Show
@@ -159,7 +161,9 @@ const ExportPage: Component = () => {
               }
             >
               <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-              Exporting...
+              <Show when={isQueued()} fallback={"Exporting..."}>
+                Queued...
+              </Show>
             </Show>
           </Button>
         </div>
