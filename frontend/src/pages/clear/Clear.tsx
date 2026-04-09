@@ -31,7 +31,7 @@ const ClearPage: Component = () => {
           <div class="flex items-center gap-4 pt-2">
             <Button
               onClick={() => handleClear(formatedNamespace())}
-              disabled={isAppBusy() || isLoading() || !expression().trim()}
+              disabled={isLoading() || !expression().trim()}
               variant="destructive"
               class="w-36"
             >
