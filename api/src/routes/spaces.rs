@@ -311,13 +311,13 @@ pub async fn export(
                 message: "Export completed successfully.".to_string(),
             });
             let _ = broadcaster.send(ServerEvent::Success {
-                message: "Export done".to_string(),
+                message: "EXPORT".to_string(),
             });
             data
         }
         Err(e) => {
             let _ = broadcaster.send(ServerEvent::Error {
-                message: format!("{:?}", e),
+                message: "EXPORT".to_string(),
             });
 
             return Err(Custom(e, Json(json!({ "message": "Mork API Error" }))));

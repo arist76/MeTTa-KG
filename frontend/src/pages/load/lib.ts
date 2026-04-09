@@ -41,9 +41,11 @@ export const [subSpace, { refetch: refetchSubSpace, mutate: mutateSubSpace }] =
     }),
     async ({ path, expr, token }) => {
       try {
-        const data = JSON.parse(
-          await exploreSpace(path, expr, token)
-        ) as ExploreResponse[];
+        const response = await exploreSpace(path, expr, token);
+        const data =
+          typeof response === "string"
+            ? (JSON.parse(response) as ExploreResponse[])
+            : (response as unknown as ExploreResponse[]);
         showToast({
           title: "Success",
           description: `Loaded ${data.length} nodes.`,
@@ -61,19 +63,25 @@ export const [subSpace, { refetch: refetchSubSpace, mutate: mutateSubSpace }] =
   );
 
 export const refreshSpace = async () => {
-  // If a command is running, wait for it to finish
-  if (isCommandRunning()) {
-    await new Promise<void>((resolve) => {
-      createRoot((dispose) => {
-        createEffect(() => {
-          if (!isCommandRunning()) {
-            dispose();
-            resolve();
-          }
+  const waitUntilIdle = async () => {
+    if (isCommandRunning()) {
+      await new Promise<void>((resolve) => {
+        createRoot((dispose) => {
+          createEffect(() => {
+            if (!isCommandRunning()) {
+              dispose();
+              resolve();
+            }
+          });
         });
       });
-    });
-  }
+    }
+  };
+
+  await waitUntilIdle();
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  await waitUntilIdle();
+
   mutateSubSpace([]);
   treeStore.reset();
   return refetchSubSpace();

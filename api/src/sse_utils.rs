@@ -15,8 +15,12 @@ impl From<ServerEvent> for Event {
         match event {
             ServerEvent::Started { command } => Event::data(format!("PROCESS_STARTED:{}", command)),
             ServerEvent::Log { message } => Event::data(message),
-            ServerEvent::Success { .. } => Event::data("PROCESS_EXIT_SUCCESS"),
-            ServerEvent::Error { .. } => Event::data("PROCESS_EXIT_ERROR"),
+            ServerEvent::Success { message } => {
+                Event::data(format!("PROCESS_EXIT_SUCCESS:{}", message))
+            }
+            ServerEvent::Error { message } => {
+                Event::data(format!("PROCESS_EXIT_ERROR:{}", message))
+            }
         }
     }
 }
@@ -32,20 +36,24 @@ impl JobRunner {
     {
         let command = command_name.to_string();
         tokio::spawn(async move {
-            let _ = broadcaster.send(ServerEvent::Started { command });
+            let _ = broadcaster.send(ServerEvent::Started {
+                command: command.clone(),
+            });
 
             match task(broadcaster.clone()).await {
                 Ok(msg) => {
                     let _ = broadcaster.send(ServerEvent::Log { message: msg });
                     let _ = broadcaster.send(ServerEvent::Success {
-                        message: "Done".into(),
+                        message: command.clone(),
                     });
                 }
                 Err(err) => {
                     let _ = broadcaster.send(ServerEvent::Log {
                         message: format!("Error: {}", err),
                     });
-                    let _ = broadcaster.send(ServerEvent::Error { message: err });
+                    let _ = broadcaster.send(ServerEvent::Error {
+                        message: command.clone(),
+                    });
                 }
             }
         });
