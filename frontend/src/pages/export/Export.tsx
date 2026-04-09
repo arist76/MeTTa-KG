@@ -32,7 +32,6 @@ import {
   handleExport,
   handleDownload,
   maxWrite,
-  setMaxWrite,
   isInputValid,
   handleInput,
   ExportFormat,
@@ -111,7 +110,7 @@ const ExportPage: Component = () => {
               <TextFieldInput
                 id="max-write"
                 type="number"
-                value={maxWrite() ?? setMaxWrite(15)}
+                value={maxWrite() ?? 15}
                 onInput={handleInput}
                 disabled={isLoading()}
               />
