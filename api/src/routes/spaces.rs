@@ -22,6 +22,7 @@ use crate::mork_api::{
     TransformDetails, TransformRequest, UploadRequest,
 };
 use crate::routes::sse::SseState;
+use crate::scheduler::acquire_write_lock;
 use crate::sse_utils::{JobRunner, ServerEvent};
 
 trait SourceTargetPermissions {
@@ -567,14 +568,7 @@ pub async fn union(
             let path = request_path;
             let write_lock = write_lock;
             async move {
-                let lock_guard = if let Ok(guard) = write_lock.try_lock() {
-                    guard
-                } else {
-                    let _ = tx.send(ServerEvent::Log {
-                        message: "Write queue busy, waiting for turn...".to_string(),
-                    });
-                    write_lock.lock().await
-                };
+                let lock_guard = acquire_write_lock(&write_lock, &tx).await;
 
                 let _ = tx.send(ServerEvent::Log {
                     message: "Starting union operation...".to_string(),
@@ -683,14 +677,7 @@ fn spawn_job<R>(
         command,
         broadcaster,
         move |tx: broadcast::Sender<ServerEvent>| async move {
-            let lock_guard = if let Ok(guard) = write_lock.try_lock() {
-                guard
-            } else {
-                let _ = tx.send(ServerEvent::Log {
-                    message: "Write queue busy, waiting for turn...".to_string(),
-                });
-                write_lock.lock().await
-            };
+            let lock_guard = acquire_write_lock(&write_lock, &tx).await;
 
             mork_api_client
                 .dispatch(request)
