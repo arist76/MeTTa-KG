@@ -109,9 +109,9 @@ const ExportPage: Component = () => {
               <TextFieldInput
                 id="max-write"
                 type="number"
-                value={maxWrite() ?? 15}
+                value={maxWrite() ?? ""}
                 onInput={handleInput}
-                disabled={isLoading()}
+                disabled={!!isLoading() || isAppBusy()}
               />
             </TextField>
           </div>

@@ -17,11 +17,20 @@ export const [result, setResult] = createSignal<string | null>(null);
 export const [exportError, setExportError] = createSignal<Error | null>(null);
 export const [maxWrite, setMaxWrite] = createSignal<number | null>(null);
 
+const normalizeMaxWrite = (val: number | null): number | null => {
+  if (val === null || !Number.isFinite(val)) {
+    return null;
+  }
+
+  return val;
+};
+
 export const handleExport = async (spacePath: string) => {
+  const normalizedMaxWrite = normalizeMaxWrite(maxWrite());
   const exportInput: Mm2Input = {
     pattern: pattern().trim() || "$x",
     template: template().trim() || "$x",
-    max_write: maxWrite(),
+    max_write: normalizedMaxWrite,
     format: format().charAt(0).toUpperCase() + format().slice(1),
   };
 
@@ -61,9 +70,11 @@ export const handleExport = async (spacePath: string) => {
 
 export const handleDownload = async (spacePath: string) => {
   const currentFormat = format();
+  const normalizedMaxWrite = normalizeMaxWrite(maxWrite());
   const exportInput: Mm2Input = {
     pattern: pattern().trim() || "$x",
     template: template().trim() || "$x",
+    max_write: normalizedMaxWrite,
     format: currentFormat.charAt(0).toUpperCase() + currentFormat.slice(1),
   };
 
@@ -73,7 +84,9 @@ export const handleDownload = async (spacePath: string) => {
 
   try {
     const exportResponse = await exportSpace(spacePath, exportInput);
-    const data = exportResponse || "()";
+    const defaultData =
+      currentFormat === "metta" ? "()" : currentFormat === "json" ? "{}" : "";
+    const data = exportResponse || defaultData;
 
     let mimeType = "text/plain";
     if (currentFormat === "json") mimeType = "application/json";
@@ -113,11 +126,21 @@ export const handleDownload = async (spacePath: string) => {
   }
 };
 export const isInputValid = (val: number | null) => {
-  return val !== null && val >= 1;
+  if (val === null) {
+    return true;
+  }
+
+  return Number.isFinite(val) && val >= 1;
 };
 
 export const handleInput = (e: InputEvent) => {
-  const raw = (e.currentTarget as HTMLInputElement).value;
+  const raw = (e.currentTarget as HTMLInputElement).value.trim();
+
+  if (raw === "") {
+    setMaxWrite(null);
+    return;
+  }
+
   const val = Number(raw);
-  setMaxWrite(val);
+  setMaxWrite(Number.isFinite(val) ? val : null);
 };
