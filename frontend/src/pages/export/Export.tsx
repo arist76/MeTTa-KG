@@ -33,9 +33,9 @@ import {
   ExportFormat,
   handleDownload,
   maxWrite,
-  setMaxWrite,
   isInputValid,
   handleInput,
+  activeExportAction,
 } from "./lib";
 
 const ExportPage: Component = () => {
@@ -110,9 +110,9 @@ const ExportPage: Component = () => {
               <TextFieldInput
                 id="max-write"
                 type="number"
-                value={maxWrite() ?? setMaxWrite(15)}
+                value={maxWrite() ?? ""}
                 onInput={handleInput}
-                disabled={isLoading()}
+                disabled={!!isLoading() || isAppBusy()}
               />
             </TextField>
           </div>
@@ -122,7 +122,7 @@ const ExportPage: Component = () => {
           <Button
             onClick={() => handleExport(formatedNamespace())}
             disabled={
-              !!isLoading() ||
+              isAppBusy() ||
               !pattern().trim() ||
               !template().trim() ||
               !isInputValid(maxWrite())
@@ -130,7 +130,7 @@ const ExportPage: Component = () => {
             class="w-36"
           >
             <Show
-              when={isLoading() === "export"}
+              when={isLoading() && activeExportAction() === "export"}
               fallback={
                 <>
                   <Download class="mr-2 h-4 w-4" />
@@ -145,11 +145,11 @@ const ExportPage: Component = () => {
 
           <Button
             onClick={() => handleDownload(formatedNamespace())}
-            disabled={!!isLoading() || !pattern().trim() || !template().trim()}
+            disabled={isAppBusy() || !pattern().trim() || !template().trim()}
             class="w-37"
           >
             <Show
-              when={isLoading() === "download"}
+              when={isLoading() && activeExportAction() === "download"}
               fallback={
                 <>
                   <Download class="mr-2 h-4 w-4" />
