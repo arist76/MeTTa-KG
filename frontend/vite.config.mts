@@ -20,7 +20,7 @@ export default defineConfig({
     //sourcemap: mode === 'development'
   },
   optimizeDeps: {
-    include: ["@codemirror/state", "**/*.module.scss"],
+    include: ["**/*.module.scss"],
   },
   css: {
     modules: {},

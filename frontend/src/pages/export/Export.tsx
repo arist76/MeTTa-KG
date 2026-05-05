@@ -1,7 +1,11 @@
 import { Show, Component } from "solid-js";
 import { Button } from "~/components/ui/Button";
 import { CommandCard } from "~/components/common/CommandCard";
-import { TextField, TextFieldLabel, TextFieldInput } from "~/components/ui/TextField";
+import {
+  TextField,
+  TextFieldLabel,
+  TextFieldInput,
+} from "~/components/ui/TextField";
 import {
   Select,
   SelectContent,
@@ -75,32 +79,32 @@ const ExportPage: Component = () => {
           {/*   /> */}
           {/* </TextField> */}
           <div class="flex items-end gap-4">
-          <div class="flex-grow">
-          <TextField class="space-y-2">
-            <TextFieldLabel for="export-format">Format</TextFieldLabel>
-            <Select<ExportFormat>
-              options={["metta", "json", "csv", "raw"]}
-              value={format()}
-              onChange={setFormat}
-              disabled={isLoading()}
-              placeholder="Select a format"
-              itemComponent={(props) => (
-                <SelectItem item={props.item}>
-                  {props.item.rawValue.toUpperCase()}
-                </SelectItem>
-              )}
-            >
-              <SelectTrigger id="export-format">
-                <SelectValue<string>>
-                  {(state) => state.selectedOption()}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent />
-            </Select>
-          </TextField>
-        </div>
-          <TextField class="space-y-2">
-            <TextFieldLabel for="max-write">Max Records</TextFieldLabel>
+            <div class="flex-grow">
+              <TextField class="space-y-2">
+                <TextFieldLabel for="export-format">Format</TextFieldLabel>
+                <Select<ExportFormat>
+                  options={["metta", "json", "csv", "raw"]}
+                  value={format()}
+                  onChange={setFormat}
+                  disabled={isLoading()}
+                  placeholder="Select a format"
+                  itemComponent={(props) => (
+                    <SelectItem item={props.item}>
+                      {props.item.rawValue.toUpperCase()}
+                    </SelectItem>
+                  )}
+                >
+                  <SelectTrigger id="export-format">
+                    <SelectValue<string>>
+                      {(state) => state.selectedOption()}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent />
+                </Select>
+              </TextField>
+            </div>
+            <TextField class="space-y-2">
+              <TextFieldLabel for="max-write">Max Records</TextFieldLabel>
               <TextFieldInput
                 id="max-write"
                 type="number"
@@ -108,15 +112,19 @@ const ExportPage: Component = () => {
                 onInput={handleInput}
                 disabled={isLoading()}
               />
-          </TextField>
-
+            </TextField>
           </div>
         </div>
 
         <div class="mt-4">
           <Button
             onClick={() => handleExport(formatedNamespace())}
-            disabled={isLoading() || !pattern().trim() || !template().trim() || !isInputValid(maxWrite())}
+            disabled={
+              isLoading() ||
+              !pattern().trim() ||
+              !template().trim() ||
+              !isInputValid(maxWrite())
+            }
             class="w-36"
           >
             <Show

@@ -27,10 +27,10 @@ export const handleExport = async (spacePath: string) => {
 
   try {
     const exportResponse = await exportSpace(spacePath, exportInput);
-    
+
     const defaultResult = exportInput.format === "Metta" ? "()" : "";
     setResult(exportResponse || defaultResult);
-    
+
     showToast({
       title: "Export Complete",
       description: `Exported data with pattern: ${exportInput.pattern}`,
@@ -57,10 +57,10 @@ export const handleExport = async (spacePath: string) => {
 
 export const isInputValid = (val: number | null) => {
   return val !== null && val >= 1;
-  };
+};
 
 export const handleInput = (e: InputEvent) => {
-    const raw = (e.currentTarget as HTMLInputElement).value;
-    const val = Number(raw);
-    setMaxWrite(val);
-  };
+  const raw = (e.currentTarget as HTMLInputElement).value;
+  const val = Number(raw);
+  setMaxWrite(val);
+};

@@ -69,8 +69,8 @@ export function OutputViewer(props: OutputViewerProps): JSX.Element {
       </CardHeader>
       <CardContent>
         <div class="min-h-[120px] max-h-[600px] w-full rounded-md border border-border bg-muted p-4 overflow-auto">
-          <Show 
-            when={typeof Content() !== 'string'}
+          <Show
+            when={typeof Content() !== "string"}
             fallback={
               <pre class="text-sm font-mono whitespace-pre-wrap text-foreground">
                 {Content()}

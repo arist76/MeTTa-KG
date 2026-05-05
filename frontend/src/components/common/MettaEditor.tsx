@@ -1,9 +1,16 @@
-import { Component, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import {
+  Component,
+  Show,
+  createEffect,
+  createSignal,
+  onCleanup,
+  onMount,
+} from "solid-js";
 import { ParseError } from "../../types";
 import { createEditor, type PrismEditor } from "prism-code-editor";
 import "prism-code-editor/layout.css";
 import "prism-code-editor/themes/github-dark.css";
-import "prism-code-editor/languages/clike";
+import "../../syntax/mettaLanguage";
 
 // Component Prop Interfaces
 export interface MettaEditorProps {
@@ -53,7 +60,7 @@ const MettaEditor: Component<MettaEditorProps> = (props) => {
 
     prismEditor = createEditor(editorHostRef, {
       class: "metta-prism-instance",
-      language: "clike",
+      language: "metta",
       value: text(),
       lineNumbers: true,
       wordWrap: false,
@@ -135,14 +142,19 @@ const MettaEditor: Component<MettaEditorProps> = (props) => {
       <h3 class="m-0 mb-3 text-sm font-semibold flex-shrink-0 leading-tight text-foreground">
         {realTimeErrors().length > 0 && (
           <span class="ml-2 text-xs font-normal text-destructive">
-            ({realTimeErrors().filter((e) => e.severity === "error").length} errors,{" "}
-            {realTimeErrors().filter((e) => e.severity === "warning").length} warnings)
+            ({realTimeErrors().filter((e) => e.severity === "error").length}{" "}
+            errors,{" "}
+            {realTimeErrors().filter((e) => e.severity === "warning").length}{" "}
+            warnings)
           </span>
         )}
       </h3>
 
       <div class="relative flex-1 min-h-0 mb-2 border border-border rounded bg-background overflow-hidden transition-all duration-300 ease-linear">
-        <div ref={editorHostRef} class="metta-prism-editor-host h-full w-full" />
+        <div
+          ref={editorHostRef}
+          class="metta-prism-editor-host h-full w-full"
+        />
       </div>
 
       <Show when={props.showActionButtons ?? true}>
