@@ -2,30 +2,40 @@ import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { exportSpace } from "~/lib/api";
 import { Mm2Input } from "~/lib/types";
-import { isAnyCommandActive } from "~/lib/sse";
+import { isAnyCommandActive, isCommandActive } from "~/lib/sse";
 
 export type ExportFormat = "metta" | "json" | "csv" | "raw";
 export const [uri, setUri] = createSignal("");
-export const [isLoading, setIsLoading] = createSignal<
+export const [activeExportAction, setActiveExportAction] = createSignal<
   false | "export" | "download"
 >(false);
 export const [format, setFormat] = createSignal<ExportFormat>("metta");
+export const isLoading = () => isCommandActive("EXPORT");
 export const isAppBusy = isAnyCommandActive;
 export const [pattern, setPattern] = createSignal("$x\n\n\n");
 export const [template, setTemplate] = createSignal("$x\n\n\n");
 export const [result, setResult] = createSignal<string | null>(null);
 export const [exportError, setExportError] = createSignal<Error | null>(null);
-export const [maxWrite, setMaxWrite] = createSignal<number | null>(null);
+export const [maxWrite, setMaxWrite] = createSignal<number | null>(15);
+
+const normalizeMaxWrite = (val: number | null): number | null => {
+  if (val === null || !Number.isFinite(val)) {
+    return null;
+  }
+
+  return val;
+};
 
 export const handleExport = async (spacePath: string) => {
+  const normalizedMaxWrite = normalizeMaxWrite(maxWrite());
   const exportInput: Mm2Input = {
     pattern: pattern().trim() || "$x",
     template: template().trim() || "$x",
-    max_write: maxWrite(),
+    max_write: normalizedMaxWrite,
     format: format().charAt(0).toUpperCase() + format().slice(1),
   };
 
-  setIsLoading("export");
+  setActiveExportAction("export");
   setResult(null);
   setExportError(null);
 
@@ -54,24 +64,30 @@ export const handleExport = async (spacePath: string) => {
       description: errorMessage,
       variant: "destructive",
     });
+  } finally {
+    setActiveExportAction(false);
   }
 };
 
 export const handleDownload = async (spacePath: string) => {
   const currentFormat = format();
+  const normalizedMaxWrite = normalizeMaxWrite(maxWrite());
   const exportInput: Mm2Input = {
     pattern: pattern().trim() || "$x",
     template: template().trim() || "$x",
+    max_write: normalizedMaxWrite,
     format: currentFormat.charAt(0).toUpperCase() + currentFormat.slice(1),
   };
 
-  setIsLoading("download");
+  setActiveExportAction("download");
   setResult(null);
   setExportError(null);
 
   try {
     const exportResponse = await exportSpace(spacePath, exportInput);
-    const data = exportResponse || "()";
+    const defaultData =
+      currentFormat === "metta" ? "()" : currentFormat === "json" ? "{}" : "";
+    const data = exportResponse || defaultData;
 
     let mimeType = "text/plain";
     if (currentFormat === "json") mimeType = "application/json";
@@ -107,15 +123,25 @@ export const handleDownload = async (spacePath: string) => {
       variant: "destructive",
     });
   } finally {
-    setIsLoading(false);
+    setActiveExportAction(false);
   }
 };
 export const isInputValid = (val: number | null) => {
-  return val !== null && val >= 1;
+  if (val === null) {
+    return true;
+  }
+
+  return Number.isFinite(val) && val >= 1;
 };
 
 export const handleInput = (e: InputEvent) => {
-  const raw = (e.currentTarget as HTMLInputElement).value;
+  const raw = (e.currentTarget as HTMLInputElement).value.trim();
+
+  if (raw === "") {
+    setMaxWrite(null);
+    return;
+  }
+
   const val = Number(raw);
-  setMaxWrite(val);
+  setMaxWrite(Number.isFinite(val) ? val : null);
 };

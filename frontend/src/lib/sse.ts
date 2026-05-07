@@ -24,6 +24,8 @@ export const isAnyCommandActive = () => activeCommand() !== null;
 export const isCommandRunning = isAnyCommandActive;
 
 let eventSource: EventSource | null = null;
+let lastErrorToastAt = 0;
+let commandResetTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export const initSSE = () => {
   if (
@@ -42,12 +44,12 @@ export const initSSE = () => {
   const eventsUrl = new URL("/events", API_URL).toString();
   eventSource = new EventSource(eventsUrl);
 
-  eventSource.onopen = () => {
-    console.log("SSE Connection Opened");
-  };
-
   eventSource.onmessage = (event) => {
-    console.log("SSE Message Received:", event.data);
+    if (commandResetTimeout) {
+      clearTimeout(commandResetTimeout);
+      commandResetTimeout = null;
+    }
+
     const data = event.data;
 
     if (data.startsWith("PROCESS_STARTED")) {
@@ -94,13 +96,38 @@ export const initSSE = () => {
     });
   };
 
-  eventSource.onerror = (err) => {
-    showToast({
-      title: "Error",
-      description: `Error in SSE connection, attempting to reconnect...`,
-      variant: "destructive",
-    });
-    console.error("SSE Error:", err);
+  eventSource.onerror = () => {
+    const now = Date.now();
+    if (now - lastErrorToastAt > 10000) {
+      lastErrorToastAt = now;
+      showToast({
+        title: "Error",
+        description: `Error in SSE connection, attempting to reconnect...`,
+        variant: "destructive",
+      });
+    }
+
+    if (eventSource?.readyState === EventSource.CLOSED) {
+      if (commandResetTimeout) {
+        clearTimeout(commandResetTimeout);
+        commandResetTimeout = null;
+      }
+      if (activeCommand()) {
+        setActiveCommand(null);
+        setCommandProgress(0);
+      }
+      return;
+    }
+
+    if (activeCommand() && !commandResetTimeout) {
+      commandResetTimeout = setTimeout(() => {
+        if (activeCommand()) {
+          setActiveCommand(null);
+          setCommandProgress(0);
+        }
+        commandResetTimeout = null;
+      }, 15000);
+    }
     // EventSource will attempt to reconnect automatically
   };
 };

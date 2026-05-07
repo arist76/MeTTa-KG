@@ -94,6 +94,12 @@ pub struct ExploreInput {
     pub token: String,
 }
 
+#[derive(Serialize)]
+struct ExploreFallbackItem {
+    token: Vec<u64>,
+    expr: String,
+}
+
 #[derive(Default, Serialize, Deserialize, Clone)]
 pub struct SetOperationInput {
     pub source: Vec<String>,
@@ -231,13 +237,28 @@ pub async fn explore(
     }
 
     let mork_api_client = MorkApiClient::new();
+    let namespace_path = path.clone();
     let request = ExploreRequest::new()
         .namespace(path)
         .pattern(explore_input.pattern.clone())
         .token(explore_input.token.clone());
 
-    let response = mork_api_client.dispatch(request).await.map(Json);
-    response
+    let response_text = mork_api_client.dispatch(request).await?;
+
+    // Performs fallback to read if explore returns empty result and no token was provided
+    if explore_input.token.is_empty() && is_empty_explore_response(&response_text) {
+        if let Some(fallback) = fallback_explore_via_read(
+            &mork_api_client,
+            explore_input.pattern.clone(),
+            namespace_path,
+        )
+        .await
+        {
+            return Ok(fallback);
+        }
+    }
+
+    Ok(Json(response_text))
 }
 
 /// Performs an export operation on the `<path..>` space. Get the result that
@@ -298,9 +319,6 @@ pub async fn export(
             let _ = broadcaster.send(ServerEvent::Log {
                 message: "Export completed successfully.".to_string(),
             });
-            let _ = broadcaster.send(ServerEvent::Success {
-                message: "Export done".to_string(),
-            });
             data
         }
         Err(e) => {
@@ -312,25 +330,41 @@ pub async fn export(
         }
     };
 
-    match requested_format {
+    let emit_incompatible_sse = |message: String| {
+        let _ = broadcaster.send(ServerEvent::Error { message });
+    };
+
+    let response = match requested_format {
         ExportFormat::Json => translations::convert_metta_to_json(mork_response)
             .map(Json)
             .map_err(|e| {
+                let message = format!("Incompatible metta file: {}", e);
+                emit_incompatible_sse(message.clone());
                 Custom(
                     Status::UnprocessableEntity,
-                    Json(json!({ "message": format!("Incompatible metta file: {}", e) })),
+                    Json(json!({ "message": message })),
                 )
             }),
         ExportFormat::Csv => translations::convert_metta_to_csv(mork_response)
             .map(Json)
             .map_err(|e| {
+                let message = format!("Incompatible metta file: {}", e);
+                emit_incompatible_sse(message.clone());
                 Custom(
                     Status::UnprocessableEntity,
-                    Json(json!({ "message": format!("Incompatible metta file: {}", e) })),
+                    Json(json!({ "message": message })),
                 )
             }),
         _ => Ok(Json(mork_response)),
+    };
+
+    if response.is_ok() {
+        let _ = broadcaster.send(ServerEvent::Success {
+            message: "Export done".to_string(),
+        });
     }
+
+    response
 }
 
 #[post("/spaces/clear/<path..>?<expr>")]
@@ -712,6 +746,54 @@ fn union_transform(input: SetOperationInput) -> Result<Vec<TransformDetails>, St
     }
 
     Ok(union_query)
+}
+
+async fn fallback_explore_via_read(
+    client: &MorkApiClient,
+    pattern: String,
+    namespace_path: PathBuf,
+) -> Option<Json<String>> {
+    let transform_input = TransformDetails::new()
+        .patterns(vec![Mm2Cell::new_pattern(
+            pattern.clone(),
+            Namespace::from(namespace_path.clone()),
+        )])
+        .templates(vec![Mm2Cell::new_template(
+            "$x".to_string(),
+            Namespace::from(namespace_path),
+        )]);
+
+    let read_request = ReadRequest::new().transform_input(transform_input);
+
+    let raw_text = client.dispatch(read_request).await.ok()?;
+
+    let exprs: Vec<String> = raw_text
+        .lines()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty())
+        .map(String::from)
+        .collect();
+
+    if exprs.is_empty() {
+        return None;
+    }
+
+    let fallback: Vec<ExploreFallbackItem> = exprs
+        .into_iter()
+        .enumerate()
+        .map(|(index, expr)| ExploreFallbackItem {
+            token: vec![(index + 1) as u64],
+            expr,
+        })
+        .collect();
+
+    let json = json::serde_json::to_string(&fallback).ok()?;
+    Some(Json(json))
+}
+
+fn is_empty_explore_response(response_text: &str) -> bool {
+    let trimmed = response_text.trim();
+    trimmed.is_empty() || trimmed == "[]" || trimmed == "null"
 }
 
 // unit tests

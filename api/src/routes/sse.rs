@@ -16,9 +16,12 @@ pub fn stream(state: &State<SseState>) -> EventStream<impl rocket::futures::Stre
     let rx = state.broadcaster.subscribe();
 
     let stream = futures_stream::unfold(rx, |mut rx| async move {
-        match rx.recv().await {
-            Ok(msg) => Some((Event::from(msg), rx)),
-            Err(_) => None,
+        loop {
+            match rx.recv().await {
+                Ok(msg) => break Some((Event::from(msg), rx)),
+                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(broadcast::error::RecvError::Closed) => break None,
+            }
         }
     });
 
