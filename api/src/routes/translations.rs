@@ -45,11 +45,18 @@ pub struct JSONLDParserParameters {
 }
 
 #[derive(FromForm, Clone)]
+pub struct JSONParserParameters {
+    #[allow(dead_code)]
+    pub dummy: Option<String>,
+}
+
+#[derive(FromForm, Clone)]
 pub struct ParserParameters {
     csv_parameters: Option<CSVParserParameters>,
     nt_parameters: Option<NTParserParameters>,
     jsonld_parameters: Option<JSONLDParserParameters>,
     n3_parameters: Option<N3ParserParameters>,
+    json_parameters: Option<JSONParserParameters>,
 }
 
 pub async fn create(
@@ -71,6 +78,7 @@ pub async fn create(
             nt_parameters: None,
             jsonld_parameters: None,
             n3_parameters: None,
+            json_parameters: None,
         } => {
             let direction = (parameters.direction as u8).to_string();
             let delimiter = parameters.delimiter;
@@ -87,6 +95,7 @@ pub async fn create(
             nt_parameters: Some(_parameters),
             jsonld_parameters: None,
             n3_parameters: None,
+            json_parameters: None,
         } => Command::new("./venv/bin/python")
             .arg("translations/src/nt_to_metta_run.py")
             .arg(&path)
@@ -96,6 +105,7 @@ pub async fn create(
             nt_parameters: None,
             jsonld_parameters: Some(_parameters),
             n3_parameters: None,
+            json_parameters: None,
         } => Command::new("./venv/bin/python")
             .arg("translations/src/jsonld_to_metta_run.py")
             .arg(&path)
@@ -105,8 +115,19 @@ pub async fn create(
             nt_parameters: None,
             jsonld_parameters: None,
             n3_parameters: Some(_parameters),
+            json_parameters: None,
         } => Command::new("./venv/bin/python")
             .arg("translations/src/n3_to_metta_run.py")
+            .arg(&path)
+            .status(),
+        ParserParameters {
+            csv_parameters: None,
+            nt_parameters: None,
+            jsonld_parameters: None,
+            n3_parameters: None,
+            json_parameters: Some(_parameters),
+        } => Command::new("./venv/bin/python")
+            .arg("translations/src/json_to_metta_run.py")
             .arg(&path)
             .status(),
         _ => {
@@ -143,6 +164,7 @@ pub async fn create_from_csv(
             nt_parameters: None,
             jsonld_parameters: None,
             n3_parameters: None,
+            json_parameters: None,
         },
     )
     .await
@@ -162,6 +184,7 @@ pub async fn create_from_nt(
             nt_parameters: Some(parse_parameters),
             jsonld_parameters: None,
             n3_parameters: None,
+            json_parameters: None,
         },
     )
     .await
@@ -181,6 +204,7 @@ pub async fn create_from_jsonld(
             nt_parameters: None,
             jsonld_parameters: Some(parse_parameters),
             n3_parameters: None,
+            json_parameters: None,
         },
     )
     .await
@@ -200,6 +224,27 @@ pub async fn create_from_n3(
             nt_parameters: None,
             jsonld_parameters: None,
             n3_parameters: Some(parse_parameters),
+            json_parameters: None,
+        },
+    )
+    .await
+    .map(Json)
+}
+
+#[post("/translations/json?<parse_parameters..>", data = "<file>")]
+pub async fn create_from_json(
+    file: TempFile<'_>,
+    parse_parameters: JSONParserParameters,
+) -> Result<Json<String>, Status> {
+    create(
+        "json",
+        file,
+        ParserParameters {
+            csv_parameters: None,
+            nt_parameters: None,
+            jsonld_parameters: None,
+            n3_parameters: None,
+            json_parameters: Some(parse_parameters),
         },
     )
     .await

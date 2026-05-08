@@ -126,6 +126,7 @@ export const handleDownload = async (spacePath: string) => {
     setActiveExportAction(false);
   }
 };
+
 export const isInputValid = (val: number | null) => {
   if (val === null) {
     return true;
