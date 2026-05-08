@@ -3,14 +3,6 @@ import { clsx } from "clsx";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 
-type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue };
-
 interface JsonVisualizerProps {
   data: JsonValue;
   depth?: number;
