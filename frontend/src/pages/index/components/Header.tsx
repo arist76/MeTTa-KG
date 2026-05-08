@@ -1,4 +1,5 @@
 import NameSpace from "./NameSpace";
+import NamespaceTabs from "~/pages/index/components/NamespaceTabs";
 import { getAllTokens } from "~/lib/api";
 import {
   rootToken,
@@ -10,38 +11,51 @@ import {
 export default function Header() {
   return (
     <>
-      {/* Header */}
-      <header class="h-16 bg-neutral-800 border-b border-neutral-700 flex items-center justify-between px-6">
-        <NameSpace
-          namespace={namespace()}
-          setNamespace={setNamespace}
-          rootToken={rootToken()}
-          tokenRootNamespace={tokenRootNamespace}
-          getAllTokens={getAllTokens}
-        />
-        <div class="flex items-center gap-4">
+      {/* Header with Namespace Breadcrumb */}
+      <header class="bg-card border-b border-border flex items-center justify-between px-4 py-3">
+        <div class="flex items-center">
+          <NameSpace
+            namespace={namespace()}
+            setNamespace={setNamespace}
+            rootToken={rootToken() ? true : false}
+            tokenRootNamespace={tokenRootNamespace}
+            getAllTokens={getAllTokens}
+          />
+        </div>
+
+        {/* Links Section */}
+        <div class="flex items-center gap-4 px-6 flex-shrink-0">
           <a
             href="https://github.com/trueagi-io/MORK"
-            class="uppercase text-neutral-400 hover:text-primary hover:underline"
+            class="uppercase text-muted-foreground hover:text-primary hover:underline text-sm transition-colors"
+            target="_blank"
+            rel="noopener noreferrer"
           >
             MORK
           </a>
           <span class="text-primary">·</span>
           <a
             href="https://github.com/trueagi-io/MORK/wiki"
-            class="uppercase text-neutral-400 hover:text-primary hover:underline"
+            class="uppercase text-muted-foreground hover:text-primary hover:underline text-sm transition-colors"
+            target="_blank"
+            rel="noopener noreferrer"
           >
             DOCS
           </a>
           <span class="text-primary">·</span>
           <a
             href="https://chat.singularitynet.io/chat/channels/mork"
-            class="uppercase text-neutral-400 hover:text-primary hover:underline"
+            class="uppercase text-muted-foreground hover:text-primary hover:underline text-sm transition-colors"
+            target="_blank"
+            rel="noopener noreferrer"
           >
             COMMUNITY
           </a>
         </div>
       </header>
+
+      {/* Tabs */}
+      <NamespaceTabs />
     </>
   );
 }

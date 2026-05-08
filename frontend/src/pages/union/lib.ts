@@ -1,26 +1,23 @@
 import { createSignal } from "solid-js";
-import { union, isPathClear } from "~/lib/api";
+import { union } from "~/lib/api";
 import { showToast } from "~/components/ui/Toast";
+import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
+import { refreshSpace } from "../load/lib";
 
-export const [isLoading, setIsLoading] = createSignal(false);
+export const isLoading = () => isCommandActive("UNION");
+export const isAppBusy = isAnyCommandActive;
 export const [isPolling, setIsPolling] = createSignal(false);
 
 export type setOperationInput = {
   pattern: string[];
   template: string[];
 };
-let pollingIntervalId: NodeJS.Timeout | null = null;
 
 export const stopPolling = () => {
-  if (pollingIntervalId) clearInterval(pollingIntervalId);
-  pollingIntervalId = null;
   setIsPolling(false);
 };
 
-export const executeUnion = async (
-  unionQuery: setOperationInput,
-  spacePath: string
-) => {
+export const executeUnion = async (unionQuery: setOperationInput) => {
   if (unionQuery.pattern.length < 1) {
     showToast({
       title: "Error",
@@ -39,39 +36,15 @@ export const executeUnion = async (
     return;
   }
 
-  setIsLoading(true);
-  stopPolling();
   try {
-    if (!(await isPathClear(spacePath))) {
-      showToast({
-        title: "Space Busy",
-        description: "The space is currently busy. Please wait.",
-        variant: "destructive",
-      });
-      setIsLoading(false);
-      return;
-    }
-
     showToast({
       title: "Unification Initiated",
       description: "Waiting for results...",
     });
 
-    const success = await union(unionQuery);
+    await union(unionQuery);
 
-    setIsLoading(false);
-    if (success) {
-      showToast({
-        title: "Unification Complete",
-        description: "Operation completed successfully!",
-      });
-    } else {
-      showToast({
-        title: "Unification Failed",
-        description: "Could not initiate the unification.",
-        variant: "destructive",
-      });
-    }
+    refreshSpace();
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "An unexpected error occurred.";
@@ -80,7 +53,5 @@ export const executeUnion = async (
       description: errorMessage,
       variant: "destructive",
     });
-  } finally {
-    setIsLoading(false);
   }
 };

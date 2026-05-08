@@ -22,6 +22,7 @@ import {
   format,
   setFormat,
   isLoading,
+  isAppBusy,
   pattern,
   setPattern,
   template,
@@ -30,10 +31,11 @@ import {
   exportError,
   handleExport,
   ExportFormat,
+  handleDownload,
   maxWrite,
-  setMaxWrite,
   isInputValid,
   handleInput,
+  activeExportAction,
 } from "./lib";
 
 const ExportPage: Component = () => {
@@ -86,7 +88,7 @@ const ExportPage: Component = () => {
                   options={["metta", "json", "csv", "raw"]}
                   value={format()}
                   onChange={setFormat}
-                  disabled={isLoading()}
+                  disabled={!!isLoading() || isAppBusy()}
                   placeholder="Select a format"
                   itemComponent={(props) => (
                     <SelectItem item={props.item}>
@@ -108,19 +110,20 @@ const ExportPage: Component = () => {
               <TextFieldInput
                 id="max-write"
                 type="number"
-                value={maxWrite() ?? setMaxWrite(15)}
+                value={maxWrite() ?? ""}
                 onInput={handleInput}
-                disabled={isLoading()}
+                disabled={!!isLoading() || isAppBusy()}
               />
             </TextField>
           </div>
         </div>
 
-        <div class="mt-4">
+        <div class="mt-4 flex justify-between items-center">
           <Button
             onClick={() => handleExport(formatedNamespace())}
             disabled={
-              isLoading() ||
+              !!isLoading() ||
+              isAppBusy() ||
               !pattern().trim() ||
               !template().trim() ||
               !isInputValid(maxWrite())
@@ -128,11 +131,30 @@ const ExportPage: Component = () => {
             class="w-36"
           >
             <Show
-              when={isLoading()}
+              when={isLoading() && activeExportAction() === "export"}
               fallback={
                 <>
                   <Download class="mr-2 h-4 w-4" />
                   Export Data
+                </>
+              }
+            >
+              <Loader2 class="mr-2 h-4 w-4 animate-spin" />
+              Exporting...
+            </Show>
+          </Button>
+
+          <Button
+            onClick={() => handleDownload(formatedNamespace())}
+            disabled={isAppBusy() || !pattern().trim() || !template().trim()}
+            class="w-37"
+          >
+            <Show
+              when={isLoading() && activeExportAction() === "download"}
+              fallback={
+                <>
+                  <Download class="mr-2 h-4 w-4" />
+                  Export to File
                 </>
               }
             >

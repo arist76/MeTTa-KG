@@ -6,16 +6,21 @@ use url::Url;
 
 use rocket::response::status::Custom;
 use rocket::serde::json;
-use rocket::{get, post, Data};
+use rocket::serde::json::serde_json;
+use rocket::serde::json::serde_json::json;
+use rocket::{get, post, Data, State};
 use std::path::PathBuf;
+use tokio::sync::broadcast;
 use tokio::time::{sleep, Duration, Instant};
 
 use crate::model::Token;
 use crate::mork_api::{
     ClearRequest, ExploreRequest, ExportFormat, ExportRequest, ImportRequest, Mm2Cell,
-    MorkApiClient, Namespace, ReadRequest, StatusRequest, StatusResponse, TransformDetails,
-    TransformRequest, UploadRequest,
+    MorkApiClient, Namespace, ReadRequest, Request, StatusRequest, StatusResponse,
+    TransformDetails, TransformRequest, UploadRequest,
 };
+use crate::routes::sse::SseState;
+use crate::sse_utils::{JobRunner, ServerEvent};
 
 trait SourceTargetPermissions {
     type Ns: ToString + Clone;
@@ -79,12 +84,20 @@ impl SourceTargetPermissions for Mm2InputMultiWithNamespace {
 pub struct Mm2Input {
     pub pattern: String,
     pub template: String,
+    pub max_write: Option<usize>,
+    pub format: Option<ExportFormat>,
 }
 
 #[derive(Default, Serialize, Deserialize, Clone)]
 pub struct ExploreInput {
     pub pattern: String,
     pub token: String,
+}
+
+#[derive(Serialize)]
+struct ExploreFallbackItem {
+    token: Vec<u64>,
+    expr: String,
 }
 
 #[derive(Default, Serialize, Deserialize, Clone)]
@@ -143,7 +156,8 @@ pub async fn upload(
     token: Token,
     path: PathBuf,
     data: Data<'_>,
-) -> Result<Json<String>, Custom<String>> {
+    state: &State<SseState>,
+) -> Result<Json<bool>, Custom<String>> {
     let token_namespace = token.namespace.strip_prefix("/").unwrap();
     if !path.starts_with(token_namespace) || !token.permission_write {
         return Err(Custom(Status::Unauthorized, "Unauthorized".to_string()));
@@ -166,23 +180,25 @@ pub async fn upload(
 
     let mork_api_client = MorkApiClient::new();
     let request = UploadRequest::new()
-        .namespace(path)
+        .namespace(path.clone())
         .pattern(pattern.to_string())
         .template(template.to_string())
         .data(body);
 
-    match mork_api_client.dispatch(request).await {
-        Ok(text) => Ok(Json(text)),
-        Err(e) => Err(Custom(
-            Status::InternalServerError,
-            format!("Failed to contact backend: {e}"),
-        )),
-    }
+    let broadcaster = state.broadcaster.clone();
+    spawn_job("UPLOAD", broadcaster, mork_api_client, request, path);
+
+    Ok(Json(true))
 }
 
 /// Imports data from `<uri>` into the `<path..>` space. Exectes mm2 on the imported data.
 #[post("/spaces/import/<path..>?<uri>")]
-pub async fn import(token: Token, path: PathBuf, uri: String) -> Result<Json<bool>, Status> {
+pub async fn import(
+    token: Token,
+    path: PathBuf,
+    uri: String,
+    state: &State<SseState>,
+) -> Result<Json<bool>, Status> {
     if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_write {
         return Err(Status::Unauthorized);
     }
@@ -193,13 +209,19 @@ pub async fn import(token: Token, path: PathBuf, uri: String) -> Result<Json<boo
     }
 
     let mork_api_client = MorkApiClient::new();
-    let template = Mm2Cell::new_template("$x".to_string(), Namespace::from(path));
+    let template = Mm2Cell::new_template("$x".to_string(), Namespace::from(path.clone()));
     let request = ImportRequest::new().to(template).uri(uri);
 
-    match mork_api_client.dispatch(request).await {
-        Ok(_) => Ok(Json(true)),
-        Err(e) => Err(e),
-    }
+    let broadcaster = state.broadcaster.clone();
+    spawn_job(
+        "IMPORT",
+        broadcaster,
+        mork_api_client,
+        request,
+        path.clone(),
+    );
+
+    Ok(Json(true))
 }
 
 /// Performs an explore operation on the `<path..>` space. Get the result that
@@ -215,54 +237,155 @@ pub async fn explore(
     }
 
     let mork_api_client = MorkApiClient::new();
+    let namespace_path = path.clone();
     let request = ExploreRequest::new()
         .namespace(path)
         .pattern(explore_input.pattern.clone())
         .token(explore_input.token.clone());
 
-    let response = mork_api_client.dispatch(request).await.map(Json);
-    response
+    let response_text = mork_api_client.dispatch(request).await?;
+
+    // Performs fallback to read if explore returns empty result and no token was provided
+    if explore_input.token.is_empty() && is_empty_explore_response(&response_text) {
+        if let Some(fallback) = fallback_explore_via_read(
+            &mork_api_client,
+            explore_input.pattern.clone(),
+            namespace_path,
+        )
+        .await
+        {
+            return Ok(fallback);
+        }
+    }
+
+    Ok(Json(response_text))
 }
 
 /// Performs an export operation on the `<path..>` space. Get the result that
 /// matches the `<pattern>` by incrementally traversing the resulting space.
+use crate::routes::translations;
 #[post("/spaces/export/<path..>", data = "<export_input>")]
 pub async fn export(
     token: Token,
     path: PathBuf,
     export_input: Json<Mm2Input>,
-) -> Result<Json<String>, Status> {
+    state: &State<SseState>,
+) -> Result<Json<String>, Custom<Json<serde_json::Value>>> {
     if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_read {
-        return Err(Status::Unauthorized);
+        return Err(Custom(
+            Status::Unauthorized,
+            Json(json!({ "message": "Unauthorized" })),
+        ));
     }
+
+    let requested_format = export_input.format.clone().unwrap_or(ExportFormat::Metta);
 
     let mork_api_client = MorkApiClient::new();
     let request = ExportRequest::new()
         .namespace(path)
         .pattern(export_input.pattern.clone())
         .template(export_input.template.clone())
-        .format(ExportFormat::Metta);
+        .format(ExportFormat::Metta)
+        .max_write(export_input.max_write);
 
-    match mork_api_client.dispatch(request).await {
-        Ok(data) => Ok(Json(data)),
-        Err(e) => Err(e),
+    let broadcaster = state.broadcaster.clone();
+
+    let _ = broadcaster.send(ServerEvent::Started {
+        command: "EXPORT".to_string(),
+    });
+
+    let _ = broadcaster.send(ServerEvent::Log {
+        message: "Starting export operation...".to_string(),
+    });
+
+    let dispatch_future = mork_api_client.dispatch(request);
+    tokio::pin!(dispatch_future);
+
+    let mut interval = tokio::time::interval(Duration::from_secs(1));
+
+    let result = loop {
+        tokio::select! {
+            res = &mut dispatch_future => break res,
+            _ = interval.tick() => {
+                let _ = broadcaster.send(ServerEvent::Log {
+                    message: "Exporting...".to_string()
+                });
+            }
+        }
+    };
+
+    let mork_response = match result {
+        Ok(data) => {
+            let _ = broadcaster.send(ServerEvent::Log {
+                message: "Export completed successfully.".to_string(),
+            });
+            data
+        }
+        Err(e) => {
+            let _ = broadcaster.send(ServerEvent::Error {
+                message: format!("{:?}", e),
+            });
+
+            return Err(Custom(e, Json(json!({ "message": "Mork API Error" }))));
+        }
+    };
+
+    let emit_incompatible_sse = |message: String| {
+        let _ = broadcaster.send(ServerEvent::Error { message });
+    };
+
+    let response = match requested_format {
+        ExportFormat::Json => translations::convert_metta_to_json(mork_response)
+            .map(Json)
+            .map_err(|e| {
+                let message = format!("Incompatible metta file: {}", e);
+                emit_incompatible_sse(message.clone());
+                Custom(
+                    Status::UnprocessableEntity,
+                    Json(json!({ "message": message })),
+                )
+            }),
+        ExportFormat::Csv => translations::convert_metta_to_csv(mork_response)
+            .map(Json)
+            .map_err(|e| {
+                let message = format!("Incompatible metta file: {}", e);
+                emit_incompatible_sse(message.clone());
+                Custom(
+                    Status::UnprocessableEntity,
+                    Json(json!({ "message": message })),
+                )
+            }),
+        _ => Ok(Json(mork_response)),
+    };
+
+    if response.is_ok() {
+        let _ = broadcaster.send(ServerEvent::Success {
+            message: "Export done".to_string(),
+        });
     }
+
+    response
 }
 
 #[post("/spaces/clear/<path..>?<expr>")]
-pub async fn clear(token: Token, path: PathBuf, expr: String) -> Result<Json<bool>, Status> {
+pub async fn clear(
+    token: Token,
+    path: PathBuf,
+    expr: String,
+    state: &State<SseState>,
+) -> Result<Json<bool>, Status> {
     let token_namespace = token.namespace.strip_prefix("/").unwrap();
     if !path.starts_with(token_namespace) || !token.permission_write {
         return Err(Status::Unauthorized);
     }
 
     let mork_api_client = MorkApiClient::new();
-    let request = ClearRequest::new().namespace(path).expr(expr);
+    let request = ClearRequest::new().namespace(path.clone()).expr(expr);
 
-    match mork_api_client.dispatch(request).await {
-        Ok(_) => Ok(Json(true)),
-        Err(e) => Err(e),
-    }
+    let broadcaster = state.broadcaster.clone();
+    spawn_job("CLEAR", broadcaster, mork_api_client, request, path.clone());
+
+    Ok(Json(true))
 }
 
 /// Performs a transformation operation on the `<path..>` space
@@ -270,6 +393,7 @@ pub async fn clear(token: Token, path: PathBuf, expr: String) -> Result<Json<boo
 pub async fn transform(
     token: Token,
     mm2: Json<Mm2InputMultiWithNamespace>,
+    state: &State<SseState>,
 ) -> Result<Json<bool>, Status> {
     let mm2 = mm2.into_inner();
     if !mm2.clone().source_target_permissions(token) {
@@ -280,14 +404,24 @@ pub async fn transform(
     let request = TransformRequest::new().transform_input(
         TransformDetails::new()
             .patterns(mm2.clone().patterns)
-            .templates(mm2.templates),
+            .templates(mm2.templates.clone()),
     );
 
-    // TODO: use server sent events instead
-    match mork_api_client.dispatch(request).await {
-        Ok(_) => Ok(Json(true)),
-        Err(e) => Err(e),
-    }
+    let broadcaster = state.broadcaster.clone();
+    // We need a target path to poll. In transform, templates define the target.
+    // Assuming the first template's namespace is the target for polling.
+    let request_path = match mm2.templates.first() {
+        Some(t) => t.namespace().clone(),
+        None => return Err(Status::BadRequest),
+    };
+
+    // poll status endpoint
+    // Convert Namespace to PathBuf for polling
+    let path_buf = PathBuf::from(request_path.to_string());
+
+    spawn_job("TRANSFORM", broadcaster, mork_api_client, request, path_buf);
+
+    Ok(Json(true))
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -309,26 +443,86 @@ pub async fn transform(
 pub async fn composition(
     token: Token,
     operation_input: Json<SetOperationInput>,
+    state: &State<SseState>,
 ) -> Result<Json<bool>, Status> {
     if !operation_input.source_target_permissions(token) {
         return Err(Status::Unauthorized);
     }
 
-    let transform_input = composition_transform(operation_input.into_inner())?;
+    let input = operation_input.into_inner();
+    let transform_input = composition_transform(input.clone())?;
 
     let request = TransformRequest::new().transform_input(transform_input.clone());
     let mork_api_client = MorkApiClient::new();
+    let broadcaster = state.broadcaster.clone();
 
-    match mork_api_client.dispatch(request).await {
-        Ok(_) => Ok(Json(true)),
-        Err(e) => Err(e),
+    // Target path for polling is the first target in the input
+    let request_path = match input.target.first() {
+        Some(t) => PathBuf::from(t),
+        None => return Err(Status::BadRequest),
+    };
+
+    spawn_job(
+        "COMPOSITION",
+        broadcaster,
+        mork_api_client,
+        request,
+        request_path,
+    );
+
+    Ok(Json(true))
+}
+
+/// Performs an intersection operation on provided namespaces. `token` must have `permission_write`
+/// on the target namespace and `permission_read` on all source namespaces.
+/// Intersection is implemented as a positive join on a shared variable across all sources.
+/// # Intersection Transformation (conceptual)
+/// ```lisp
+/// (transform
+///     (, (namespace1 $x) (namespace2 $x) ...)  ; all sources share the same variable $x
+///     (, (target $x))
+/// )
+/// ```
+#[post("/spaces/intersection", data = "<operation_input>")]
+pub async fn intersection(
+    token: Token,
+    operation_input: Json<SetOperationInput>,
+    state: &State<SseState>,
+) -> Result<Json<bool>, Status> {
+    // check `permission read` for all sources
+    if !operation_input.source_target_permissions(token) {
+        return Err(Status::Unauthorized);
     }
+
+    let input = operation_input.into_inner();
+    let transform_input = intersection_transform(input.clone())?;
+
+    let request = TransformRequest::new().transform_input(transform_input);
+    let mork_api_client = MorkApiClient::new();
+    let broadcaster = state.broadcaster.clone();
+
+    // Target path for polling is the first target in the input
+    let request_path = match input.target.first() {
+        Some(t) => PathBuf::from(t),
+        None => return Err(Status::BadRequest),
+    };
+
+    spawn_job(
+        "INTERSECTION",
+        broadcaster,
+        mork_api_client,
+        request,
+        request_path,
+    );
+
+    Ok(Json(true))
 }
 
 #[post("/spaces/union", data = "<operation_input>")]
 pub async fn union(
     token: Token,
     operation_input: Json<SetOperationInput>,
+    state: &State<SseState>,
 ) -> Result<Json<bool>, Status> {
     if !operation_input.source_target_permissions(token) {
         return Err(Status::Unauthorized);
@@ -336,25 +530,46 @@ pub async fn union(
 
     // path to be used for polling
     let request_path = match operation_input.clone().into_inner().target.first() {
-        Some(value) => value.clone(),
+        Some(value) => PathBuf::from(value),
         None => return Err(Status::BadRequest),
     };
 
     // create a vector of queries
     let transform_inputs = union_transform(operation_input.into_inner())?;
     let mork_api_client = MorkApiClient::new();
+    let broadcaster = state.broadcaster.clone();
 
-    for transform_input in transform_inputs {
-        let request = TransformRequest::new().transform_input(transform_input);
+    JobRunner::spawn(
+        "UNION",
+        broadcaster.clone(),
+        move |tx: broadcast::Sender<ServerEvent>| {
+            let client = mork_api_client;
+            let path = request_path;
+            async move {
+                let _ = tx.send(ServerEvent::Log {
+                    message: "Starting union operation...".to_string(),
+                });
 
-        match mork_api_client.dispatch(request).await {
-            Ok(_) => {}
-            Err(e) => return Err(e),
-        };
+                for transform_input in transform_inputs {
+                    let request = TransformRequest::new().transform_input(transform_input);
 
-        // poll status endpoint
-        poll(PathBuf::from(&request_path), &mork_api_client).await?;
-    }
+                    client
+                        .dispatch(request)
+                        .await
+                        .map_err(|e| format!("Transformation dispatch failed: {:?}", e))?;
+
+                    let _ = tx.send(ServerEvent::Log {
+                        message: "Data received, waiting for processing...".to_string(),
+                    });
+
+                    poll_and_broadcast(path.clone(), &client, &tx)
+                        .await
+                        .map_err(|e| format!("Processing timeout: {:?}", e))?;
+                }
+                Ok("Union complete".to_string())
+            }
+        },
+    );
 
     Ok(Json(true))
 }
@@ -363,15 +578,20 @@ pub async fn union(
 ////////////////////////////////////////////// HELPER FUNCTIONS ////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-async fn poll(path: PathBuf, mork_api_client: &MorkApiClient) -> Result<bool, Status> {
+async fn poll_and_broadcast(
+    path: PathBuf,
+    mork_api_client: &MorkApiClient,
+    broadcaster: &broadcast::Sender<ServerEvent>,
+) -> Result<bool, Status> {
     let start_time = Instant::now();
-    let timeout_duration = Duration::from_secs(40);
+    let timeout_duration = Duration::from_secs(300);
 
     // Check if space is clear by using status endpoint
     let check_request = StatusRequest::new()
         .namespace(path.clone())
         .pattern("$x".to_string());
 
+    let mut counter = 0;
     loop {
         // exit condition stop polling after some second
         if start_time.elapsed() > timeout_duration {
@@ -380,6 +600,13 @@ async fn poll(path: PathBuf, mork_api_client: &MorkApiClient) -> Result<bool, St
 
         // wait 1 second between each status request
         sleep(Duration::from_millis(1000)).await;
+
+        if counter % 5 == 0 {
+            let _ = broadcaster.send(ServerEvent::Log {
+                message: "Checking status...".to_string(),
+            });
+        }
+        counter += 1;
 
         // destructure status endpoint json response
         let status_response: StatusResponse =
@@ -396,6 +623,49 @@ async fn poll(path: PathBuf, mork_api_client: &MorkApiClient) -> Result<bool, St
         }
     }
     Ok(true)
+}
+
+fn spawn_job<R>(
+    command: &str,
+    broadcaster: broadcast::Sender<ServerEvent>,
+    mork_api_client: MorkApiClient,
+    request: R,
+    request_path: PathBuf,
+) where
+    R: Request + Send + Sync + 'static,
+{
+    let command_label = command.to_string();
+    // Capitalize first letter for success message
+    let success_msg = if let Some(first_char) = command.chars().next() {
+        format!(
+            "{}{}",
+            first_char.to_uppercase(),
+            &command.to_lowercase()[1..]
+        )
+    } else {
+        command.to_string()
+    } + " completed successfully.";
+
+    JobRunner::spawn(
+        command,
+        broadcaster,
+        move |tx: broadcast::Sender<ServerEvent>| async move {
+            mork_api_client
+                .dispatch(request)
+                .await
+                .map_err(|e| format!("{} dispatch failed: {:?}", command_label, e))?;
+
+            let _ = tx.send(ServerEvent::Log {
+                message: "Data received, waiting for processing...".to_string(),
+            });
+
+            poll_and_broadcast(request_path, &mork_api_client, &tx)
+                .await
+                .map_err(|e| format!("Processing timeout: {:?}", e))?;
+
+            Ok(success_msg)
+        },
+    );
 }
 
 fn composition_transform(input: SetOperationInput) -> Result<TransformDetails, Status> {
@@ -420,6 +690,31 @@ fn composition_transform(input: SetOperationInput) -> Result<TransformDetails, S
             .patterns(patterns)
             .templates(vec![Mm2Cell::new_template(
                 template,
+                Namespace::from(PathBuf::from(input.target.first().cloned().unwrap())),
+            )]);
+
+    Ok(transform_input)
+}
+
+fn intersection_transform(input: SetOperationInput) -> Result<TransformDetails, Status> {
+    // Require at least 2 sources and exactly 1 target
+    if input.source.len() < 2 || input.target.len() != 1 {
+        return Err(Status::BadRequest);
+    }
+
+    let patterns = input
+        .source
+        .iter()
+        .map(|source_ns| {
+            Mm2Cell::new_pattern("$x".to_string(), Namespace::from(PathBuf::from(source_ns)))
+        })
+        .collect::<Vec<Mm2Cell>>();
+
+    let transform_input =
+        TransformDetails::new()
+            .patterns(patterns)
+            .templates(vec![Mm2Cell::new_template(
+                "$x".to_string(),
                 Namespace::from(PathBuf::from(input.target.first().cloned().unwrap())),
             )]);
 
@@ -451,6 +746,54 @@ fn union_transform(input: SetOperationInput) -> Result<Vec<TransformDetails>, St
     }
 
     Ok(union_query)
+}
+
+async fn fallback_explore_via_read(
+    client: &MorkApiClient,
+    pattern: String,
+    namespace_path: PathBuf,
+) -> Option<Json<String>> {
+    let transform_input = TransformDetails::new()
+        .patterns(vec![Mm2Cell::new_pattern(
+            pattern.clone(),
+            Namespace::from(namespace_path.clone()),
+        )])
+        .templates(vec![Mm2Cell::new_template(
+            "$x".to_string(),
+            Namespace::from(namespace_path),
+        )]);
+
+    let read_request = ReadRequest::new().transform_input(transform_input);
+
+    let raw_text = client.dispatch(read_request).await.ok()?;
+
+    let exprs: Vec<String> = raw_text
+        .lines()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty())
+        .map(String::from)
+        .collect();
+
+    if exprs.is_empty() {
+        return None;
+    }
+
+    let fallback: Vec<ExploreFallbackItem> = exprs
+        .into_iter()
+        .enumerate()
+        .map(|(index, expr)| ExploreFallbackItem {
+            token: vec![(index + 1) as u64],
+            expr,
+        })
+        .collect();
+
+    let json = json::serde_json::to_string(&fallback).ok()?;
+    Some(Json(json))
+}
+
+fn is_empty_explore_response(response_text: &str) -> bool {
+    let trimmed = response_text.trim();
+    trimmed.is_empty() || trimmed == "[]" || trimmed == "null"
 }
 
 // unit tests
@@ -506,6 +849,32 @@ mod tests {
         );
         assert_eq!(
             transform_inputs[1].templates[0].build(),
+            "(__root__ (ns3 (__ns3data__ $x)))".to_string()
+        );
+    }
+
+    #[test]
+    fn test_intersection_transform() {
+        let input = SetOperationInput {
+            source: vec!["ns1".to_string(), "ns2".to_string()],
+            target: vec!["ns3".to_string()],
+        };
+
+        let transform_input = intersection_transform(input).unwrap();
+
+        assert_eq!(transform_input.patterns.len(), 2);
+        assert_eq!(transform_input.templates.len(), 1);
+
+        assert_eq!(
+            transform_input.patterns[0].build(),
+            "(__root__ (ns1 (__ns1data__ $x)))".to_string()
+        );
+        assert_eq!(
+            transform_input.patterns[1].build(),
+            "(__root__ (ns2 (__ns2data__ $x)))".to_string()
+        );
+        assert_eq!(
+            transform_input.templates[0].build(),
             "(__root__ (ns3 (__ns3data__ $x)))".to_string()
         );
     }

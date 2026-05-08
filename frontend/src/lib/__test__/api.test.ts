@@ -291,7 +291,7 @@ describe("API Tests: Upload Page", () => {
     const mockData = "(fact 0 1)\n(fact 1 1)\n(fact 2 2)";
 
     it("should send a POST request with text/plain content type", async () => {
-      mockFetch.mockResolvedValue(mockSuccessResponse("Upload successful"));
+      mockFetch.mockResolvedValue(mockSuccessResponse(true));
 
       await uploadTextToSpace(mockPath, mockData);
 
@@ -316,7 +316,7 @@ describe("API Tests: Upload Page", () => {
         setItem: vi.fn(),
       });
 
-      mockFetch.mockResolvedValue(mockSuccessResponse("Upload successful"));
+      mockFetch.mockResolvedValue(mockSuccessResponse(true));
 
       await uploadTextToSpace(mockPath, mockData);
 
@@ -324,13 +324,12 @@ describe("API Tests: Upload Page", () => {
       expect(options?.headers).toHaveProperty("Authorization", mockToken);
     });
 
-    it("should return the response text on success", async () => {
-      const successMessage = "Data uploaded successfully";
-      mockFetch.mockResolvedValue(mockSuccessResponse(successMessage));
+    it("should return true on success", async () => {
+      mockFetch.mockResolvedValue(mockSuccessResponse(true));
 
       const result = await uploadTextToSpace(mockPath, mockData);
 
-      expect(result).toBe(successMessage);
+      expect(result).toBe(true);
     });
 
     it("should throw an error when the API returns a non-ok response", async () => {
@@ -351,7 +350,7 @@ describe("API Tests: Upload Page", () => {
     });
 
     it("should handle empty path correctly", async () => {
-      mockFetch.mockResolvedValue(mockSuccessResponse("Upload successful"));
+      mockFetch.mockResolvedValue(mockSuccessResponse(true));
 
       await uploadTextToSpace("/", mockData);
 
