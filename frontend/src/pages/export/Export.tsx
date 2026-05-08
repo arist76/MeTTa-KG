@@ -122,6 +122,7 @@ const ExportPage: Component = () => {
           <Button
             onClick={() => handleExport(formatedNamespace())}
             disabled={
+              !!isLoading() ||
               isAppBusy() ||
               !pattern().trim() ||
               !template().trim() ||
