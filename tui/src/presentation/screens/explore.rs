@@ -49,16 +49,145 @@ fn quote_from_bytes(data: &[i32]) -> String {
     result
 }
 
-fn process_response(raw: &str) -> Vec<TreeNode> {
-    // API wraps response in Json<String>, so we may need to unwrap JSON string encoding
+// Minimal S-expression type for namespace unwrapping
+#[derive(Debug, Clone)]
+enum SExpr {
+    Atom(String),
+    List(Vec<SExpr>),
+}
+
+fn parse_sexpr(s: &str) -> Option<SExpr> {
+    let s = s.trim();
+    if s.is_empty() { return None; }
+    if !s.starts_with('(') {
+        // Atom: take until whitespace or ')'
+        let end = s.find(|c: char| c.is_whitespace() || c == ')').unwrap_or(s.len());
+        return Some(SExpr::Atom(s[..end].to_string()));
+    }
+    // List: find matching ')'
+    let mut depth = 0;
+    let mut items = Vec::new();
+    let mut start = 1;
+    for (i, c) in s.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    let inner = &s[start..i];
+                    // Parse each whitespace-separated token as a child
+                    let mut buf = String::new();
+                    for ch in inner.chars() {
+                        if ch.is_whitespace() {
+                            if !buf.is_empty() {
+                                if let Some(child) = parse_sexpr(&buf) {
+                                    items.push(child);
+                                }
+                                buf.clear();
+                            }
+                        } else {
+                            buf.push(ch);
+                        }
+                    }
+                    if !buf.is_empty() {
+                        if let Some(child) = parse_sexpr(&buf) {
+                            items.push(child);
+                        }
+                    }
+                    return Some(SExpr::List(items));
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn serialize_sexpr(expr: &SExpr) -> String {
+    match expr {
+        SExpr::Atom(s) => s.clone(),
+        SExpr::List(items) => {
+            let inner: Vec<String> = items.iter().map(serialize_sexpr).collect();
+            format!("({})", inner.join(" "))
+        }
+    }
+}
+
+fn unwrap_expr(expr: &str, namespace: &str, data_tag: &str) -> String {
+    if !expr.starts_with('(') { return expr.to_string(); }
+
+    let ns_components: Vec<&str> = namespace
+        .split('/')
+        .filter(|p| !p.is_empty())
+        .collect();
+
+    let parsed = match parse_sexpr(expr) {
+        Some(p) => p,
+        None => return expr.to_string(),
+    };
+
+    let mut current = parsed;
+    let mut changed = false;
+
+    // Unwrap namespace layers: always starts with "__root__" then each component
+    for component in std::iter::once("__root__").chain(ns_components.iter().copied()) {
+        match &current {
+            SExpr::List(items) if items.len() >= 2 => {
+                match &items[0] {
+                    SExpr::Atom(a) if a == component => {
+                        if let SExpr::List(_) = &items[1] {
+                            current = items[1].clone();
+                            changed = true;
+                            continue;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+        break;
+    }
+
+    // Unwrap data tag: uses .includes() match like frontend
+    match &current {
+        SExpr::List(items) if items.len() >= 2 => {
+            match &items[0] {
+                SExpr::Atom(a) if a.contains(data_tag) => {
+                    if let SExpr::List(_) = &items[1] {
+                        current = items[1].clone();
+                        changed = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        _ => {}
+    }
+
+    if changed { serialize_sexpr(&current) } else { expr.to_string() }
+}
+
+fn compute_data_tag(namespace: &str) -> String {
+    let ns_components: Vec<&str> = namespace
+        .split('/')
+        .filter(|p| !p.is_empty())
+        .collect();
+    let current_name = ns_components.last().copied().unwrap_or("root");
+    format!("__{}data__", current_name)
+}
+
+fn process_response(raw: &str, namespace: &str) -> Vec<TreeNode> {
     let unescaped: Option<String> = serde_json::from_str(raw).ok();
     let inner = unescaped.as_deref().unwrap_or(raw);
+    let data_tag = compute_data_tag(namespace);
 
     serde_json::from_str::<Vec<ExploreResponse>>(inner)
         .unwrap_or_default()
         .into_iter()
         .map(|r| {
-            let label = build_label(&r.expr);
+            let cleaned = unwrap_expr(&r.expr, namespace, &data_tag);
+            let label = build_label(&cleaned);
             TreeNode {
                 expr: r.expr, token: r.token,
                 children: Vec::new(), expanded: false,
@@ -157,7 +286,7 @@ impl Screen for ExploreScreen {
         if let Some(result) = result {
             match result {
                 Ok(raw) => {
-                    self.nodes = process_response(&raw);
+                    self.nodes = process_response(&raw, &self.namespace);
                     self.selected = 0;
                     self.scroll = 0;
                     let count = self.nodes.len();
@@ -329,7 +458,7 @@ impl Screen for ExploreScreen {
                     collapse_flat(&mut self.nodes, self.selected);
                     self.status = OperationStatus::Completed("Collapsed".to_string());
                 } else if can_expand {
-                    let (service, path, pattern, pending) = (
+                    let (service, ns, pattern, pending) = (
                         self.space_service.clone(), self.namespace.clone(),
                         self.pattern.clone(), self.pending_expand.clone(),
                     );
@@ -337,9 +466,9 @@ impl Screen for ExploreScreen {
                     if let Some(service) = service {
                         tokio::spawn(async move {
                             let token_str = quote_from_bytes(&token);
-                            let result = service.explore(&path, &pattern, &token_str).await.map_err(|e| e.to_string());
+                            let result = service.explore(&ns, &pattern, &token_str).await.map_err(|e| e.to_string());
                             let children = match &result {
-                                Ok(raw) => Ok(process_response(raw)),
+                                Ok(raw) => Ok(process_response(raw, &ns)),
                                 Err(e) => Err(e.clone()),
                             };
                             *pending.lock().unwrap() = Some((idx, children));
