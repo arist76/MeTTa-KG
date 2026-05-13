@@ -9,8 +9,8 @@ use std::sync::{Arc, Mutex};
 
 pub struct ImportScreen {
     pub active_tab: ImportTab,
+    pub namespace: String,
     pub url: String,
-    pub path: String,
     pub text_input: String,
     pub file_path: String,
     status: OperationStatus,
@@ -22,8 +22,8 @@ impl ImportScreen {
     pub fn new() -> Self {
         Self {
             active_tab: ImportTab::Url,
+            namespace: "/".to_string(),
             url: String::new(),
-            path: String::new(),
             text_input: String::new(),
             file_path: String::new(),
             status: OperationStatus::Idle,
@@ -49,7 +49,8 @@ impl Screen for ImportScreen {
     fn get_id(&self) -> &'static str { "import" }
     fn get_status(&self) -> &OperationStatus { &self.status }
     fn reset_status(&mut self) { self.status = OperationStatus::Idle; }
-    fn set_namespace(&mut self, _ns: &str) {}
+    fn namespace(&self) -> &str { &self.namespace }
+    fn set_namespace(&mut self, ns: &str) { self.namespace = ns.to_string(); }
 
     fn update(&mut self) {
         let result = self.pending_result.lock().ok().and_then(|mut g| g.take());
@@ -71,7 +72,7 @@ impl Screen for ImportScreen {
         ]);
         let [header_area, tabs_area, content_area, button_area] = chunks.areas(area);
 
-        let header = Paragraph::new("Import Data")
+        let header = Paragraph::new(format!("Import Data  [namespace: {}]", self.namespace))
             .style(title_style(&theme))
             .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(theme.primary)));
         f.render_widget(header, header_area);
@@ -107,12 +108,10 @@ impl Screen for ImportScreen {
                 .border_style(Style::default().fg(theme.primary)));
         f.render_widget(content_block, content_area);
 
-        let label = match self.active_tab {
-            ImportTab::Url => " [Enter] Import from URL [Tab] Switch Tab ",
-            ImportTab::File => " [Enter] Upload File [Tab] Switch Tab ",
-            ImportTab::Text => " [Enter] Upload Text [Tab] Switch Tab ",
-        };
-        f.render_widget(Block::default().title(label).borders(Borders::ALL).border_style(Style::default().fg(theme.primary)), button_area);
+        f.render_widget(Block::default()
+            .title(format!(" [Enter] Import into {} [Tab] Switch Tab ", self.namespace))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.primary)), button_area);
     }
 
     fn handle_paste(&mut self, text: &str) -> Option<ScreenAction> {
@@ -132,13 +131,14 @@ impl Screen for ImportScreen {
             }
             KeyCode::Enter => {
                 let (service, pending) = (self.space_service.clone(), self.pending_result.clone());
+                let ns = self.namespace.clone();
                 if let Some(service) = service {
                     match self.active_tab {
                         ImportTab::Url => {
                             let url = self.url.clone();
                             tokio::spawn(async move {
-                                let result = service.import("/tmp", &url).await
-                                    .map(|_| "Import from URL completed".to_string())
+                                let result = service.import(&ns, &url).await
+                                    .map(|_| format!("Import from URL into {} completed", ns))
                                     .map_err(|e| e.to_string());
                                 *pending.lock().unwrap() = Some(result);
                             });
@@ -146,8 +146,8 @@ impl Screen for ImportScreen {
                         ImportTab::Text => {
                             let text = self.text_input.clone();
                             tokio::spawn(async move {
-                                let result = service.upload("/tmp", &text).await
-                                    .map(|r| format!("Uploaded: {}", r))
+                                let result = service.upload(&ns, &text).await
+                                    .map(|r| format!("Uploaded into {}: {}", ns, r))
                                     .map_err(|e| e.to_string());
                                 *pending.lock().unwrap() = Some(result);
                             });
