@@ -33,6 +33,22 @@ fn build_label(expr: &str) -> String {
     else { format!("{}...", &trimmed[..77]) }
 }
 
+fn quote_from_bytes(data: &[i32]) -> String {
+    let mut result = String::new();
+    for &byte in data {
+        let b = byte as u8;
+        match b {
+            b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z' | b'-' | b'_' | b'.' | b'~' => {
+                result.push(b as char);
+            }
+            _ => {
+                result.push_str(&format!("%{:02X}", b));
+            }
+        }
+    }
+    result
+}
+
 fn process_response(raw: &str) -> Vec<TreeNode> {
     // API wraps response in Json<String>, so we may need to unwrap JSON string encoding
     let unescaped: Option<String> = serde_json::from_str(raw).ok();
@@ -320,7 +336,7 @@ impl Screen for ExploreScreen {
                     let idx = self.selected;
                     if let Some(service) = service {
                         tokio::spawn(async move {
-                            let token_str: String = token.iter().map(|v| format!("{}", v)).collect::<Vec<_>>().join(",");
+                            let token_str = quote_from_bytes(&token);
                             let result = service.explore(&path, &pattern, &token_str).await.map_err(|e| e.to_string());
                             let children = match &result {
                                 Ok(raw) => Ok(process_response(raw)),
