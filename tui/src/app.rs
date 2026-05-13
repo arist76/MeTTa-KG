@@ -21,6 +21,8 @@ use crate::presentation::screens::stubs;
 use crate::presentation::components::sidebar::*;
 use crate::presentation::components::status_bar::*;
 use crate::presentation::components::command_palette::CommandPalette;
+use crate::presentation::widgets::toast::ToastManager;
+use crate::domain::models::OperationStatus;
 
 pub struct App {
     pub screen: Box<dyn Screen>,
@@ -36,6 +38,8 @@ pub struct App {
     pub show_help: bool,
     pub current_namespace: String,
     pub editing_namespace: bool,
+    pub toast_manager: ToastManager,
+    last_status: Option<String>,
 }
 
 impl App {
@@ -109,6 +113,8 @@ impl App {
             show_help: false,
             current_namespace: "/".to_string(),
             editing_namespace: false,
+            toast_manager: ToastManager::new(),
+            last_status: None,
         }
     }
 
@@ -193,10 +199,39 @@ impl App {
             terminal.draw(|f| self.render(f))?;
             self.handle_events()?;
             self.screen.update();
+            self.process_toasts();
         }
 
         ratatui::restore();
         Ok(())
+    }
+
+    fn process_toasts(&mut self) {
+        self.toast_manager.remove_expired();
+
+        let status = self.screen.get_status();
+        let status_key = match status {
+            OperationStatus::Completed(msg) => Some(format!("ok:{}", msg)),
+            OperationStatus::Failed(msg) => Some(format!("err:{}", msg)),
+            _ => None,
+        };
+
+        if let Some(key) = status_key {
+            if self.last_status.as_deref() != Some(&key) {
+                match status {
+                    OperationStatus::Completed(msg) => {
+                        self.toast_manager.success(msg.clone());
+                    }
+                    OperationStatus::Failed(msg) => {
+                        self.toast_manager.error(msg.clone());
+                    }
+                    _ => {}
+                }
+                self.last_status = Some(key);
+            }
+        } else {
+            self.last_status = None;
+        }
     }
 
     fn render(&mut self, f: &mut Frame) {
@@ -232,6 +267,8 @@ impl App {
         self.screen.render(f, screen_area);
 
         render_status_bar(f, footer_area, &self.theme, &self.status_message, "Ctrl+P:Palette  Esc:Back  Ctrl+C:Quit");
+
+        self.toast_manager.render(f, area);
     }
 
     fn render_namespace_bar(&mut self, f: &mut Frame, area: Rect, _has_token: bool) {
