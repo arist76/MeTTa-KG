@@ -7,6 +7,7 @@ use crate::presentation::widgets::table::TableWidget;
 use crate::domain::models::{Token, OperationStatus};
 use crate::application::token_service::TokenService;
 use std::sync::Arc;
+use std::sync::Mutex;
 
 pub struct TokensScreen {
     tokens: Vec<Token>,
@@ -14,9 +15,9 @@ pub struct TokensScreen {
     status: OperationStatus,
     token_service: Option<Arc<TokenService>>,
     should_refresh: bool,
+    pending_tokens: Arc<Mutex<Option<Result<Vec<Token>, String>>>>,
     mode: TokenMode,
     focused_input: usize,
-    // Create form fields
     create_description: String,
     create_child_namespace: String,
     create_read: bool,
@@ -50,6 +51,7 @@ impl TokensScreen {
             status: OperationStatus::Idle,
             token_service: None,
             should_refresh: true,
+            pending_tokens: Arc::new(Mutex::new(None)),
             mode: TokenMode::List,
             focused_input: 0,
             create_description: String::new(),
@@ -70,16 +72,15 @@ impl TokensScreen {
 
     fn load_tokens_impl(&mut self) {
         if let Some(ref service) = self.token_service {
-            match tokio::runtime::Handle::current().block_on(service.list_tokens()) {
-                Ok(tokens) => {
-                    self.tokens = tokens;
-                    self.update_table();
-                    self.status = OperationStatus::Completed("Tokens loaded".to_string());
-                }
-                Err(e) => {
-                    self.status = OperationStatus::Failed(e.to_string());
-                }
-            }
+            let service = service.clone();
+            let pending = self.pending_tokens.clone();
+            tokio::spawn(async move {
+                let result = match service.list_tokens().await {
+                    Ok(tokens) => Ok(tokens),
+                    Err(e) => Err(e.to_string()),
+                };
+                *pending.lock().unwrap() = Some(result);
+            });
         }
     }
 
@@ -204,6 +205,20 @@ impl Screen for TokensScreen {
         if self.should_refresh {
             self.should_refresh = false;
             self.load_tokens_impl();
+        }
+
+        let result = self.pending_tokens.lock().ok().and_then(|mut g| g.take());
+        if let Some(result) = result {
+            match result {
+                Ok(tokens) => {
+                    self.tokens = tokens;
+                    self.update_table();
+                    self.status = OperationStatus::Completed("Tokens loaded".to_string());
+                }
+                Err(e) => {
+                    self.status = OperationStatus::Failed(e.to_string());
+                }
+            }
         }
     }
 
