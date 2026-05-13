@@ -5,13 +5,14 @@ use super::{Screen, ScreenAction};
 use crate::presentation::theme::*;
 use crate::domain::models::OperationStatus;
 use crate::application::space_service::SpaceService;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub struct ClearScreen {
     pub namespace: String,
     expression: String,
     status: OperationStatus,
     space_service: Option<Arc<SpaceService>>,
+    pending_result: Arc<Mutex<Option<Result<bool, String>>>>,
 }
 
 impl ClearScreen {
@@ -21,6 +22,7 @@ impl ClearScreen {
             expression: String::new(),
             status: OperationStatus::Idle,
             space_service: None,
+            pending_result: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -35,9 +37,19 @@ impl Screen for ClearScreen {
     fn namespace(&self) -> &str { &self.namespace }
     fn set_namespace(&mut self, ns: &str) { self.namespace = ns.to_string(); }
 
+    fn update(&mut self) {
+        let result = self.pending_result.lock().ok().and_then(|mut g| g.take());
+        if let Some(result) = result {
+            match result {
+                Ok(true) => self.status = OperationStatus::Completed("Space cleared".to_string()),
+                Ok(false) => self.status = OperationStatus::Failed("Clear returned false".to_string()),
+                Err(e) => self.status = OperationStatus::Failed(e),
+            }
+        }
+    }
+
     fn render(&mut self, f: &mut Frame, area: Rect) {
         let theme = AppTheme::dark();
-
         let chunks = Layout::vertical([
             Constraint::Length(3),
             Constraint::Min(5),
@@ -54,11 +66,9 @@ impl Screen for ClearScreen {
             .title(" Expression (Enter to clear) ")
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme.primary));
-
         let expr_inner = expr_block.inner(editor_area);
         f.render_widget(expr_block, editor_area);
-
-        let expr_text = Paragraph::new(self.expression.as_str())
+        let expr_text = Paragraph::new(format!("{}█", self.expression))
             .style(Style::default().fg(theme.text));
         f.render_widget(expr_text, expr_inner);
 
@@ -77,10 +87,16 @@ impl Screen for ClearScreen {
     fn handle_key(&mut self, key: KeyEvent) -> Option<ScreenAction> {
         match key.code {
             KeyCode::Enter => {
-                let service = self.space_service.clone();
+                let (service, path, expr, pending) = (
+                    self.space_service.clone(),
+                    self.namespace.clone(),
+                    self.expression.clone(),
+                    self.pending_result.clone(),
+                );
                 if let Some(service) = service {
                     tokio::spawn(async move {
-                        let _ = service.clear("/", "").await;
+                        let result = service.clear(&path, &expr).await.map_err(|e| e.to_string());
+                        *pending.lock().unwrap() = Some(result);
                     });
                 }
                 self.status = OperationStatus::Running;

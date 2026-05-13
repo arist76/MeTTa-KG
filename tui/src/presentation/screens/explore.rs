@@ -6,7 +6,7 @@ use crate::presentation::theme::*;
 use crate::presentation::widgets::tree::TreeWidget;
 use crate::domain::models::{SpaceNode, OperationStatus};
 use crate::application::space_service::SpaceService;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub struct ExploreScreen {
     pub namespace: String,
@@ -14,8 +14,9 @@ pub struct ExploreScreen {
     tree: TreeWidget,
     status: OperationStatus,
     space_service: Option<Arc<SpaceService>>,
-    explore_output: String,
     pub focus_tree: bool,
+    pending_explore: Arc<Mutex<Option<Result<String, String>>>>,
+    pending_read: Arc<Mutex<Option<Result<String, String>>>>,
 }
 
 impl ExploreScreen {
@@ -26,71 +27,14 @@ impl ExploreScreen {
             tree: TreeWidget::new(),
             status: OperationStatus::Idle,
             space_service: None,
-            explore_output: String::new(),
             focus_tree: false,
+            pending_explore: Arc::new(Mutex::new(None)),
+            pending_read: Arc::new(Mutex::new(None)),
         }
     }
 
     pub fn set_space_service(&mut self, service: Arc<SpaceService>) {
         self.space_service = Some(service);
-    }
-
-    pub async fn run_explore(&mut self) {
-        if let Some(ref service) = self.space_service {
-            let path = if self.namespace.starts_with('/') {
-                self.namespace.clone()
-            } else {
-                format!("/{}", self.namespace)
-            };
-            match service.explore(&path, &self.pattern, "").await {
-                Ok(result) => {
-                    self.explore_output = result.clone();
-                    let nodes: Vec<SpaceNode> = serde_json::from_str(&result).unwrap_or_else(|_| {
-                        result.lines().enumerate().map(|(_i, line)| SpaceNode {
-                            expression: line.to_string(),
-                            token: String::new(),
-                            children: Vec::new(),
-                            expanded: false,
-                            loaded: false,
-                        }).collect()
-                    });
-                    self.tree.set_nodes(nodes);
-                    self.status = OperationStatus::Completed("Explore complete".to_string());
-                    self.focus_tree = true;
-                }
-                Err(e) => {
-                    self.status = OperationStatus::Failed(e.to_string());
-                }
-            }
-        }
-    }
-
-    pub async fn run_read(&mut self) {
-        if let Some(ref service) = self.space_service {
-            let path = if self.namespace.starts_with('/') {
-                self.namespace.clone()
-            } else {
-                format!("/{}", self.namespace)
-            };
-            match service.read(&path).await {
-                Ok(result) => {
-                    self.explore_output = result.clone();
-                    let nodes: Vec<SpaceNode> = result.lines().map(|line| SpaceNode {
-                        expression: line.to_string(),
-                        token: String::new(),
-                        children: Vec::new(),
-                        expanded: false,
-                        loaded: false,
-                    }).collect();
-                    self.tree.set_nodes(nodes);
-                    self.status = OperationStatus::Completed("Space read complete".to_string());
-                    self.focus_tree = true;
-                }
-                Err(e) => {
-                    self.status = OperationStatus::Failed(e.to_string());
-                }
-            }
-        }
     }
 }
 
@@ -99,6 +43,53 @@ impl Screen for ExploreScreen {
     fn get_status(&self) -> &OperationStatus { &self.status }
     fn namespace(&self) -> &str { &self.namespace }
     fn set_namespace(&mut self, ns: &str) { self.namespace = ns.to_string(); }
+
+    fn update(&mut self) {
+        let result = self.pending_explore.lock().ok().and_then(|mut g| g.take());
+        if let Some(result) = result {
+            match result {
+                Ok(output) => {
+                    let nodes: Vec<SpaceNode> = serde_json::from_str(&output).unwrap_or_else(|_| {
+                        output.lines().enumerate().map(|(_i, line)| SpaceNode {
+                            expression: line.to_string(),
+                            token: String::new(),
+                            children: Vec::new(),
+                            expanded: false,
+                            loaded: false,
+                        }).collect()
+                    });
+                    self.tree.set_nodes(nodes);
+                    self.focus_tree = true;
+                    self.status = OperationStatus::Completed("Explore complete".to_string());
+                }
+                Err(e) => {
+                    self.status = OperationStatus::Failed(e);
+                }
+            }
+            return;
+        }
+
+        let result = self.pending_read.lock().ok().and_then(|mut g| g.take());
+        if let Some(result) = result {
+            match result {
+                Ok(output) => {
+                    let nodes: Vec<SpaceNode> = output.lines().map(|line| SpaceNode {
+                        expression: line.to_string(),
+                        token: String::new(),
+                        children: Vec::new(),
+                        expanded: false,
+                        loaded: false,
+                    }).collect();
+                    self.tree.set_nodes(nodes);
+                    self.focus_tree = true;
+                    self.status = OperationStatus::Completed("Space read complete".to_string());
+                }
+                Err(e) => {
+                    self.status = OperationStatus::Failed(e);
+                }
+            }
+        }
+    }
 
     fn render(&mut self, f: &mut Frame, area: Rect) {
         let theme = AppTheme::dark();
@@ -122,7 +113,7 @@ impl Screen for ExploreScreen {
         };
 
         let pattern_block = Block::default()
-            .title(format!(" Pattern (Enter:explore, R:read, Tab:tree) ",))
+            .title(format!(" Pattern (Enter:explore, R:read, Tab:tree) "))
             .borders(Borders::ALL)
             .border_style(pattern_border);
 
@@ -156,23 +147,31 @@ impl Screen for ExploreScreen {
             match key.code {
                 KeyCode::Tab => { self.focus_tree = true; None }
                 KeyCode::Enter => {
-                    let service = self.space_service.clone();
+                    let (service, path, pattern, pending) = (
+                        self.space_service.clone(),
+                        self.namespace.clone(),
+                        self.pattern.clone(),
+                        self.pending_explore.clone(),
+                    );
                     if let Some(service) = service {
-                        let path = self.namespace.clone();
-                        let pattern = self.pattern.clone();
                         tokio::spawn(async move {
-                            let _ = service.explore(&path, &pattern, "").await;
+                            let result = service.explore(&path, &pattern, "").await.map_err(|e| e.to_string());
+                            *pending.lock().unwrap() = Some(result);
                         });
                     }
                     self.status = OperationStatus::Running;
                     None
                 }
                 KeyCode::Char('r') | KeyCode::Char('R') => {
-                    let service = self.space_service.clone();
+                    let (service, path, pending) = (
+                        self.space_service.clone(),
+                        self.namespace.clone(),
+                        self.pending_read.clone(),
+                    );
                     if let Some(service) = service {
-                        let path = self.namespace.clone();
                         tokio::spawn(async move {
-                            let _ = service.read(&path).await;
+                            let result = service.read(&path).await.map_err(|e| e.to_string());
+                            *pending.lock().unwrap() = Some(result);
                         });
                     }
                     self.status = OperationStatus::Running;

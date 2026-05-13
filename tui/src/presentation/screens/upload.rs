@@ -5,7 +5,7 @@ use super::{Screen, ScreenAction};
 use crate::presentation::theme::*;
 use crate::domain::models::{OperationStatus, ImportTab};
 use crate::application::space_service::SpaceService;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub struct ImportScreen {
     pub active_tab: ImportTab,
@@ -15,6 +15,7 @@ pub struct ImportScreen {
     pub file_path: String,
     status: OperationStatus,
     space_service: Option<Arc<SpaceService>>,
+    pending_result: Arc<Mutex<Option<Result<String, String>>>>,
 }
 
 impl ImportScreen {
@@ -27,6 +28,7 @@ impl ImportScreen {
             file_path: String::new(),
             status: OperationStatus::Idle,
             space_service: None,
+            pending_result: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -47,6 +49,16 @@ impl Screen for ImportScreen {
     fn get_id(&self) -> &'static str { "import" }
     fn get_status(&self) -> &OperationStatus { &self.status }
     fn set_namespace(&mut self, _ns: &str) {}
+
+    fn update(&mut self) {
+        let result = self.pending_result.lock().ok().and_then(|mut g| g.take());
+        if let Some(result) = result {
+            match result {
+                Ok(msg) => self.status = OperationStatus::Completed(msg),
+                Err(e) => self.status = OperationStatus::Failed(e),
+            }
+        }
+    }
 
     fn render(&mut self, f: &mut Frame, area: Rect) {
         let theme = AppTheme::dark();
@@ -118,18 +130,30 @@ impl Screen for ImportScreen {
                 None
             }
             KeyCode::Enter => {
-                let service = self.space_service.clone();
+                let (service, pending) = (self.space_service.clone(), self.pending_result.clone());
                 if let Some(service) = service {
                     match self.active_tab {
                         ImportTab::Url => {
                             let url = self.url.clone();
-                            tokio::spawn(async move { let _ = service.import("/tmp", &url).await; });
+                            tokio::spawn(async move {
+                                let result = service.import("/tmp", &url).await
+                                    .map(|_| "Import from URL completed".to_string())
+                                    .map_err(|e| e.to_string());
+                                *pending.lock().unwrap() = Some(result);
+                            });
                         }
                         ImportTab::Text => {
                             let text = self.text_input.clone();
-                            tokio::spawn(async move { let _ = service.upload("/tmp", &text).await; });
+                            tokio::spawn(async move {
+                                let result = service.upload("/tmp", &text).await
+                                    .map(|r| format!("Uploaded: {}", r))
+                                    .map_err(|e| e.to_string());
+                                *pending.lock().unwrap() = Some(result);
+                            });
                         }
-                        ImportTab::File => {}
+                        ImportTab::File => {
+                            *pending.lock().unwrap() = Some(Err("File import not implemented in TUI".to_string()));
+                        }
                     }
                 }
                 self.status = OperationStatus::Running;

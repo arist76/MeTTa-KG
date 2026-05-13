@@ -5,7 +5,7 @@ use super::{Screen, ScreenAction};
 use crate::presentation::theme::*;
 use crate::domain::models::{OperationStatus, Mm2Input};
 use crate::application::space_service::SpaceService;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub struct ExportScreen {
     pub namespace: String,
@@ -16,6 +16,7 @@ pub struct ExportScreen {
     status: OperationStatus,
     space_service: Option<Arc<SpaceService>>,
     focused: usize,
+    pending_result: Arc<Mutex<Option<Result<String, String>>>>,
 }
 
 impl ExportScreen {
@@ -29,6 +30,7 @@ impl ExportScreen {
             status: OperationStatus::Idle,
             space_service: None,
             focused: 0,
+            pending_result: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -59,6 +61,21 @@ impl Screen for ExportScreen {
     fn get_status(&self) -> &OperationStatus { &self.status }
     fn namespace(&self) -> &str { &self.namespace }
     fn set_namespace(&mut self, ns: &str) { self.namespace = ns.to_string(); }
+
+    fn update(&mut self) {
+        let result = self.pending_result.lock().ok().and_then(|mut g| g.take());
+        if let Some(result) = result {
+            match result {
+                Ok(output) => {
+                    self.output = output;
+                    self.status = OperationStatus::Completed("Export complete".to_string());
+                }
+                Err(e) => {
+                    self.status = OperationStatus::Failed(e);
+                }
+            }
+        }
+    }
 
     fn render(&mut self, f: &mut Frame, area: Rect) {
         let theme = AppTheme::dark();
@@ -125,7 +142,11 @@ impl Screen for ExportScreen {
                 if let Some(service) = service {
                     let input = Mm2Input { pattern: self.pattern.clone(), template: self.template.clone() };
                     let path = format!("/{}", self.namespace.trim_start_matches('/'));
-                    tokio::spawn(async move { let _ = service.export(&path, &input).await; });
+                    let pending = self.pending_result.clone();
+                    tokio::spawn(async move {
+                        let result = service.export(&path, &input).await.map_err(|e| e.to_string());
+                        *pending.lock().unwrap() = Some(result);
+                    });
                 }
                 self.status = OperationStatus::Running;
                 None

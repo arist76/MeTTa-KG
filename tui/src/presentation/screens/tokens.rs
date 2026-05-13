@@ -27,6 +27,7 @@ pub struct TokensScreen {
     create_share_share: bool,
     selected_parent_idx: usize,
     namespace_picker_visible: bool,
+    pending_operation: Arc<Mutex<Option<Result<String, String>>>>,
 }
 
 #[derive(PartialEq)]
@@ -63,6 +64,7 @@ impl TokensScreen {
             create_share_share: false,
             selected_parent_idx: 0,
             namespace_picker_visible: false,
+            pending_operation: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -132,8 +134,13 @@ impl TokensScreen {
         if token_index < self.tokens.len() {
             let token_id = self.tokens[token_index].id;
             if let Some(ref service) = self.token_service {
-                let service = service.clone();
-                tokio::spawn(async move { let _ = service.delete_token(token_id).await; });
+                let (service, pending) = (service.clone(), self.pending_operation.clone());
+                tokio::spawn(async move {
+                    let result = service.delete_token(token_id).await
+                        .map(|_| format!("Token {} deleted", token_id))
+                        .map_err(|e| e.to_string());
+                    *pending.lock().unwrap() = Some(result);
+                });
                 self.status = OperationStatus::Running;
             }
         }
@@ -146,8 +153,13 @@ impl TokensScreen {
         if token_index < self.tokens.len() {
             let token_id = self.tokens[token_index].id;
             if let Some(ref service) = self.token_service {
-                let service = service.clone();
-                tokio::spawn(async move { let _ = service.refresh_token(token_id).await; });
+                let (service, pending) = (service.clone(), self.pending_operation.clone());
+                tokio::spawn(async move {
+                    let result = service.refresh_token(token_id).await
+                        .map(|t| format!("Token {} refreshed: {}", token_id, truncate(&t.code, 8)))
+                        .map_err(|e| e.to_string());
+                    *pending.lock().unwrap() = Some(result);
+                });
                 self.status = OperationStatus::Running;
             }
         }
@@ -155,15 +167,18 @@ impl TokensScreen {
 
     fn submit_create(&mut self) {
         if let Some(ref service) = self.token_service {
-            let ns = self.full_namespace();
-            let desc = self.create_description.clone();
-            let r = self.create_read;
-            let w = self.create_write;
-            let sr = self.create_share_read;
-            let sw = self.create_share_write;
-            let ss = self.create_share_share;
-            let service = service.clone();
-            tokio::spawn(async move { let _ = service.create_token(desc, ns, r, w, sr, sw, ss).await; });
+            let (ns, desc, r, w, sr, sw, ss) = (
+                self.full_namespace(), self.create_description.clone(),
+                self.create_read, self.create_write,
+                self.create_share_read, self.create_share_write, self.create_share_share,
+            );
+            let (service, pending) = (service.clone(), self.pending_operation.clone());
+            tokio::spawn(async move {
+                let result = service.create_token(desc, ns, r, w, sr, sw, ss).await
+                    .map(|t| format!("Token created: {} (id={})", truncate(&t.code, 8), t.id))
+                    .map_err(|e| e.to_string());
+                *pending.lock().unwrap() = Some(result);
+            });
             self.mode = TokenMode::List;
             self.should_refresh = true;
             self.status = OperationStatus::Running;
@@ -217,6 +232,19 @@ impl Screen for TokensScreen {
                 }
                 Err(e) => {
                     self.status = OperationStatus::Failed(e.to_string());
+                }
+            }
+        }
+
+        let result = self.pending_operation.lock().ok().and_then(|mut g| g.take());
+        if let Some(result) = result {
+            match result {
+                Ok(msg) => {
+                    self.status = OperationStatus::Completed(msg);
+                    self.should_refresh = true;
+                }
+                Err(e) => {
+                    self.status = OperationStatus::Failed(e);
                 }
             }
         }
