@@ -12,17 +12,20 @@ pub struct TokensScreen {
     tokens: Vec<Token>,
     table: TableWidget,
     status: OperationStatus,
+    token_service: Option<Arc<TokenService>>,
+    should_refresh: bool,
+    mode: TokenMode,
+    focused_input: usize,
+    // Create form fields
     create_description: String,
-    create_namespace: String,
+    create_child_namespace: String,
     create_read: bool,
     create_write: bool,
     create_share_read: bool,
     create_share_write: bool,
     create_share_share: bool,
-    show_create: bool,
-    mode: TokenMode,
-    focused_input: usize,
-    token_service: Option<Arc<TokenService>>,
+    selected_parent_idx: usize,
+    namespace_picker_visible: bool,
 }
 
 #[derive(PartialEq)]
@@ -37,24 +40,27 @@ impl TokensScreen {
             tokens: Vec::new(),
             table: TableWidget::new(vec![
                 "ID".into(),
+                "Code".into(),
                 "Namespace".into(),
                 "Description".into(),
-                "Read".into(),
-                "Write".into(),
+                "R".into(),
+                "W".into(),
                 "Created".into(),
             ]),
             status: OperationStatus::Idle,
+            token_service: None,
+            should_refresh: true,
+            mode: TokenMode::List,
+            focused_input: 0,
             create_description: String::new(),
-            create_namespace: String::new(),
+            create_child_namespace: String::new(),
             create_read: true,
-            create_write: true,
+            create_write: false,
             create_share_read: false,
             create_share_write: false,
             create_share_share: false,
-            show_create: false,
-            mode: TokenMode::List,
-            focused_input: 0,
-            token_service: None,
+            selected_parent_idx: 0,
+            namespace_picker_visible: false,
         }
     }
 
@@ -62,26 +68,12 @@ impl TokensScreen {
         self.token_service = Some(service);
     }
 
-    pub async fn refresh(&mut self) {
+    fn load_tokens_impl(&mut self) {
         if let Some(ref service) = self.token_service {
-            match service.list_tokens().await {
+            match tokio::runtime::Handle::current().block_on(service.list_tokens()) {
                 Ok(tokens) => {
                     self.tokens = tokens;
-                    self.table.set_rows(
-                        self.tokens
-                            .iter()
-                            .map(|t| {
-                                vec![
-                                    t.id.to_string(),
-                                    t.namespace.clone(),
-                                    truncate(&t.description, 20),
-                                    if t.permission_read { "✓" } else { "✗" }.into(),
-                                    if t.permission_write { "✓" } else { "✗" }.into(),
-                                    t.creation_timestamp[..10].to_string(),
-                                ]
-                            })
-                            .collect(),
-                    );
+                    self.update_table();
                     self.status = OperationStatus::Completed("Tokens loaded".to_string());
                 }
                 Err(e) => {
@@ -91,20 +83,56 @@ impl TokensScreen {
         }
     }
 
+    fn update_table(&mut self) {
+        self.table.set_rows(
+            self.tokens.iter().map(|t| {
+                vec![
+                    t.id.to_string(),
+                    truncate(&t.code, 8),
+                    t.namespace.clone(),
+                    truncate(&t.description, 15),
+                    if t.permission_read { "✓" } else { " " }.into(),
+                    if t.permission_write { "✓" } else { " " }.into(),
+                    t.creation_timestamp[..10].to_string(),
+                ]
+            }).collect(),
+        );
+    }
+
+    fn available_parents(&self) -> Vec<&Token> {
+        self.tokens.iter()
+            .filter(|t| t.permission_share_read || t.permission_share_write)
+            .collect()
+    }
+
+    fn selected_parent(&self) -> Option<&Token> {
+        let parents = self.available_parents();
+        parents.get(self.selected_parent_idx).copied()
+    }
+
+    fn full_namespace(&self) -> String {
+        match self.selected_parent() {
+            None => "/".to_string(),
+            Some(parent) => {
+                let child = self.create_child_namespace.trim();
+                if child.is_empty() {
+                    parent.namespace.clone()
+                } else {
+                    format!("{}{}/", parent.namespace.trim_end_matches('/'), child)
+                }
+            }
+        }
+    }
+
     fn delete_selected(&mut self) {
         let ids = self.table.selected_ids();
-        if ids.is_empty() {
-            return;
-        }
+        if ids.is_empty() { return; }
         let token_index = ids[0];
         if token_index < self.tokens.len() {
             let token_id = self.tokens[token_index].id;
             if let Some(ref service) = self.token_service {
                 let service = service.clone();
-                let id = token_id;
-                tokio::spawn(async move {
-                    let _ = service.delete_token(id).await;
-                });
+                tokio::spawn(async move { let _ = service.delete_token(token_id).await; });
                 self.status = OperationStatus::Running;
             }
         }
@@ -112,18 +140,13 @@ impl TokensScreen {
 
     fn refresh_selected(&mut self) {
         let ids = self.table.selected_ids();
-        if ids.is_empty() {
-            return;
-        }
+        if ids.is_empty() { return; }
         let token_index = ids[0];
         if token_index < self.tokens.len() {
             let token_id = self.tokens[token_index].id;
             if let Some(ref service) = self.token_service {
                 let service = service.clone();
-                let id = token_id;
-                tokio::spawn(async move {
-                    let _ = service.refresh_token(id).await;
-                });
+                tokio::spawn(async move { let _ = service.refresh_token(token_id).await; });
                 self.status = OperationStatus::Running;
             }
         }
@@ -131,42 +154,61 @@ impl TokensScreen {
 
     fn submit_create(&mut self) {
         if let Some(ref service) = self.token_service {
+            let ns = self.full_namespace();
             let desc = self.create_description.clone();
-            let ns = self.create_namespace.clone();
             let r = self.create_read;
             let w = self.create_write;
             let sr = self.create_share_read;
             let sw = self.create_share_write;
             let ss = self.create_share_share;
             let service = service.clone();
-            tokio::spawn(async move {
-                let _ = service.create_token(desc, ns, r, w, sr, sw, ss).await;
-            });
+            tokio::spawn(async move { let _ = service.create_token(desc, ns, r, w, sr, sw, ss).await; });
+            self.mode = TokenMode::List;
+            self.should_refresh = true;
             self.status = OperationStatus::Running;
+        }
+    }
+
+    fn cascade_permissions(&mut self) {
+        if !self.create_read {
+            self.create_write = false;
+            self.create_share_read = false;
+            self.create_share_write = false;
+            self.create_share_share = false;
+        }
+        if self.create_write && !self.create_read {
+            self.create_read = true;
+        }
+        if (self.create_share_read || self.create_share_write) && !self.create_read {
+            self.create_read = true;
+        }
+        if self.create_share_write {
+            self.create_write = true;
+            self.create_share_read = true;
+        }
+        if self.create_share_share && !self.create_share_write {
+            self.create_share_write = true;
         }
     }
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() > max {
-        format!("{}...", &s[..max])
-    } else {
-        s.to_string()
-    }
+    if s.len() > max { format!("{}..", &s[..max]) } else { s.to_string() }
 }
 
 impl Screen for TokensScreen {
-    fn get_id(&self) -> &'static str {
-        "tokens"
-    }
+    fn get_id(&self) -> &'static str { "tokens" }
+    fn get_status(&self) -> &OperationStatus { &self.status }
 
-    fn get_status(&self) -> &OperationStatus {
-        &self.status
+    fn update(&mut self) {
+        if self.should_refresh {
+            self.should_refresh = false;
+            self.load_tokens_impl();
+        }
     }
 
     fn render(&mut self, f: &mut Frame, area: Rect) {
         let theme = AppTheme::dark();
-
         let chunks = Layout::vertical([Constraint::Min(3), Constraint::Min(10), Constraint::Min(3)]);
         let [header_area, main_area, footer_area] = chunks.areas(area);
 
@@ -181,95 +223,159 @@ impl Screen for TokensScreen {
                 Constraint::Percentage(30),
             ]);
             let [table_area, actions_area] = main_chunks.areas(main_area);
-
             self.table.render(f, table_area, &theme);
 
             let actions_block = Block::default()
                 .title(" Actions ")
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(theme.border));
-
             let inner = actions_block.inner(actions_area);
             f.render_widget(actions_block, actions_area);
 
             let mut y = inner.y;
             let actions = vec![
-                ("[R] Refresh", "Refresh token list"),
+                ("[R] Refresh", "Reload token list"),
                 ("[C] Create", "Create new token"),
                 ("[D] Delete", "Delete selected token"),
-                ("[F] Refresh Code", "Refresh selected token code"),
+                ("[F] Refresh Code", "Regenerate selected token code"),
             ];
-
             for (key, desc) in &actions {
-                let line = Span::styled(
-                    format!("{} - {}", key, desc),
-                    Style::default().fg(theme.text),
-                );
-                f.render_widget(Paragraph::new(line), Rect::new(inner.x + 1, y, inner.width - 2, 1));
+                f.render_widget(Paragraph::new(Span::styled(
+                    format!("{} - {}", key, desc), Style::default().fg(theme.text),
+                )), Rect::new(inner.x + 1, y, inner.width - 2, 1));
                 y += 1;
+            }
+
+            if self.tokens.is_empty() {
+                y += 1;
+                f.render_widget(Paragraph::new("No tokens loaded yet. Press R to refresh.")
+                    .style(Style::default().fg(theme.text_dim)),
+                    Rect::new(inner.x + 1, y, inner.width - 2, 1));
             }
         } else {
             let form_block = Block::default()
                 .title(" Create Token ")
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(theme.primary));
-
             let inner = form_block.inner(main_area);
             f.render_widget(form_block, main_area);
 
+            let parents = self.available_parents();
             let mut y = inner.y;
 
-            let fields = vec![
-                ("Description", &self.create_description),
-                ("Namespace (e.g., /test/)", &self.create_namespace),
-            ];
+            // Parent namespace picker
+            let parent_label = if self.namespace_picker_visible {
+                " Select Parent Namespace (↑↓ Enter) "
+            } else {
+                " Parent Namespace (Enter to pick) "
+            };
 
-            for (i, (label, value)) in fields.iter().enumerate() {
-                let border_style = if self.focused_input == i {
+            if self.namespace_picker_visible {
+                let picker_h = (parents.len() as u16).min(6).max(1);
+                let picker_area = Rect::new(inner.x, y, inner.width, picker_h + 2);
+
+                let items: Vec<ListItem> = parents.iter().enumerate().map(|(i, t)| {
+                    let style = if i == self.selected_parent_idx {
+                        Style::default().bg(theme.primary).fg(Color::Black)
+                    } else {
+                        Style::default().fg(theme.text)
+                    };
+                    ListItem::new(format!(" {}  {}", t.namespace, t.description)).style(style)
+                }).collect();
+
+                let list = List::new(items)
+                    .block(Block::default()
+                        .title(parent_label)
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(theme.primary)));
+                f.render_widget(list, picker_area);
+                y += picker_h + 2;
+            } else {
+                let selected = parents.get(self.selected_parent_idx).map(|t| t.namespace.as_str()).unwrap_or("/");
+                let parent_input = Paragraph::new(selected)
+                    .style(Style::default().fg(theme.text))
+                    .block(Block::default()
+                        .title(parent_label)
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(theme.border)));
+                f.render_widget(parent_input, Rect::new(inner.x, y, inner.width, 3));
+                y += 4;
+            }
+
+            // Child namespace + full namespace preview
+            if !self.namespace_picker_visible && parents.len() > self.selected_parent_idx {
+                let ns_border = if self.focused_input == 0 {
                     Style::default().fg(theme.primary)
                 } else {
                     Style::default().fg(theme.border)
                 };
 
-                let input = Paragraph::new(value.as_str())
+                let full_ns = self.full_namespace();
+                let display = if self.focused_input == 0 {
+                    format!("{}█", self.create_child_namespace)
+                } else {
+                    self.create_child_namespace.clone()
+                };
+
+                let child_input = Paragraph::new(display)
                     .style(Style::default().fg(theme.text))
-                    .block(
-                        Block::default()
-                            .title(format!(" {} ", label))
-                            .borders(Borders::ALL)
-                            .border_style(border_style),
-                    );
-                f.render_widget(input, Rect::new(inner.x, y, inner.width, 3));
+                    .block(Block::default()
+                        .title(format!(" Child Namespace  (Full: {})", full_ns))
+                        .borders(Borders::ALL)
+                        .border_style(ns_border));
+                f.render_widget(child_input, Rect::new(inner.x, y, inner.width, 3));
                 y += 4;
             }
 
-            let perms = [
-                ("Read", self.create_read),
-                ("Write", self.create_write),
-                ("Share Read", self.create_share_read),
-                ("Share Write", self.create_share_write),
-                ("Share Share", self.create_share_share),
-            ];
-
-            for (i, (label, val)) in perms.iter().enumerate() {
-                let idx = i + 2;
-                let marker = if *val { "[✓]" } else { "[ ]" };
-                let style = if self.focused_input == idx {
-                    Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)
+            if !self.namespace_picker_visible {
+                // Description
+                let desc_border = if self.focused_input == 1 {
+                    Style::default().fg(theme.primary)
                 } else {
-                    Style::default().fg(theme.text)
+                    Style::default().fg(theme.border)
                 };
-                let line = format!(" {} {}", marker, label);
-                f.render_widget(Paragraph::new(Span::styled(line, style)), Rect::new(inner.x + 1, y, inner.width - 2, 1));
-                y += 1;
-            }
+                let desc_display = if self.focused_input == 1 {
+                    format!("{}█", self.create_description)
+                } else {
+                    self.create_description.clone()
+                };
+                let desc_input = Paragraph::new(desc_display)
+                    .style(Style::default().fg(theme.text))
+                    .block(Block::default()
+                        .title(" Description ")
+                        .borders(Borders::ALL)
+                        .border_style(desc_border));
+                f.render_widget(desc_input, Rect::new(inner.x, y, inner.width, 3));
+                y += 4;
 
-            y += 1;
-            let submit = Span::styled(
-                "[Enter] Create Token  [Esc] Cancel",
-                Style::default().fg(theme.text_dim),
-            );
-            f.render_widget(Paragraph::new(submit), Rect::new(inner.x + 1, y, inner.width - 2, 1));
+                // Permissions
+                let perms = [
+                    ("Read", self.create_read, 2),
+                    ("Write", self.create_write, 3),
+                    ("Share Read", self.create_share_read, 4),
+                    ("Share Write", self.create_share_write, 5),
+                    ("Share Share", self.create_share_share, 6),
+                ];
+                for (label, val, idx) in &perms {
+                    let marker = if *val { "[✓]" } else { "[ ]" };
+                    let style = if self.focused_input == *idx {
+                        Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(theme.text)
+                    };
+                    f.render_widget(Paragraph::new(Span::styled(
+                        format!(" {} {}", marker, label), style,
+                    )), Rect::new(inner.x + 1, y, inner.width - 2, 1));
+                    y += 1;
+                }
+
+                y += 1;
+                let hint = Span::styled(
+                    "[Enter] Submit  [Tab] Next  [Space] Toggle  [Esc] Cancel",
+                    Style::default().fg(theme.text_dim),
+                );
+                f.render_widget(Paragraph::new(hint), Rect::new(inner.x + 1, y, inner.width - 2, 1));
+            }
         }
 
         let footer = match &self.status {
@@ -284,8 +390,8 @@ impl Screen for TokensScreen {
     fn handle_paste(&mut self, text: &str) -> Option<ScreenAction> {
         if self.mode == TokenMode::Create {
             match self.focused_input {
-                0 => self.create_description.push_str(text),
-                1 => self.create_namespace.push_str(text),
+                0 => self.create_child_namespace.push_str(text),
+                1 => self.create_description.push_str(text),
                 _ => {}
             }
         }
@@ -298,81 +404,108 @@ impl Screen for TokensScreen {
                 KeyCode::Char('c') | KeyCode::Char('C') => {
                     self.mode = TokenMode::Create;
                     self.focused_input = 0;
+                    self.selected_parent_idx = 0;
+                    self.namespace_picker_visible = true;
                     None
                 }
                 KeyCode::Char('r') | KeyCode::Char('R') => {
-                    let service = self.token_service.clone();
-                    if let Some(service) = service {
-                        let service = service.clone();
-                        tokio::spawn(async move {
-                            let _ = service.list_tokens().await;
-                        });
-                    }
+                    self.should_refresh = true;
                     None
                 }
-                KeyCode::Char('d') | KeyCode::Char('D') => {
-                    self.delete_selected();
-                    None
-                }
-                KeyCode::Char('f') | KeyCode::Char('F') => {
-                    self.refresh_selected();
-                    None
-                }
-                KeyCode::Up => {
-                    self.table.prev();
-                    None
-                }
-                KeyCode::Down => {
-                    self.table.next();
-                    None
-                }
+                KeyCode::Char('d') | KeyCode::Char('D') => { self.delete_selected(); None }
+                KeyCode::Char('f') | KeyCode::Char('F') => { self.refresh_selected(); None }
+                KeyCode::Up => { self.table.prev(); None }
+                KeyCode::Down => { self.table.next(); None }
                 _ => None,
             },
-            TokenMode::Create => match key.code {
-                KeyCode::Char(c) => {
-                    if self.focused_input == 0 {
-                        self.create_description.push(c);
-                    } else if self.focused_input == 1 {
-                        self.create_namespace.push(c);
-                    } else {
-                        let perm_idx = self.focused_input - 2;
-                        match perm_idx {
-                            0 => self.create_read = !self.create_read,
-                            1 => self.create_write = !self.create_write,
-                            2 => self.create_share_read = !self.create_share_read,
-                            3 => self.create_share_write = !self.create_share_write,
-                            4 => self.create_share_share = !self.create_share_share,
-                            _ => {}
+            TokenMode::Create => {
+                if self.namespace_picker_visible {
+                    match key.code {
+                        KeyCode::Up => {
+                            let count = self.available_parents().len();
+                            if count > 0 {
+                                self.selected_parent_idx = self.selected_parent_idx.saturating_sub(1);
+                            }
+                            None
                         }
+                        KeyCode::Down => {
+                            let count = self.available_parents().len();
+                            if count > 0 {
+                                self.selected_parent_idx = (self.selected_parent_idx + 1) % count;
+                            }
+                            None
+                        }
+                        KeyCode::Enter => {
+                            self.namespace_picker_visible = false;
+                            self.focused_input = 0;
+                            None
+                        }
+                        KeyCode::Esc => {
+                            self.mode = TokenMode::List;
+                            None
+                        }
+                        _ => None,
                     }
-                    None
-                }
-                KeyCode::Backspace => {
-                    if self.focused_input == 0 {
-                        self.create_description.pop();
-                    } else if self.focused_input == 1 {
-                        self.create_namespace.pop();
+                } else {
+                    match key.code {
+                        KeyCode::Tab => {
+                            self.focused_input = (self.focused_input + 1) % 7;
+                            None
+                        }
+                        KeyCode::Char(' ') => {
+                            if self.focused_input >= 2 {
+                                let perm_idx = self.focused_input - 2;
+                                match perm_idx {
+                                    0 => self.create_read = !self.create_read,
+                                    1 => self.create_write = !self.create_write,
+                                    2 => self.create_share_read = !self.create_share_read,
+                                    3 => self.create_share_write = !self.create_share_write,
+                                    4 => self.create_share_share = !self.create_share_share,
+                                    _ => {}
+                                }
+                                self.cascade_permissions();
+                            }
+                            None
+                        }
+                        KeyCode::Char(c) => {
+                            match self.focused_input {
+                                0 => self.create_child_namespace.push(c),
+                                1 => self.create_description.push(c),
+                                _ => {
+                                    let perm_idx = self.focused_input - 2;
+                                    match perm_idx {
+                                        0 => self.create_read = !self.create_read,
+                                        1 => self.create_write = !self.create_write,
+                                        2 => self.create_share_read = !self.create_share_read,
+                                        3 => self.create_share_write = !self.create_share_write,
+                                        4 => self.create_share_share = !self.create_share_share,
+                                        _ => {}
+                                    }
+                                    self.cascade_permissions();
+                                }
+                            }
+                            None
+                        }
+                        KeyCode::Backspace => {
+                            match self.focused_input {
+                                0 => { self.create_child_namespace.pop(); }
+                                1 => { self.create_description.pop(); }
+                                _ => {}
+                            }
+                            None
+                        }
+                        KeyCode::Enter => {
+                            if self.focused_input >= 2 {
+                                self.submit_create();
+                            } else {
+                                self.focused_input = (self.focused_input + 1) % 7;
+                            }
+                            None
+                        }
+                        KeyCode::Esc => { self.mode = TokenMode::List; None }
+                        _ => None,
                     }
-                    None
                 }
-                KeyCode::Tab => {
-                    self.focused_input = (self.focused_input + 1) % 7;
-                    None
-                }
-                KeyCode::Enter => {
-                    if self.focused_input < 2 {
-                        self.focused_input = (self.focused_input + 1) % 7;
-                    } else {
-                        self.submit_create();
-                        self.mode = TokenMode::List;
-                    }
-                    None
-                }
-                KeyCode::Esc => {
-                    self.mode = TokenMode::List;
-                    None
-                }
-                _ => None,
             },
         }
     }
