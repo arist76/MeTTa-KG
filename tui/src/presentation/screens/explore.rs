@@ -1,22 +1,95 @@
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 use crossterm::event::{KeyEvent, KeyCode};
+use serde::Deserialize;
 use super::{Screen, ScreenAction};
 use crate::presentation::theme::*;
-use crate::presentation::widgets::tree::TreeWidget;
-use crate::domain::models::{SpaceNode, OperationStatus};
+use crate::domain::models::OperationStatus;
 use crate::application::space_service::SpaceService;
 use std::sync::{Arc, Mutex};
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExploreResponse {
+    pub expr: String,
+    pub token: Vec<i32>,
+    #[serde(default)]
+    pub has_more: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct TreeNode {
+    pub expr: String,
+    pub token: Vec<i32>,
+    pub children: Vec<TreeNode>,
+    pub expanded: bool,
+    pub depth: usize,
+    pub loaded: bool,
+    pub label: String,
+}
+
+fn build_label(expr: &str) -> String {
+    let trimmed = expr.trim();
+    if trimmed.len() <= 80 { trimmed.to_string() }
+    else { format!("{}...", &trimmed[..77]) }
+}
+
+fn process_response(raw: &str) -> Vec<TreeNode> {
+    serde_json::from_str::<Vec<ExploreResponse>>(raw)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|r| {
+            let label = build_label(&r.expr);
+            TreeNode {
+                expr: r.expr, token: r.token,
+                children: Vec::new(), expanded: false,
+                depth: 0, loaded: false, label,
+            }
+        })
+        .collect()
+}
+
+fn collapse_flat(nodes: &mut [TreeNode], target: usize) {
+    let mut i = 0usize;
+    fn go(nodes: &mut [TreeNode], i: &mut usize, target: usize) -> bool {
+        for node in nodes.iter_mut() {
+            if *i == target { node.expanded = false; return true; }
+            *i += 1;
+            if node.expanded && go(&mut node.children, i, target) { return true; }
+        }
+        false
+    }
+    go(nodes, &mut i, target);
+}
+
+fn set_children_flat(nodes: &mut [TreeNode], target: usize, children: Vec<TreeNode>) {
+    let mut i = 0usize;
+    fn go(nodes: &mut [TreeNode], i: &mut usize, target: usize, children: &mut Option<Vec<TreeNode>>) -> bool {
+        for node in nodes.iter_mut() {
+            if *i == target {
+                if let Some(ch) = children.take() {
+                    node.children = ch; node.expanded = true; node.loaded = true;
+                }
+                return true;
+            }
+            *i += 1;
+            if node.expanded && go(&mut node.children, i, target, children) { return true; }
+        }
+        false
+    }
+    let mut ch = Some(children);
+    go(nodes, &mut i, target, &mut ch);
+}
 
 pub struct ExploreScreen {
     pub namespace: String,
     pattern: String,
-    tree: TreeWidget,
     status: OperationStatus,
     space_service: Option<Arc<SpaceService>>,
-    pub focus_tree: bool,
+    nodes: Vec<TreeNode>,
+    selected: usize,
+    scroll: usize,
     pending_explore: Arc<Mutex<Option<Result<String, String>>>>,
-    pending_read: Arc<Mutex<Option<Result<String, String>>>>,
+    pending_expand: Arc<Mutex<Option<(usize, Result<Vec<TreeNode>, String>)>>>,
 }
 
 impl ExploreScreen {
@@ -24,24 +97,36 @@ impl ExploreScreen {
         Self {
             namespace: "/".to_string(),
             pattern: "$x".to_string(),
-            tree: TreeWidget::new(),
             status: OperationStatus::Idle,
             space_service: None,
-            focus_tree: false,
+            nodes: Vec::new(),
+            selected: 0,
+            scroll: 0,
             pending_explore: Arc::new(Mutex::new(None)),
-            pending_read: Arc::new(Mutex::new(None)),
+            pending_expand: Arc::new(Mutex::new(None)),
         }
     }
 
     pub fn set_space_service(&mut self, service: Arc<SpaceService>) {
         self.space_service = Some(service);
     }
+
+    fn flatten(&self) -> Vec<(usize, &TreeNode)> {
+        fn go<'a>(nodes: &'a [TreeNode], depth: usize, out: &mut Vec<(usize, &'a TreeNode)>) {
+            for node in nodes {
+                out.push((depth, node));
+                if node.expanded { go(&node.children, depth + 1, out); }
+            }
+        }
+        let mut out = Vec::new();
+        go(&self.nodes, 0, &mut out);
+        out
+    }
 }
 
 impl Screen for ExploreScreen {
     fn get_id(&self) -> &'static str { "explore" }
     fn get_status(&self) -> &OperationStatus { &self.status }
-    fn reset_status(&mut self) { self.status = OperationStatus::Idle; }
     fn namespace(&self) -> &str { &self.namespace }
     fn set_namespace(&mut self, ns: &str) { self.namespace = ns.to_string(); }
 
@@ -49,139 +134,173 @@ impl Screen for ExploreScreen {
         let result = self.pending_explore.lock().ok().and_then(|mut g| g.take());
         if let Some(result) = result {
             match result {
-                Ok(output) => {
-                    let nodes: Vec<SpaceNode> = serde_json::from_str(&output).unwrap_or_else(|_| {
-                        output.lines().enumerate().map(|(_i, line)| SpaceNode {
-                            expression: line.to_string(),
-                            token: String::new(),
-                            children: Vec::new(),
-                            expanded: false,
-                            loaded: false,
-                        }).collect()
-                    });
-                    self.tree.set_nodes(nodes);
-                    self.focus_tree = true;
-                    self.status = OperationStatus::Completed("Explore complete".to_string());
+                Ok(raw) => {
+                    self.nodes = process_response(&raw);
+                    self.selected = 0;
+                    self.scroll = 0;
+                    let count = self.nodes.len();
+                    self.status = OperationStatus::Completed(
+                        if count == 0 { "No nodes found".into() } else { format!("Loaded {} nodes", count) }
+                    );
                 }
-                Err(e) => {
-                    self.status = OperationStatus::Failed(e);
-                }
+                Err(e) => self.status = OperationStatus::Failed(e),
             }
             return;
         }
 
-        let result = self.pending_read.lock().ok().and_then(|mut g| g.take());
-        if let Some(result) = result {
+        let result = self.pending_expand.lock().ok().and_then(|mut g| g.take());
+        if let Some((idx, result)) = result {
             match result {
-                Ok(output) => {
-                    let nodes: Vec<SpaceNode> = output.lines().map(|line| SpaceNode {
-                        expression: line.to_string(),
-                        token: String::new(),
-                        children: Vec::new(),
-                        expanded: false,
-                        loaded: false,
-                    }).collect();
-                    self.tree.set_nodes(nodes);
-                    self.focus_tree = true;
-                    self.status = OperationStatus::Completed("Space read complete".to_string());
+                Ok(children) => {
+                    set_children_flat(&mut self.nodes, idx, children);
+                    self.status = OperationStatus::Completed("Expanded".to_string());
                 }
-                Err(e) => {
-                    self.status = OperationStatus::Failed(e);
-                }
+                Err(e) => self.status = OperationStatus::Failed(e),
             }
         }
     }
 
     fn render(&mut self, f: &mut Frame, area: Rect) {
         let theme = AppTheme::dark();
-
         let chunks = Layout::vertical([
             Constraint::Length(3),
             Constraint::Length(3),
-            Constraint::Percentage(50),
+            Constraint::Min(5),
         ]);
-        let [header_area, pattern_area, result_area] = chunks.areas(area);
+        let [header_area, pattern_area, list_area] = chunks.areas(area);
 
         let header = Paragraph::new(format!("Explore: {}", self.namespace))
             .style(title_style(&theme))
             .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(theme.primary)));
         f.render_widget(header, header_area);
 
-        let pattern_border = if self.focus_tree {
-            Style::default().fg(theme.border)
-        } else {
-            Style::default().fg(theme.primary)
-        };
-
+        let pattern_border = Style::default().fg(theme.primary);
         let pattern_block = Block::default()
-            .title(format!(" Pattern (Enter:explore, R:read, Tab:tree) "))
+            .title(" Pattern (Enter:explore, R:read, ↑↓:navigate, ←→:expand/collapse) ")
             .borders(Borders::ALL)
             .border_style(pattern_border);
-
         let pattern_inner = pattern_block.inner(pattern_area);
         f.render_widget(pattern_block, pattern_area);
+        f.render_widget(Paragraph::new(self.pattern.as_str()).style(Style::default().fg(theme.text)), pattern_inner);
 
-        let pattern_text = Paragraph::new(self.pattern.as_str())
-            .style(Style::default().fg(theme.text));
-        f.render_widget(pattern_text, pattern_inner);
+        let list_block = Block::default()
+            .title(" Results ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.border));
+        let inner = list_block.inner(list_area);
+        f.render_widget(list_block, list_area);
 
-        self.tree.render(f, result_area, &theme);
+        let flat = self.flatten();
+        if flat.is_empty() {
+            f.render_widget(
+                Paragraph::new("Press Enter to explore").style(Style::default().fg(theme.text_dim)).alignment(Alignment::Center),
+                inner,
+            );
+            return;
+        }
+
+        let mut y = inner.y;
+        for (i, (depth, node)) in flat.iter().enumerate() {
+            if i < self.scroll || i >= self.scroll + inner.height as usize { continue; }
+            if y >= inner.y + inner.height { break; }
+
+            let selected = i == self.selected;
+            let indent = "  ".repeat(*depth);
+            let expand_marker = if node.expanded { "▼" } else if !node.token.is_empty() { "▶" } else { " " };
+            let line = format!("{}{} {}", indent, expand_marker, node.label);
+
+            let style = if selected {
+                Style::default().bg(theme.primary).fg(Color::Black)
+            } else {
+                Style::default().fg(theme.text)
+            };
+            f.render_widget(Paragraph::new(Span::styled(line, style)), Rect::new(inner.x, y, inner.width, 1));
+            y += 1;
+        }
     }
 
     fn handle_paste(&mut self, text: &str) -> Option<ScreenAction> {
-        if !self.focus_tree {
-            self.pattern.push_str(text);
-        }
+        self.pattern.push_str(text);
         None
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> Option<ScreenAction> {
-        if self.focus_tree {
-            match key.code {
-                KeyCode::Up => { self.tree.prev(); None }
-                KeyCode::Down => { self.tree.next(); None }
-                KeyCode::Tab => { self.focus_tree = false; None }
-                KeyCode::Enter => { self.tree.toggle_current(); None }
-                _ => None,
+        match key.code {
+            KeyCode::Enter => {
+                let (service, path, pattern, pending) = (
+                    self.space_service.clone(), self.namespace.clone(),
+                    self.pattern.clone(), self.pending_explore.clone(),
+                );
+                if let Some(service) = service {
+                    tokio::spawn(async move {
+                        let result = service.explore(&path, &pattern, "").await.map_err(|e| e.to_string());
+                        *pending.lock().unwrap() = Some(result);
+                    });
+                }
+                self.status = OperationStatus::Running;
+                None
             }
-        } else {
-            match key.code {
-                KeyCode::Tab => { self.focus_tree = true; None }
-                KeyCode::Enter => {
+            KeyCode::Char('r') | KeyCode::Char('R') => {
+                let (service, path, pending) = (
+                    self.space_service.clone(), self.namespace.clone(),
+                    self.pending_explore.clone(),
+                );
+                if let Some(service) = service {
+                    tokio::spawn(async move {
+                        let result = service.read(&path).await.map_err(|e| e.to_string());
+                        *pending.lock().unwrap() = Some(result);
+                    });
+                }
+                self.status = OperationStatus::Running;
+                None
+            }
+            KeyCode::Char(c) => { self.pattern.push(c); None }
+            KeyCode::Backspace => { self.pattern.pop(); None }
+            KeyCode::Up => {
+                if self.selected > 0 { self.selected -= 1; }
+                if self.selected < self.scroll { self.scroll = self.selected; }
+                None
+            }
+            KeyCode::Down => {
+                let len = self.flatten().len();
+                if len > 0 && self.selected + 1 < len { self.selected += 1; }
+                if self.selected >= self.scroll + 10 { self.scroll = self.selected.saturating_sub(5); }
+                None
+            }
+            KeyCode::Right | KeyCode::Left => {
+                let (is_expanded, can_expand, token) = {
+                    let flat = self.flatten();
+                    if self.selected < flat.len() {
+                        let (_, n) = &flat[self.selected];
+                        (n.expanded, !n.token.is_empty() && !n.token.iter().all(|v| *v == -1), n.token.clone())
+                    } else { (false, false, vec![]) }
+                };
+
+                if is_expanded {
+                    collapse_flat(&mut self.nodes, self.selected);
+                    self.status = OperationStatus::Completed("Collapsed".to_string());
+                } else if can_expand {
                     let (service, path, pattern, pending) = (
-                        self.space_service.clone(),
-                        self.namespace.clone(),
-                        self.pattern.clone(),
-                        self.pending_explore.clone(),
+                        self.space_service.clone(), self.namespace.clone(),
+                        self.pattern.clone(), self.pending_expand.clone(),
                     );
+                    let idx = self.selected;
                     if let Some(service) = service {
                         tokio::spawn(async move {
-                            let result = service.explore(&path, &pattern, "").await.map_err(|e| e.to_string());
-                            *pending.lock().unwrap() = Some(result);
+                            let token_str: String = token.iter().map(|v| format!("{}", v)).collect::<Vec<_>>().join(",");
+                            let result = service.explore(&path, &pattern, &token_str).await.map_err(|e| e.to_string());
+                            let children = match &result {
+                                Ok(raw) => Ok(process_response(raw)),
+                                Err(e) => Err(e.clone()),
+                            };
+                            *pending.lock().unwrap() = Some((idx, children));
                         });
                     }
                     self.status = OperationStatus::Running;
-                    None
                 }
-                KeyCode::Char('r') | KeyCode::Char('R') => {
-                    let (service, path, pending) = (
-                        self.space_service.clone(),
-                        self.namespace.clone(),
-                        self.pending_read.clone(),
-                    );
-                    if let Some(service) = service {
-                        tokio::spawn(async move {
-                            let result = service.read(&path).await.map_err(|e| e.to_string());
-                            *pending.lock().unwrap() = Some(result);
-                        });
-                    }
-                    self.status = OperationStatus::Running;
-                    None
-                }
-                KeyCode::Char(c) => { self.pattern.push(c); None }
-                KeyCode::Backspace => { self.pattern.pop(); None }
-                _ => None,
+                None
             }
+            _ => None,
         }
     }
 }
