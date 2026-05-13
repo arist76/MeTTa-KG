@@ -34,7 +34,11 @@ fn build_label(expr: &str) -> String {
 }
 
 fn process_response(raw: &str) -> Vec<TreeNode> {
-    serde_json::from_str::<Vec<ExploreResponse>>(raw)
+    // API wraps response in Json<String>, so we may need to unwrap JSON string encoding
+    let unescaped: Option<String> = serde_json::from_str(raw).ok();
+    let inner = unescaped.as_deref().unwrap_or(raw);
+
+    serde_json::from_str::<Vec<ExploreResponse>>(inner)
         .unwrap_or_default()
         .into_iter()
         .map(|r| {
@@ -89,6 +93,7 @@ pub struct ExploreScreen {
     selected: usize,
     scroll: usize,
     pending_explore: Arc<Mutex<Option<Result<String, String>>>>,
+    pending_read: Arc<Mutex<Option<Result<String, String>>>>,
     pending_expand: Arc<Mutex<Option<(usize, Result<Vec<TreeNode>, String>)>>>,
 }
 
@@ -103,6 +108,7 @@ impl ExploreScreen {
             selected: 0,
             scroll: 0,
             pending_explore: Arc::new(Mutex::new(None)),
+            pending_read: Arc::new(Mutex::new(None)),
             pending_expand: Arc::new(Mutex::new(None)),
         }
     }
@@ -141,6 +147,33 @@ impl Screen for ExploreScreen {
                     let count = self.nodes.len();
                     self.status = OperationStatus::Completed(
                         if count == 0 { "No nodes found".into() } else { format!("Loaded {} nodes", count) }
+                    );
+                }
+                Err(e) => self.status = OperationStatus::Failed(e),
+            }
+            return;
+        }
+
+        let result = self.pending_read.lock().ok().and_then(|mut g| g.take());
+        if let Some(result) = result {
+            match result {
+                Ok(raw) => {
+                    // Unwrap JSON string encoding, then split lines into tree nodes
+                    let inner: String = serde_json::from_str(&raw).unwrap_or(raw);
+                    let lines: Vec<&str> = inner.lines().filter(|l| !l.trim().is_empty()).collect();
+                    self.nodes = lines.into_iter().map(|line| {
+                        let label = build_label(line);
+                        TreeNode {
+                            expr: line.to_string(), token: vec![],
+                            children: Vec::new(), expanded: false,
+                            depth: 0, loaded: false, label,
+                        }
+                    }).collect();
+                    self.selected = 0;
+                    self.scroll = 0;
+                    let count = self.nodes.len();
+                    self.status = OperationStatus::Completed(
+                        if count == 0 { "No data".into() } else { format!("Read {} lines", count) }
                     );
                 }
                 Err(e) => self.status = OperationStatus::Failed(e),
@@ -243,7 +276,7 @@ impl Screen for ExploreScreen {
             KeyCode::Char('r') | KeyCode::Char('R') => {
                 let (service, path, pending) = (
                     self.space_service.clone(), self.namespace.clone(),
-                    self.pending_explore.clone(),
+                    self.pending_read.clone(),
                 );
                 if let Some(service) = service {
                     tokio::spawn(async move {
