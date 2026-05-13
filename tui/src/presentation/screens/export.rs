@@ -68,7 +68,15 @@ impl Screen for ExportScreen {
         if let Some(result) = result {
             match result {
                 Ok(output) => {
-                    self.output = output;
+                    let cleaned = output
+                        .strip_prefix('"')
+                        .and_then(|s| s.strip_suffix('"'))
+                        .unwrap_or(&output)
+                        .replace("\\n", "\n")
+                        .replace("\\t", "\t")
+                        .replace("\\\"", "\"")
+                        .replace("\\\\", "\\");
+                    self.output = cleaned;
                     self.status = OperationStatus::Completed("Export complete".to_string());
                 }
                 Err(e) => {
