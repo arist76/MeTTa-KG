@@ -179,7 +179,9 @@ impl App {
             return;
         }
         let old_screen_id = self.active_screen;
-        self.screens.insert(old_screen_id, std::mem::replace(&mut self.screen, Box::new(stubs::StubScreen::new(""))));
+        let mut old_screen = std::mem::replace(&mut self.screen, Box::new(stubs::StubScreen::new("")));
+        old_screen.reset_status();
+        self.screens.insert(old_screen_id, old_screen);
 
         let mut new_screen = if let Some(s) = self.screens.remove(id) {
             s

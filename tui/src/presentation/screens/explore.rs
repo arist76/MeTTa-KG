@@ -41,6 +41,7 @@ impl ExploreScreen {
 impl Screen for ExploreScreen {
     fn get_id(&self) -> &'static str { "explore" }
     fn get_status(&self) -> &OperationStatus { &self.status }
+    fn reset_status(&mut self) { self.status = OperationStatus::Idle; }
     fn namespace(&self) -> &str { &self.namespace }
     fn set_namespace(&mut self, ns: &str) { self.namespace = ns.to_string(); }
 

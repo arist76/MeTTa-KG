@@ -24,6 +24,8 @@ impl Screen for StubScreen {
         &OperationStatus::Idle
     }
 
+    fn reset_status(&mut self) {}
+
     fn render(&mut self, f: &mut Frame, area: Rect) {
         let theme = AppTheme::dark();
 

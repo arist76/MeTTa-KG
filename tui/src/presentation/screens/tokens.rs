@@ -215,6 +215,7 @@ fn truncate(s: &str, max: usize) -> String {
 impl Screen for TokensScreen {
     fn get_id(&self) -> &'static str { "tokens" }
     fn get_status(&self) -> &OperationStatus { &self.status }
+    fn reset_status(&mut self) { self.status = OperationStatus::Idle; }
 
     fn update(&mut self) {
         if self.should_refresh {

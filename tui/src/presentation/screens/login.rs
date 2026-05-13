@@ -68,6 +68,10 @@ impl Screen for LoginScreen {
         &self.status
     }
 
+    fn reset_status(&mut self) {
+        self.status = OperationStatus::Idle;
+    }
+
     fn update(&mut self) {}
 
     fn render(&mut self, f: &mut Frame, area: Rect) {

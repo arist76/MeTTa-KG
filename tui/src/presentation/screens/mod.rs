@@ -26,6 +26,7 @@ pub trait Screen {
     fn set_namespace(&mut self, _ns: &str) {}
     fn namespace(&self) -> &str { "" }
     fn get_status(&self) -> &OperationStatus;
+    fn reset_status(&mut self) {}
     fn update(&mut self) {}
     fn get_id(&self) -> &'static str;
 }

@@ -45,6 +45,7 @@ impl IntersectionScreen {
 impl Screen for IntersectionScreen {
     fn get_id(&self) -> &'static str { "intersection" }
     fn get_status(&self) -> &OperationStatus { &self.status }
+    fn reset_status(&mut self) { self.status = OperationStatus::Idle; }
     fn set_namespace(&mut self, _ns: &str) {}
 
     fn update(&mut self) {

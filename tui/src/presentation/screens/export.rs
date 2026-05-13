@@ -59,6 +59,7 @@ impl ExportScreen {
 impl Screen for ExportScreen {
     fn get_id(&self) -> &'static str { "export" }
     fn get_status(&self) -> &OperationStatus { &self.status }
+    fn reset_status(&mut self) { self.status = OperationStatus::Idle; self.output.clear(); }
     fn namespace(&self) -> &str { &self.namespace }
     fn set_namespace(&mut self, ns: &str) { self.namespace = ns.to_string(); }
 
