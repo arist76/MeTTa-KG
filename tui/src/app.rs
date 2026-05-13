@@ -38,8 +38,8 @@ pub struct App {
     pub show_help: bool,
     pub current_namespace: String,
     pub editing_namespace: bool,
-    pub toast_manager: ToastManager,
-    last_status: Option<String>,
+    pub     toast_manager: ToastManager,
+    last_toast: Option<(&'static str, String)>,
 }
 
 impl App {
@@ -114,7 +114,7 @@ impl App {
             current_namespace: "/".to_string(),
             editing_namespace: false,
             toast_manager: ToastManager::new(),
-            last_status: None,
+            last_toast: None,
         }
     }
 
@@ -209,15 +209,16 @@ impl App {
     fn process_toasts(&mut self) {
         self.toast_manager.remove_expired();
 
+        let screen_id = self.screen.get_id();
         let status = self.screen.get_status();
-        let status_key = match status {
-            OperationStatus::Completed(msg) => Some(format!("ok:{}", msg)),
-            OperationStatus::Failed(msg) => Some(format!("err:{}", msg)),
+        let toast_key = match status {
+            OperationStatus::Completed(msg) => Some((screen_id, format!("ok:{}", msg))),
+            OperationStatus::Failed(msg) => Some((screen_id, format!("err:{}", msg))),
             _ => None,
         };
 
-        if let Some(key) = status_key {
-            if self.last_status.as_deref() != Some(&key) {
+        if let Some(ref key) = toast_key {
+            if self.last_toast.as_ref() != Some(key) {
                 match status {
                     OperationStatus::Completed(msg) => {
                         self.toast_manager.success(msg.clone());
@@ -227,10 +228,10 @@ impl App {
                     }
                     _ => {}
                 }
-                self.last_status = Some(key);
+                self.last_toast = Some(key.clone());
             }
         } else {
-            self.last_status = None;
+            self.last_toast = None;
         }
     }
 
