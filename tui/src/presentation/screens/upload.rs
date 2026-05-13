@@ -1,0 +1,143 @@
+use ratatui::prelude::*;
+use ratatui::widgets::*;
+use crossterm::event::{KeyEvent, KeyCode};
+use super::{Screen, ScreenAction};
+use crate::presentation::theme::*;
+use crate::domain::models::{OperationStatus, ImportTab};
+use crate::application::space_service::SpaceService;
+use std::sync::Arc;
+
+pub struct ImportScreen {
+    pub active_tab: ImportTab,
+    pub url: String,
+    pub path: String,
+    pub text_input: String,
+    pub file_path: String,
+    status: OperationStatus,
+    space_service: Option<Arc<SpaceService>>,
+}
+
+impl ImportScreen {
+    pub fn new() -> Self {
+        Self {
+            active_tab: ImportTab::Url,
+            url: String::new(),
+            path: String::new(),
+            text_input: String::new(),
+            file_path: String::new(),
+            status: OperationStatus::Idle,
+            space_service: None,
+        }
+    }
+
+    pub fn set_space_service(&mut self, service: Arc<SpaceService>) {
+        self.space_service = Some(service);
+    }
+
+    fn current_field(&mut self) -> &mut String {
+        match self.active_tab {
+            ImportTab::Url => &mut self.url,
+            ImportTab::File => &mut self.file_path,
+            ImportTab::Text => &mut self.text_input,
+        }
+    }
+}
+
+impl Screen for ImportScreen {
+    fn get_id(&self) -> &'static str { "import" }
+    fn get_status(&self) -> &OperationStatus { &self.status }
+    fn set_namespace(&mut self, _ns: &str) {}
+
+    fn render(&mut self, f: &mut Frame, area: Rect) {
+        let theme = AppTheme::dark();
+        let chunks = Layout::vertical([
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Min(5),
+            Constraint::Length(3),
+        ]);
+        let [header_area, tabs_area, content_area, button_area] = chunks.areas(area);
+
+        let header = Paragraph::new("Import Data")
+            .style(title_style(&theme))
+            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(theme.primary)));
+        f.render_widget(header, header_area);
+
+        let tabs = [("URL", ImportTab::Url), ("File", ImportTab::File), ("Text", ImportTab::Text)];
+        let tab_w = tabs_area.width / 3;
+        for (i, (label, tab)) in tabs.iter().enumerate() {
+            let x = tabs_area.x + (i as u16 * tab_w);
+            let style = if self.active_tab == *tab {
+                Style::default().fg(Color::Black).bg(theme.primary).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(theme.text)
+            };
+            f.render_widget(Paragraph::new(Span::styled(*label, style)).alignment(Alignment::Center),
+                Rect::new(x, tabs_area.y, tab_w, tabs_area.height));
+        }
+
+        let content = match self.active_tab {
+            ImportTab::Url => &self.url,
+            ImportTab::File => &self.file_path,
+            ImportTab::Text => &self.text_input,
+        };
+
+        let content_block = Paragraph::new(format!("{}█", content))
+            .style(Style::default().fg(theme.text))
+            .block(Block::default()
+                .title(match self.active_tab {
+                    ImportTab::Url => " URL ",
+                    ImportTab::File => " File Path ",
+                    ImportTab::Text => " MeTTa Text ",
+                })
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.primary)));
+        f.render_widget(content_block, content_area);
+
+        let label = match self.active_tab {
+            ImportTab::Url => " [Enter] Import from URL [Tab] Switch Tab ",
+            ImportTab::File => " [Enter] Upload File [Tab] Switch Tab ",
+            ImportTab::Text => " [Enter] Upload Text [Tab] Switch Tab ",
+        };
+        f.render_widget(Block::default().title(label).borders(Borders::ALL).border_style(Style::default().fg(theme.primary)), button_area);
+    }
+
+    fn handle_paste(&mut self, text: &str) -> Option<ScreenAction> {
+        self.current_field().push_str(text);
+        None
+    }
+
+    fn handle_key(&mut self, key: KeyEvent) -> Option<ScreenAction> {
+        match key.code {
+            KeyCode::Tab => {
+                self.active_tab = match self.active_tab {
+                    ImportTab::Url => ImportTab::File,
+                    ImportTab::File => ImportTab::Text,
+                    ImportTab::Text => ImportTab::Url,
+                };
+                None
+            }
+            KeyCode::Enter => {
+                let service = self.space_service.clone();
+                if let Some(service) = service {
+                    match self.active_tab {
+                        ImportTab::Url => {
+                            let url = self.url.clone();
+                            tokio::spawn(async move { let _ = service.import("/tmp", &url).await; });
+                        }
+                        ImportTab::Text => {
+                            let text = self.text_input.clone();
+                            tokio::spawn(async move { let _ = service.upload("/tmp", &text).await; });
+                        }
+                        ImportTab::File => {}
+                    }
+                }
+                self.status = OperationStatus::Running;
+                None
+            }
+            KeyCode::Char(c) => { self.current_field().push(c); None }
+            KeyCode::Backspace => { self.current_field().pop(); None }
+            _ => None,
+        }
+    }
+}
