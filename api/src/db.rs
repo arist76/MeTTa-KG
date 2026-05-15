@@ -10,7 +10,10 @@ pub fn establish_connection() -> PgConnection {
     let port = env::var("POSTGRES_PORT").unwrap_or_else(|_| "5432".to_string());
 
     // Add SSL mode for managed database connections (e.g., DigitalOcean)
-    let ssl_mode = env::var("POSTGRES_SSLMODE").unwrap_or_else(|_| "prefer".to_string());
+    let ssl_mode = env::var("POSTGRES_SSLMODE")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "prefer".to_string());
     let database_url = format!(
         "postgresql://{}:{}@{}:{}/{}?sslmode={}",
         user, password, host, port, db_name, ssl_mode

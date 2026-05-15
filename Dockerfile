@@ -1,5 +1,5 @@
 # STAGE 1: build API Rust binary
-FROM rust:1.86 AS rust-builder
+FROM rust:1.89 AS rust-builder
 
 WORKDIR /mettakg
 
