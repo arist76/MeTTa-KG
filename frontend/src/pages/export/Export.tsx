@@ -1,7 +1,11 @@
 import { Show, Component } from "solid-js";
 import { Button } from "~/components/ui/Button";
 import { CommandCard } from "~/components/common/CommandCard";
-import { TextField, TextFieldLabel } from "~/components/ui/TextField";
+import {
+  TextField,
+  TextFieldLabel,
+  TextFieldInput,
+} from "~/components/ui/TextField";
 import {
   Select,
   SelectContent,
@@ -18,6 +22,7 @@ import {
   format,
   setFormat,
   isLoading,
+  isAppBusy,
   pattern,
   setPattern,
   template,
@@ -25,6 +30,11 @@ import {
   result,
   exportError,
   handleExport,
+  handleDownload,
+  maxWrite,
+  isInputValid,
+  handleInput,
+  ExportFormat,
 } from "./lib";
 
 const ExportPage: Component = () => {
@@ -69,43 +79,80 @@ const ExportPage: Component = () => {
           {/*     disabled={isLoading()} */}
           {/*   /> */}
           {/* </TextField> */}
-
-          <TextField class="space-y-2">
-            <TextFieldLabel for="export-format">Format</TextFieldLabel>
-            <Select
-              options={["metta", "json", "csv", "raw"]}
-              value={format()}
-              onChange={setFormat}
-              disabled={isLoading()}
-              placeholder="Select a format"
-              itemComponent={(props) => (
-                <SelectItem item={props.item}>
-                  {props.item.rawValue.toUpperCase()}
-                </SelectItem>
-              )}
-            >
-              <SelectTrigger id="export-format">
-                <SelectValue<string>>
-                  {(state) => state.selectedOption()}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent />
-            </Select>
-          </TextField>
+          <div class="flex items-end gap-4">
+            <div class="flex-grow">
+              <TextField class="space-y-2">
+                <TextFieldLabel for="export-format">Format</TextFieldLabel>
+                <Select<ExportFormat>
+                  options={["metta", "json", "csv", "raw"]}
+                  value={format()}
+                  onChange={setFormat}
+                  disabled={!!isLoading() || isAppBusy()}
+                  placeholder="Select a format"
+                  itemComponent={(props) => (
+                    <SelectItem item={props.item}>
+                      {props.item.rawValue.toUpperCase()}
+                    </SelectItem>
+                  )}
+                >
+                  <SelectTrigger id="export-format">
+                    <SelectValue<string>>
+                      {(state) => state.selectedOption()}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent />
+                </Select>
+              </TextField>
+            </div>
+            <TextField class="space-y-2">
+              <TextFieldLabel for="max-write">Max Records</TextFieldLabel>
+              <TextFieldInput
+                id="max-write"
+                type="number"
+                value={maxWrite() ?? 15}
+                onInput={handleInput}
+                disabled={isLoading()}
+              />
+            </TextField>
+          </div>
         </div>
 
-        <div class="mt-4">
+        <div class="mt-4 flex justify-between items-center">
           <Button
             onClick={() => handleExport(formatedNamespace())}
-            disabled={isLoading() || !pattern().trim() || !template().trim()}
+            disabled={
+              !!isLoading() ||
+              !pattern().trim() ||
+              !template().trim() ||
+              !isInputValid(maxWrite())
+            }
             class="w-36"
           >
             <Show
-              when={isLoading()}
+              when={isLoading() === "export"}
               fallback={
                 <>
                   <Download class="mr-2 h-4 w-4" />
                   Export Data
+                </>
+              }
+            >
+              <Loader2 class="mr-2 h-4 w-4 animate-spin" />
+              Exporting...
+            </Show>
+          </Button>
+
+          <Button
+            onClick={() => handleDownload(formatedNamespace())}
+            disabled={!!isLoading() || !pattern().trim() || !template().trim()}
+            class="w-37"
+          >
+            <Show
+              when={isLoading() === "download"}
+              fallback={
+                <>
+                  <Download class="mr-2 h-4 w-4" />
+                  Export to File
                 </>
               }
             >
@@ -122,6 +169,7 @@ const ExportPage: Component = () => {
               title="Export Result"
               data={exportError() ? exportError()!.message : result()}
               status={exportError() ? "error" : "success"}
+              format={format()}
             />
           </div>
         </Show>

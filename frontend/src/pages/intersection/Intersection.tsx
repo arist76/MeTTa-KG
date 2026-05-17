@@ -16,7 +16,13 @@ import {
 import { getAllTokens } from "~/lib/api";
 import { rootToken, tokenRootNamespace } from "~/lib/state";
 import { Copy, Check } from "lucide-solid";
-import { isLoading, isPolling, executeIntersection, stopPolling } from "./lib";
+import {
+  isLoading,
+  isPolling,
+  executeIntersection,
+  stopPolling,
+  isAppBusy,
+} from "./lib";
 
 const IntersectionPage: Component = () => {
   const [state, setState] = createStore({
@@ -175,7 +181,7 @@ const IntersectionPage: Component = () => {
           </div>
           <Button
             class="w-full mt-4"
-            disabled={!canSubmit() || isLoading() || isPolling()}
+            disabled={!canSubmit() || isLoading() || isPolling() || isAppBusy()}
             onClick={handleIntersection}
           >
             <Show when={isLoading() || isPolling()}>
