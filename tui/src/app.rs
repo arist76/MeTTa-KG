@@ -40,6 +40,7 @@ pub struct App {
     pub editing_namespace: bool,
     pub     toast_manager: ToastManager,
     last_toast: Option<(&'static str, String)>,
+    pub pending_shortcut: Option<char>,
 }
 
 impl App {
@@ -115,6 +116,7 @@ impl App {
             editing_namespace: false,
             toast_manager: ToastManager::new(),
             last_toast: None,
+            pending_shortcut: None,
         }
     }
 
@@ -191,7 +193,6 @@ impl App {
         new_screen.set_namespace(&self.current_namespace);
         self.screen = new_screen;
         self.active_screen = id;
-        self.status_message = format!("Switched to {}", id);
     }
 
     pub fn run(&mut self) -> anyhow::Result<()> {
@@ -269,7 +270,13 @@ impl App {
 
         self.screen.render(f, screen_area);
 
-        render_status_bar(f, footer_area, &self.theme, &self.status_message, "Ctrl+P:Palette  Esc:Back  Ctrl+C:Quit");
+        render_status_bar(
+            f,
+            footer_area,
+            &self.theme,
+            &self.status_message,
+            "Ctrl+P:Palette  ?:Help  Esc:Back  Ctrl+C:Quit",
+        );
 
         self.toast_manager.render(f, area);
     }
@@ -326,9 +333,17 @@ impl App {
         f.render_widget(block, inner);
 
         let mut y = content.y;
+        let max_y = content.y + content.height;
         let help_items = vec![
+            ("?", "Open/close help popup"),
             ("Ctrl+P", "Open command palette"),
             ("Ctrl+C / Ctrl+Q", "Quit application"),
+            ("ie", "Open Explore"),
+            ("ic", "Open Clear"),
+            ("ui", "Open Import"),
+            ("ue", "Open Export"),
+            ("ut", "Open Tokens"),
+            ("1-9", "Transform..Cartesian"),
             ("↑ / ↓ / Tab", "Navigate between elements"),
             ("Enter", "Execute action / submit"),
             ("Esc", "Go back / cancel"),
@@ -405,7 +420,49 @@ impl App {
                     return Ok(());
                 }
 
+                if key.code == KeyCode::Char('?') {
+                    self.show_help = true;
+                    return Ok(());
+                }
+
+                if let Some(c) = self.pending_shortcut {
+                    self.pending_shortcut = None;
+                    if c == 'u' || c == 'U' {
+                        match key.code {
+                            KeyCode::Char('i') | KeyCode::Char('I') => { self.navigate("import"); return Ok(()); }
+                            KeyCode::Char('e') | KeyCode::Char('E') => { self.navigate("export"); return Ok(()); }
+                            KeyCode::Char('t') | KeyCode::Char('T') => { self.navigate("tokens"); return Ok(()); }
+                            _ => {}
+                        }
+                    } else if c == 'i' || c == 'I' {
+                        match key.code {
+                            KeyCode::Char('e') | KeyCode::Char('E') => { self.navigate("explore"); return Ok(()); }
+                            KeyCode::Char('c') | KeyCode::Char('C') => { self.navigate("clear"); return Ok(()); }
+                            _ => {}
+                        }
+                    }
+                }
+
+                if (key.code == KeyCode::Char('u') || key.code == KeyCode::Char('U')) && key.modifiers.is_empty() {
+                    self.pending_shortcut = Some('u');
+                    return Ok(());
+                }
+                
+                if (key.code == KeyCode::Char('i') || key.code == KeyCode::Char('I')) && key.modifiers.is_empty() {
+                    self.pending_shortcut = Some('i');
+                    return Ok(());
+                }
+
                 match key.code {
+                    KeyCode::Char('1') if key.modifiers.is_empty() => { self.navigate("transform"); return Ok(()); }
+                    KeyCode::Char('2') if key.modifiers.is_empty() => { self.navigate("composition"); return Ok(()); }
+                    KeyCode::Char('3') if key.modifiers.is_empty() => { self.navigate("union"); return Ok(()); }
+                    KeyCode::Char('4') if key.modifiers.is_empty() => { self.navigate("intersection"); return Ok(()); }
+                    KeyCode::Char('5') if key.modifiers.is_empty() => { self.navigate("difference"); return Ok(()); }
+                    KeyCode::Char('6') if key.modifiers.is_empty() => { self.navigate("restrict"); return Ok(()); }
+                    KeyCode::Char('7') if key.modifiers.is_empty() => { self.navigate("decapitate"); return Ok(()); }
+                    KeyCode::Char('8') if key.modifiers.is_empty() => { self.navigate("head"); return Ok(()); }
+                    KeyCode::Char('9') if key.modifiers.is_empty() => { self.navigate("cartesian"); return Ok(()); }
                     KeyCode::Esc => {
                         if self.active_screen == "login" {
                             self.quit = true;
