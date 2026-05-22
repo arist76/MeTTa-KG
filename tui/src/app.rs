@@ -356,7 +356,7 @@ impl App {
             ("i", "Enter edit mode"),
             ("Esc", "Return to command mode"),
             ("ui", "Open Import"),
-            ("ue","open Export"),
+            ("ue","Open Export"),
             ("ut", "Open Tokens"),
             ("e", "Open Explore"),
             ("c", "Open Clear"),
@@ -442,42 +442,34 @@ impl App {
                     return Ok(());
                 }
 
+                let apply_screen_action = |app: &mut Self, action: ScreenAction| {
+                    match action {
+                        ScreenAction::Navigate(id) => app.navigate(id),
+                        ScreenAction::Back => {
+                            if app.active_screen != "explore" {
+                                app.navigate("explore");
+                            }
+                        }
+                        ScreenAction::Quit => app.quit = true,
+                        ScreenAction::None => {}
+                        ScreenAction::OpenCommandPalette => {
+                            app.command_palette.toggle();
+                        }
+                    }
+                };
+
                 if self.mode == AppMode::Edit {
                     self.pending_shortcut = None;
                     if key.code == KeyCode::Esc {
                         if let Some(action) = self.screen.handle_key(key) {
-                            match action {
-                                ScreenAction::Navigate(id) => self.navigate(id),
-                                ScreenAction::Back => {
-                                    if self.active_screen != "explore" {
-                                        self.navigate("explore");
-                                    }
-                                }
-                                ScreenAction::Quit => self.quit = true,
-                                ScreenAction::None => {}
-                                ScreenAction::OpenCommandPalette => {
-                                    self.command_palette.toggle();
-                                }
-                            }
+                            apply_screen_action(self, action);
                         }
                         self.mode = AppMode::Command;
                         return Ok(());
                     }
 
                     if let Some(action) = self.screen.handle_key(key) {
-                        match action {
-                            ScreenAction::Navigate(id) => self.navigate(id),
-                            ScreenAction::Back => {
-                                if self.active_screen != "explore" {
-                                    self.navigate("explore");
-                                }
-                            }
-                            ScreenAction::Quit => self.quit = true,
-                            ScreenAction::None => {}
-                            ScreenAction::OpenCommandPalette => {
-                                self.command_palette.toggle();
-                            }
-                        }
+                        apply_screen_action(self, action);
                     }
                     return Ok(());
                 }
@@ -494,9 +486,13 @@ impl App {
                     ('9', "cartesian"),
                 ];
 
+                let shortcut_modifiers_allowed =
+                    !key.modifiers.contains(KeyModifiers::CONTROL)
+                        && !key.modifiers.contains(KeyModifiers::ALT);
+
                 if let Some(prefix) = self.pending_shortcut {
                     self.pending_shortcut = None;
-                    if key.modifiers.is_empty() {
+                    if shortcut_modifiers_allowed {
                         match (prefix.to_ascii_lowercase(), key.code) {
                             ('u', KeyCode::Char('i') | KeyCode::Char('I')) => {
                                 self.navigate("import");
@@ -515,7 +511,7 @@ impl App {
                     }
                 }
 
-                if key.modifiers.is_empty() {
+                if shortcut_modifiers_allowed {
                     if let KeyCode::Char(c) = key.code {
                         match c.to_ascii_lowercase() {
                             'i' => {
