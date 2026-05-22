@@ -24,6 +24,12 @@ use crate::presentation::components::command_palette::CommandPalette;
 use crate::presentation::widgets::toast::ToastManager;
 use crate::domain::models::OperationStatus;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AppMode {
+    Command,
+    Edit,
+}
+
 pub struct App {
     pub screen: Box<dyn Screen>,
     pub screens: std::collections::HashMap<&'static str, Box<dyn Screen>>,
@@ -40,6 +46,8 @@ pub struct App {
     pub editing_namespace: bool,
     pub     toast_manager: ToastManager,
     last_toast: Option<(&'static str, String)>,
+    pending_shortcut: Option<char>,
+    mode: AppMode,
 }
 
 impl App {
@@ -115,6 +123,15 @@ impl App {
             editing_namespace: false,
             toast_manager: ToastManager::new(),
             last_toast: None,
+            pending_shortcut: None,
+            mode: AppMode::Command,
+        }
+    }
+
+    fn mode_label(&self) -> &'static str {
+        match self.mode {
+            AppMode::Command => "Command",
+            AppMode::Edit => "Edit",
         }
     }
 
@@ -191,7 +208,6 @@ impl App {
         new_screen.set_namespace(&self.current_namespace);
         self.screen = new_screen;
         self.active_screen = id;
-        self.status_message = format!("Switched to {}", id);
     }
 
     pub fn run(&mut self) -> anyhow::Result<()> {
@@ -269,7 +285,13 @@ impl App {
 
         self.screen.render(f, screen_area);
 
-        render_status_bar(f, footer_area, &self.theme, &self.status_message, "Ctrl+P:Palette  Esc:Back  Ctrl+C:Quit");
+        render_status_bar(
+            f,
+            footer_area,
+            &self.theme,
+            self.mode_label(),
+            "Ctrl+P:Palette  ?:Help  Esc:Back  Ctrl+C:Quit",
+        );
 
         self.toast_manager.render(f, area);
     }
@@ -326,9 +348,19 @@ impl App {
         f.render_widget(block, inner);
 
         let mut y = content.y;
+        
         let help_items = vec![
+            ("?", "Open help popup"),
             ("Ctrl+P", "Open command palette"),
             ("Ctrl+C / Ctrl+Q", "Quit application"),
+            ("i", "Enter edit mode"),
+            ("Esc", "Return to command mode"),
+            ("ui", "Open Import"),
+            ("ue","Open Export"),
+            ("ut", "Open Tokens"),
+            ("e", "Open Explore"),
+            ("c", "Open Clear"),
+            ("1-9", "Transform → Cartesian"),
             ("↑ / ↓ / Tab", "Navigate between elements"),
             ("Enter", "Execute action / submit"),
             ("Esc", "Go back / cancel"),
@@ -392,7 +424,7 @@ impl App {
                         KeyCode::Enter | KeyCode::Esc => {
                             self.editing_namespace = false;
                             self.screen.set_namespace(&self.current_namespace);
-                            self.status_message = format!("Namespace: {}", self.current_namespace);
+                            self.mode = AppMode::Command;
                         }
                         KeyCode::Char(c) => {
                             self.current_namespace.push(c);
@@ -403,6 +435,113 @@ impl App {
                         _ => {}
                     }
                     return Ok(());
+                }
+
+                if key.code == KeyCode::Char('?') {
+                    self.show_help = !self.show_help;
+                    return Ok(());
+                }
+
+                let apply_screen_action = |app: &mut Self, action: ScreenAction| {
+                    match action {
+                        ScreenAction::Navigate(id) => app.navigate(id),
+                        ScreenAction::Back => {
+                            if app.active_screen != "explore" {
+                                app.navigate("explore");
+                            }
+                        }
+                        ScreenAction::Quit => app.quit = true,
+                        ScreenAction::None => {}
+                        ScreenAction::OpenCommandPalette => {
+                            app.command_palette.toggle();
+                        }
+                    }
+                };
+
+                if self.mode == AppMode::Edit {
+                    self.pending_shortcut = None;
+                    if key.code == KeyCode::Esc {
+                        if let Some(action) = self.screen.handle_key(key) {
+                            apply_screen_action(self, action);
+                        }
+                        self.mode = AppMode::Command;
+                        return Ok(());
+                    }
+
+                    if let Some(action) = self.screen.handle_key(key) {
+                        apply_screen_action(self, action);
+                    }
+                    return Ok(());
+                }
+
+                const NUMERIC_SHORTCUTS: &[(char, &str)] = &[
+                    ('1', "transform"),
+                    ('2', "composition"),
+                    ('3', "union"),
+                    ('4', "intersection"),
+                    ('5', "difference"),
+                    ('6', "restrict"),
+                    ('7', "decapitate"),
+                    ('8', "head"),
+                    ('9', "cartesian"),
+                ];
+
+                let shortcut_modifiers_allowed =
+                    !key.modifiers.contains(KeyModifiers::CONTROL)
+                        && !key.modifiers.contains(KeyModifiers::ALT);
+
+                if let Some(prefix) = self.pending_shortcut {
+                    self.pending_shortcut = None;
+                    if shortcut_modifiers_allowed {
+                        match (prefix.to_ascii_lowercase(), key.code) {
+                            ('u', KeyCode::Char('i') | KeyCode::Char('I')) => {
+                                self.navigate("import");
+                                return Ok(());
+                            }
+                            ('u', KeyCode::Char('e') | KeyCode::Char('E')) => {
+                                self.navigate("export");
+                                return Ok(());
+                            }
+                            ('u', KeyCode::Char('t') | KeyCode::Char('T')) => {
+                                self.navigate("tokens");
+                                return Ok(());
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
+                if shortcut_modifiers_allowed {
+                    if let KeyCode::Char(c) = key.code {
+                        match c.to_ascii_lowercase() {
+                            'i' => {
+                                self.mode = AppMode::Edit;
+                                return Ok(());
+                            }
+                            'u' => {
+                                self.pending_shortcut = Some('u');
+                                return Ok(());
+                            }
+                            'e' => {
+                                self.navigate("explore");
+                                return Ok(());
+                            }
+                            'c' => {
+                                self.navigate("clear");
+                                return Ok(());
+                            }
+                            't' => {
+                                self.navigate("tokens");
+                                return Ok(());
+                            }
+                            shortcut => {
+                                if let Some((_, screen_id)) = NUMERIC_SHORTCUTS.iter().find(|(digit, _)| *digit == shortcut) {
+                                    self.navigate(screen_id);
+                                    return Ok(());
+                                }
+                            }
+                        }
+                    }
                 }
 
                 match key.code {
