@@ -1,16 +1,36 @@
-FROM rustlang/rust:nightly-bookworm
+# syntax=docker/dockerfile:1
 
-RUN apt-get update && apt-get install -y git cmake
+# ============================================================
+# STAGE 1: Build Mork server
+# ============================================================
+FROM rustlang/rust:nightly-bookworm AS builder
 
-RUN git clone --branch fix/server-graft-api-update https://github.com/icog-labs-dev/MORK.git /app
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --branch fix/server-graft-api-update --depth 1 \
+    https://github.com/icog-labs-dev/MORK.git /app
+
+RUN git clone --branch stable --depth 1 \
+    https://github.com/Adam-Vandervorst/PathMap.git /PathMap
 
 WORKDIR /app
 
-# Clone the PathMap dependency to the absolute path expected by the manifest
-RUN git clone --branch stable https://github.com/Adam-Vandervorst/PathMap.git /PathMap
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target \
+    cargo build --release -p mork-server --bin mork-server
 
-RUN cargo build --release -p mork-server --bin mork-server
+# ============================================================
+# STAGE 2: Slim runtime
+# ============================================================
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libssl3 ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/target/release/mork-server /usr/local/bin/
 
 EXPOSE 8001
-
-CMD ["./target/release/mork-server"]
+CMD ["mork-server"]
