@@ -13,6 +13,7 @@ import { formatedNamespace } from "~/lib/state";
 import ExpressionListItem from "./ExpressionListItem";
 import { treeStore, type FlatNode } from "./store";
 import { showToast } from "~/components/ui/Toast";
+import { reportError } from "~/lib/errors";
 import { shouldFillViewport, setShouldFillViewport } from "../../lib";
 
 interface Props {
@@ -62,11 +63,7 @@ export default function ExpressionList(props: Props) {
         flattenedNodes()
       );
     } catch (e) {
-      showToast({
-        title: "Expansion Error",
-        description: `${e}`,
-        variant: "destructive",
-      });
+      reportError("explore", e);
     } finally {
       treeStore.setExpanding(false);
     }

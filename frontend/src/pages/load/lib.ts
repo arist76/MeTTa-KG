@@ -8,6 +8,7 @@ import { formatedNamespace } from "~/lib/state";
 import { ParseError } from "~/types";
 import { exploreSpace } from "~/lib/api";
 import { showToast } from "~/components/ui/Toast";
+import { reportError } from "~/lib/errors";
 import { treeStore } from "./components/expandableList/store";
 import { isCommandRunning } from "~/lib/sse";
 
@@ -50,11 +51,15 @@ export const [subSpace, { refetch: refetchSubSpace, mutate: mutateSubSpace }] =
         });
         return data;
       } catch (e) {
-        const msg =
-          e instanceof Error && e.message === "noRootToken"
-            ? "No token found, please add one in the Tokens page"
-            : "Failed to load space data.";
-        showToast({ title: "Error", description: msg, variant: "destructive" });
+        if (e instanceof Error && e.message === "noRootToken") {
+          showToast({
+            title: "Error",
+            description: "No token found, please add one in the Tokens page",
+            variant: "destructive",
+          });
+        } else {
+          reportError("load", e);
+        }
         return [];
       }
     }
