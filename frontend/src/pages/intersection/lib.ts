@@ -9,6 +9,8 @@ import { refreshSpace } from "../load/lib";
 export const isLoading = () => isCommandActive("INTERSECTION");
 export const isAppBusy = isAnyCommandActive;
 export const [isPolling, setIsPolling] = createSignal(false);
+export const [error, setError] = createSignal<string | null>(null);
+
 
 export const stopPolling = () => {
   setIsPolling(false);
@@ -72,5 +74,8 @@ export const executeIntersection = async (
     refreshSpace();
   } catch (error) {
     reportError("intersection", error);
+    setError(
+      error instanceof Error ? error.message : "An unexpected error occurred.",
+    );
   }
 };

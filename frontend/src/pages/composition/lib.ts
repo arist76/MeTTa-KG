@@ -9,6 +9,8 @@ export const isLoading = () => isCommandActive("COMPOSITION");
 export const isAppBusy = isAnyCommandActive;
 export const [isPolling, setIsPolling] = createSignal(false);
 
+export const [error, setError] = createSignal<string | null>(null);
+
 export type setOperationInput = {
   source: string[];
   target: string[];
@@ -46,8 +48,10 @@ export const executeComposition = async (
     });
 
     await composition(compositionQuery);
-
   } catch (error) {
     reportError("composition", error);
+    setError(
+      error instanceof Error ? error.message : "An unexpected error occurred.",
+    );
   }
 };

@@ -17,9 +17,12 @@ import {
   executeTransform,
   stopPolling,
   isAppBusy,
+  error,
+  setError,
 } from "./lib";
 import Copy from "lucide-solid/icons/copy";
 import Check from "lucide-solid/icons/check";
+import X from "lucide-solid/icons/x";
 import { TransformInput as TransformInputComponent } from "./components/TransformInput";
 import { Item } from "~/lib/types";
 
@@ -210,6 +213,23 @@ const TransformPage: Component = () => {
             Transforming...
           </Show>
         </Button>
+
+        <Show when={error()}>
+          <div class="mt-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+            <div class="flex items-start justify-between">
+              <div class="flex-1">
+                <h4 class="text-sm font-semibold text-destructive">Operation Failed</h4>
+                <p class="text-sm mt-1 text-destructive/80">{error()}</p>
+              </div>
+              <button
+                onClick={() => setError(null)}
+                class="ml-4 flex-shrink-0 rounded-md p-1 text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                <X class="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </Show>
       </CommandCard>
     </div>
   );

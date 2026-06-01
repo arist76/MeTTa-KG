@@ -8,6 +8,8 @@ import { refreshSpace } from "../load/lib";
 export const isLoading = () => isCommandActive("UNION");
 export const isAppBusy = isAnyCommandActive;
 export const [isPolling, setIsPolling] = createSignal(false);
+export const [error, setError] = createSignal<string | null>(null);
+
 
 export type setOperationInput = {
   pattern: string[];
@@ -44,8 +46,10 @@ export const executeUnion = async (unionQuery: setOperationInput) => {
     });
 
     await union(unionQuery);
-
   } catch (error) {
     reportError("union", error);
+    setError(
+      error instanceof Error ? error.message : "An unexpected error occurred.",
+    );
   }
 };
