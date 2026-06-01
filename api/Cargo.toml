@@ -6,7 +6,8 @@ edition = "2021"
 [dependencies]
 serde = { version = "1.0.204", features = ["derive"] }
 rocket = { version = "0.5.1", features = ["json"] }
-diesel = { version = "2.2.2", features = ["postgres", "chrono"] }
+diesel = { version = "2.2.2", features = ["postgres", "chrono", "r2d2"] }
+r2d2 = "0.4.1"
 diesel_migrations = "2.3.0"
 dotenv = "0.15.0"
 jwt = "0.16.0"
