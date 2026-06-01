@@ -7,6 +7,7 @@ import {
 } from "~/lib/api";
 import { Token } from "~/lib/types";
 import { showToast } from "~/components/ui/Toast";
+import { reportError } from "~/lib/errors";
 import { rootToken, setRootToken } from "~/lib/state";
 
 export enum SortableColumns {
@@ -58,11 +59,7 @@ export const [tokens, { mutate: mutateTokens, refetch: refetchTokens }] =
               variant: "destructive",
             });
           } else {
-            showToast({
-              title: "Error",
-              description: `Failed to fetch tokens. ${e instanceof Error ? e.message : String(e)}`,
-              variant: "destructive",
-            });
+            reportError("tokens", e);
           }
           return [];
         }
@@ -134,11 +131,7 @@ export const handleRefresh = async () => {
     });
     setSelectedTokens([]);
   } catch {
-    showToast({
-      title: "Error",
-      description: "Failed to refresh tokens.",
-      variant: "destructive",
-    });
+    reportError("tokens", new Error("Failed to refresh tokens."));
   }
 };
 
@@ -166,11 +159,7 @@ export const handleDelete = async () => {
     });
     setSelectedTokens([]);
   } catch {
-    showToast({
-      title: "Error",
-      description: "Failed to delete tokens.",
-      variant: "destructive",
-    });
+    reportError("tokens", new Error("Failed to delete tokens."));
   }
 };
 
