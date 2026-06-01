@@ -8,6 +8,8 @@ const IntersectionPage = lazy(() => import("../intersection/Intersection"));
 const ExportPage = lazy(() => import("../export/Export"));
 const TokensPage = lazy(() => import("../tokens/Tokens"));
 const ClearPage = lazy(() => import("../clear/Clear"));
+import Header from "~/pages/index/components/Header";
+import NamespaceTabs from "~/pages/index/components/NamespaceTabs";
 import Sidebar from "~/pages/index/components/Sidebar";
 import TopNavigation from "~/components/common/TopNavigation";
 import ContentWrapper from "~/components/common/ContentWrapper";
@@ -166,6 +168,16 @@ const AppLayout = (
         </Show>
 
         <div class="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+          <Show when={layoutMode() === "sidebar"}>
+            <div class="flex-shrink-0">
+              <Header />
+            </div>
+          </Show>
+          <Show when={layoutMode() !== "sidebar"}>
+            <div class="flex-shrink-0">
+              <NamespaceTabs />
+            </div>
+          </Show>
           {/* Progress Bar */}
           <Show when={isCommandRunning()}>
             <div class="w-full h-1 bg-muted overflow-hidden flex-shrink-0">
