@@ -79,7 +79,7 @@ const getInitialLayoutMode = (): LayoutMode => {
   const persisted = safeGetItem("theme-layout");
   return persisted === "sidebar" || persisted === "topnav"
     ? persisted
-    : "topnav";
+    : "sidebar"
 };
 
 const getInitialPattern = (): keyof typeof backgroundPatterns => {
