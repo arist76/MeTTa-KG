@@ -9,7 +9,6 @@ const ExportPage = lazy(() => import("../export/Export"));
 const TokensPage = lazy(() => import("../tokens/Tokens"));
 const ClearPage = lazy(() => import("../clear/Clear"));
 import Sidebar from "~/pages/index/components/Sidebar";
-import Header from "~/pages/index/components/Header";
 import TopNavigation from "~/components/common/TopNavigation";
 import ContentWrapper from "~/components/common/ContentWrapper";
 import Upload from "lucide-solid/icons/upload";
@@ -166,12 +165,7 @@ const AppLayout = (
           </div>
         </Show>
 
-        {/* Main Content Area */}
         <div class="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
-          <div class="flex-shrink-0">
-            <Header />
-          </div>
-
           {/* Progress Bar */}
           <Show when={isCommandRunning()}>
             <div class="w-full h-1 bg-muted overflow-hidden flex-shrink-0">

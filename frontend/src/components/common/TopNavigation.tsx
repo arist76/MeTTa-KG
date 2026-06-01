@@ -129,6 +129,7 @@ export default function TopNavigation(props: TopNavigationProps) {
             </nav>
 
             {/* Right Side Actions */}
+
             <div class="flex items-center gap-2">
               {/* Command Palette Trigger */}
               <Button
@@ -166,6 +167,35 @@ export default function TopNavigation(props: TopNavigationProps) {
                   <Menu class="h-5 w-5" />
                 </Show>
               </Button>
+              {/* External Links */}
+              <div class="hidden md:flex items-center gap-3 ml-2 text-xs">
+                <a
+                  href="https://github.com/trueagi-io/MORK"
+                  class="uppercase text-muted-foreground hover:text-primary transition-colors"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  MORK
+                </a>
+                <span class="text-muted-foreground/40">·</span>
+                <a
+                  href="https://github.com/trueagi-io/MORK/wiki"
+                  class="uppercase text-muted-foreground hover:text-primary transition-colors"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  DOCS
+                </a>
+                <span class="text-muted-foreground/40">·</span>
+                <a
+                  href="https://chat.singularitynet.io/chat/channels/mork"
+                  class="uppercase text-muted-foreground hover:text-primary transition-colors"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  COMMUNITY
+                </a>
+              </div>
             </div>
           </div>
         </div>

@@ -22,36 +22,6 @@ export default function Header() {
             getAllTokens={getAllTokens}
           />
         </div>
-
-        {/* Links Section */}
-        <div class="flex items-center gap-4 px-6 flex-shrink-0">
-          <a
-            href="https://github.com/trueagi-io/MORK"
-            class="uppercase text-muted-foreground hover:text-primary hover:underline text-sm transition-colors"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            MORK
-          </a>
-          <span class="text-primary">·</span>
-          <a
-            href="https://github.com/trueagi-io/MORK/wiki"
-            class="uppercase text-muted-foreground hover:text-primary hover:underline text-sm transition-colors"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            DOCS
-          </a>
-          <span class="text-primary">·</span>
-          <a
-            href="https://chat.singularitynet.io/chat/channels/mork"
-            class="uppercase text-muted-foreground hover:text-primary hover:underline text-sm transition-colors"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            COMMUNITY
-          </a>
-        </div>
       </header>
 
       {/* Tabs */}
