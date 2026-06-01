@@ -124,25 +124,27 @@ const LoadPage = () => {
         <Show
           when={!subSpace.loading && !subSpace.error && subSpace() && subSpace()!.length > 0}
           fallback={
-            <div class="flex flex-col items-center justify-center h-full w-full gap-4">
-              <div
-                class="w-16 h-16 rounded-full flex items-center justify-center"
-                style={{
-                  background: "hsl(var(--muted))",
-                  border: "1px solid hsl(var(--border))",
-                }}
-              >
-                <Database class="h-8 w-8 text-muted-foreground" />
+            <Show when={!subSpace.error}>
+              <div class="flex flex-col items-center justify-center h-full w-full gap-4">
+                <div
+                  class="w-16 h-16 rounded-full flex items-center justify-center"
+                  style={{
+                    background: "hsl(var(--muted))",
+                    border: "1px solid hsl(var(--border))",
+                  }}
+                >
+                  <Database class="h-8 w-8 text-muted-foreground" />
+                </div>
+                <div class="text-center">
+                  <p class="text-lg font-medium text-foreground mb-1">
+                    No Data Loaded
+                  </p>
+                  <p class="text-sm text-muted-foreground">
+                    Use the pattern editor to load space data
+                  </p>
+                </div>
               </div>
-              <div class="text-center">
-                <p class="text-lg font-medium text-foreground mb-1">
-                  No Data Loaded
-                </p>
-                <p class="text-sm text-muted-foreground">
-                  Use the pattern editor to load space data
-                </p>
-              </div>
-            </div>
+            </Show>
           }
         >
           <div class="w-full h-full">
