@@ -5,6 +5,7 @@ import {
   ColorModeScript,
   createLocalStorageManager,
 } from "@kobalte/core";
+import ErrorBoundary from "~/components/common/ErrorBoundary";
 import App from "~/pages/index/Index";
 import { ToastViewport } from "~/components/ui/Toast";
 import "./app.css";
@@ -23,7 +24,7 @@ render(() => {
     <>
       <ColorModeScript storageType={storageManager.type} />
       <ColorModeProvider storageManager={storageManager}>
-        <App />
+        <ErrorBoundary><App /></ErrorBoundary>
         <ToastViewport />
       </ColorModeProvider>
     </>
