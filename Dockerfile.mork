@@ -18,7 +18,6 @@ RUN git clone --branch stable --depth 1 \
 WORKDIR /app
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/app/target \
     cargo build --release -p mork-server --bin mork-server
 
 # ============================================================
