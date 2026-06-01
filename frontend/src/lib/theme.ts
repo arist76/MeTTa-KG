@@ -1,4 +1,5 @@
 import { createSignal, createRenderEffect, createRoot } from "solid-js";
+import { safeGetItem, safeSetItem } from "./utils";
 
 // Accent color definitions
 export const accentColors = {
@@ -75,14 +76,14 @@ export const backgroundPatterns = {
 };
 
 const getInitialLayoutMode = (): LayoutMode => {
-  const persisted = localStorage.getItem("theme-layout");
+  const persisted = safeGetItem("theme-layout");
   return persisted === "sidebar" || persisted === "topnav"
     ? persisted
     : "topnav";
 };
 
 const getInitialPattern = (): keyof typeof backgroundPatterns => {
-  const persisted = localStorage.getItem("theme-pattern");
+  const persisted = safeGetItem("theme-pattern");
   return persisted && persisted in backgroundPatterns
     ? (persisted as keyof typeof backgroundPatterns)
     : "none";
@@ -92,12 +93,12 @@ const getInitialPattern = (): keyof typeof backgroundPatterns => {
 const [currentAccent, setCurrentAccent] = createSignal<
   keyof typeof accentColors
 >(
-  (localStorage.getItem("theme-accent") as keyof typeof accentColors) ||
+  (safeGetItem("theme-accent") as keyof typeof accentColors) ||
     "neonGreen"
 );
 
 const [glowEnabled, setGlowEnabled] = createSignal(
-  localStorage.getItem("theme-glow") === "true"
+  safeGetItem("theme-glow") === "true"
 );
 
 const [layoutMode, setLayoutMode] = createSignal<LayoutMode>(
@@ -105,24 +106,24 @@ const [layoutMode, setLayoutMode] = createSignal<LayoutMode>(
 );
 
 const [contentWidth, setContentWidth] = createSignal(
-  localStorage.getItem("theme-width") || "contained" // "full" | "contained"
+  safeGetItem("theme-width") || "contained" // "full" | "contained"
 );
 
 const [backgroundPattern, setBackgroundPattern] =
   createSignal<keyof typeof backgroundPatterns>(getInitialPattern());
 
 const [patternAnimationEnabled, setPatternAnimationEnabled] = createSignal(
-  localStorage.getItem("theme-pattern-animation") === "true"
+  safeGetItem("theme-pattern-animation") === "true"
 );
 
 // Persist theme changes
 const persistTheme = () => {
-  localStorage.setItem("theme-accent", currentAccent());
-  localStorage.setItem("theme-glow", glowEnabled().toString());
-  localStorage.setItem("theme-layout", layoutMode());
-  localStorage.setItem("theme-width", contentWidth());
-  localStorage.setItem("theme-pattern", backgroundPattern());
-  localStorage.setItem(
+  safeSetItem("theme-accent", currentAccent());
+  safeSetItem("theme-glow", glowEnabled().toString());
+  safeSetItem("theme-layout", layoutMode());
+  safeSetItem("theme-width", contentWidth());
+  safeSetItem("theme-pattern", backgroundPattern());
+  safeSetItem(
     "theme-pattern-animation",
     patternAnimationEnabled().toString()
   );
