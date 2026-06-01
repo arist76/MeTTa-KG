@@ -97,10 +97,19 @@ pub fn create(token: Token, new_token: Json<Token>, pool: &State<DbPool>) -> Res
 
     let result = diesel::insert_into(tokens)
         .values(&to_insert)
-        .get_result(&mut conn);
+        .get_result::<Token>(&mut conn);
 
     match result {
-        Ok(token) => Ok(Json(token)),
+        Ok(new_token) => {
+            tracing::info!(
+                target: "audit",
+                actor_token_id = token.id,
+                new_token_id = new_token.id,
+                namespace = %new_token.namespace,
+                "Created token"
+            );
+            Ok(Json(new_token))
+        }
         Err(_) => Err(Status::InternalServerError),
     }
 }
@@ -120,7 +129,16 @@ pub fn delete_batch(token: Token, token_ids: Json<Vec<i32>>, pool: &State<DbPool
     .execute(&mut conn);
 
     match result {
-        Ok(rows_affected) => Ok(Json(rows_affected as i32)),
+        Ok(rows_affected) => {
+            tracing::info!(
+                target: "audit",
+                actor_token_id = token.id,
+                deleted_token_ids = ?token_ids.iter().collect::<Vec<_>>(),
+                rows_affected = rows_affected,
+                "Batch deleted tokens"
+            );
+            Ok(Json(rows_affected as i32))
+        }
         Err(_) => Err(Status::NotFound),
     }
 }
@@ -137,7 +155,16 @@ pub fn update(token: Token, token_id: i32, pool: &State<DbPool>) -> Result<Json<
             .get_result(&mut conn);
 
         match result {
-            Ok(result) => Ok(Json(result)),
+            Ok(result) => {
+                tracing::info!(
+                    target: "audit",
+                    actor_token_id = token.id,
+                    target_token_id = token_id,
+                    self_update = token.id == token_id,
+                    "Rotated token code"
+                );
+                Ok(Json(result))
+            }
             Err(_) => Err(Status::NotFound),
         }
     } else {
@@ -146,7 +173,16 @@ pub fn update(token: Token, token_id: i32, pool: &State<DbPool>) -> Result<Json<
             .get_result(&mut conn);
 
         match result {
-            Ok(result) => Ok(Json(result)),
+            Ok(result) => {
+                tracing::info!(
+                    target: "audit",
+                    actor_token_id = token.id,
+                    target_token_id = token_id,
+                    self_update = false,
+                    "Rotated child token code"
+                );
+                Ok(Json(result))
+            }
             Err(_) => Err(Status::NotFound),
         }
     }
@@ -166,7 +202,15 @@ pub fn delete(token: Token, token_id: i32, pool: &State<DbPool>) -> Status {
         diesel::delete(tokens.filter(id.eq(token_id)).filter(parent.eq(&token.id))).execute(&mut conn);
 
     match result {
-        Ok(_) => Status::Ok,
+        Ok(_) => {
+            tracing::info!(
+                target: "audit",
+                actor_token_id = token.id,
+                deleted_token_id = token_id,
+                "Deleted token"
+            );
+            Status::Ok
+        }
         Err(_) => Status::NotFound,
     }
 }

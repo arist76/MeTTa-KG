@@ -47,6 +47,7 @@ impl<'r> FromRequest<'r> for Token {
         let token = match request.headers().get_one("authorization") {
             Some(token) => token,
             None => {
+                tracing::warn!(target: "audit", "Missing authorization header");
                 return request::Outcome::Error((Status::Unauthorized, Self::Error::InvalidToken))
             }
         };
@@ -67,7 +68,10 @@ impl<'r> FromRequest<'r> for Token {
 
         match result {
             Ok(claims) => Outcome::Success(claims),
-            Err(_) => Outcome::Error((Status::Unauthorized, Self::Error::Unknown)),
+            Err(_) => {
+                tracing::warn!(target: "audit", token = %token, "Authentication failed: invalid or missing token");
+                Outcome::Error((Status::Unauthorized, Self::Error::Unknown))
+            }
         }
     }
 }
