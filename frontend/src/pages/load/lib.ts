@@ -7,8 +7,6 @@ import {
 import { formatedNamespace } from "~/lib/state";
 import { ParseError } from "~/types";
 import { exploreSpace } from "~/lib/api";
-import { showToast } from "~/components/ui/Toast";
-import { reportError } from "~/lib/errors";
 import { treeStore } from "./components/expandableList/store";
 import { isCommandRunning } from "~/lib/sse";
 
@@ -41,27 +39,8 @@ export const [subSpace, { refetch: refetchSubSpace, mutate: mutateSubSpace }] =
       token: Uint8Array.from([]),
     }),
     async ({ path, expr, token }) => {
-      try {
-        const data = JSON.parse(
-          await exploreSpace(path, expr, token)
-        ) as ExploreResponse[];
-        showToast({
-          title: "Success",
-          description: `Loaded ${data.length} nodes.`,
-        });
-        return data;
-      } catch (e) {
-        if (e instanceof Error && e.message === "noRootToken") {
-          showToast({
-            title: "Error",
-            description: "No token found, please add one in the Tokens page",
-            variant: "destructive",
-          });
-        } else {
-          reportError("load", e);
-        }
-        return [];
-      }
+      const raw = await exploreSpace(path, expr, token);
+      return JSON.parse(raw) as ExploreResponse[];
     }
   );
 

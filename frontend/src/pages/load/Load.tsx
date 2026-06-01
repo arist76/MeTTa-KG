@@ -15,6 +15,7 @@ import {
   handlePatternLoad,
   toggleMinimize,
   pattern,
+  refetchSubSpace,
   subSpace,
   handleExpandAll,
   handleCollapseToRoot,
@@ -90,8 +91,38 @@ const LoadPage = () => {
         class="absolute inset-0 w-full h-full flex pt-3 pb-4 px-1"
         style="z-index: 1;"
       >
+        <Show when={subSpace.loading}>
+          <div class="flex items-center justify-center h-full w-full">
+            <div class="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+          </div>
+        </Show>
+        <Show when={subSpace.error}>
+          <div class="flex flex-col items-center justify-center h-full w-full gap-4">
+            <div
+              class="w-16 h-16 rounded-full flex items-center justify-center"
+              style={{
+                background: "hsl(var(--destructive) / 0.1)",
+                border: "1px solid hsl(var(--destructive))",
+              }}
+            >
+              <Database class="h-8 w-8 text-destructive" />
+            </div>
+            <div class="text-center">
+              <p class="text-lg font-medium text-foreground mb-1">Failed to Load</p>
+              <p class="text-sm text-muted-foreground">
+                {subSpace.error.message || "An unexpected error occurred"}
+              </p>
+              <button
+                class="mt-4 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                onClick={() => refetchSubSpace()}
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </Show>
         <Show
-          when={subSpace() && subSpace()!.length > 0}
+          when={!subSpace.loading && !subSpace.error && subSpace() && subSpace()!.length > 0}
           fallback={
             <div class="flex flex-col items-center justify-center h-full w-full gap-4">
               <div
