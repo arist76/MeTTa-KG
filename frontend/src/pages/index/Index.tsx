@@ -158,7 +158,7 @@ const AppLayout = (
       >
         {/* Sidebar - Only visible in sidebar layout mode */}
         <Show when={layoutMode() === "sidebar"}>
-          <div class="hidden lg:block">
+          <div class="hidden lg:block sticky top-0 self-start h-screen">
             <Sidebar
               activeTab={() => activeTab()}
               setActiveTab={setActiveTab}
