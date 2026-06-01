@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 import { union } from "~/lib/api";
 import { showToast } from "~/components/ui/Toast";
+import { reportError } from "~/lib/errors";
 import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
 import { refreshSpace } from "../load/lib";
 
@@ -44,14 +45,7 @@ export const executeUnion = async (unionQuery: setOperationInput) => {
 
     await union(unionQuery);
 
-    refreshSpace();
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "An unexpected error occurred.";
-    showToast({
-      title: "Error",
-      description: errorMessage,
-      variant: "destructive",
-    });
+    reportError("union", error);
   }
 };

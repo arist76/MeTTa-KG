@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
+import { reportError } from "~/lib/errors";
 import { clearSpace } from "~/lib/api";
 import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
 import { refreshSpace } from "../load/lib";
@@ -28,14 +29,7 @@ export const handleClear = async (spacePath: string) => {
       });
     }
 
-    refreshSpace();
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "An unexpected error occurred.";
-    showToast({
-      title: "API Error",
-      description: errorMessage,
-      variant: "destructive",
-    });
+    reportError("clear", error);
   }
 };
