@@ -45,11 +45,6 @@ export const handleExport = async (spacePath: string) => {
 
     const defaultResult = exportInput.format === "Metta" ? "()" : "";
     setResult(exportResponse || defaultResult);
-
-    showToast({
-      title: "Export Complete",
-      description: `Exported data with pattern: ${exportInput.pattern}`,
-    });
   } catch (e) {
     const error = e instanceof Error ? e : new Error("Failed to export data");
     setExportError(error);
