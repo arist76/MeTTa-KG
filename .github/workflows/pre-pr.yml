@@ -28,8 +28,8 @@ jobs:
         run: cd frontend && pnpm install --frozen-lockfile
       - name: Lint frontend
         run: cd frontend && pnpm run lint && pnpm run prettier:check
-      # - name: Test frontend
-      #   run: cd frontend && pnpm test
+      - name: Test frontend
+        run: cd frontend && pnpm test
 
       - name: Lint backend
         run: cd api && cargo clippy -- -D warnings
