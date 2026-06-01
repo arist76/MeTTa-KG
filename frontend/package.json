@@ -47,7 +47,6 @@
     "clsx": "^2.1.1",
     "cmdk-solid": "^1.1.2",
     "codemirror": "^6.0.1",
-    "d3": "^7.9.0",
     "lucide-solid": "^0.536.0",
     "solid-js": "^1.8.11",
     "tailwind-merge": "^3.3.1",
