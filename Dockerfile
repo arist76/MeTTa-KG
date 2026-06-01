@@ -30,7 +30,7 @@ RUN mkdir -p src/routes && \
     for m in health spaces sse tokens translations; do echo "// stub" > "src/routes/$m.rs"; done
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo build --release --target x86_64-unknown-linux-musl
+    cargo build --release --target x86_64-unknown-linux-musl --lib
 
 # ============================================================
 # STAGE 2: Build real binary (only compiles changed source)
