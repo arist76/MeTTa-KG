@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
+import { reportError } from "~/lib/errors";
 import { importData, uploadTextToSpace, importSpace } from "~/lib/api";
 import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
 import { refreshSpace } from "../load/lib";
@@ -108,11 +109,7 @@ export const handleImport = async (spacePath: string) => {
                 ? error.message
                 : "Failed to fetch or process JSON from URL";
             setResult({ error: errorMessage });
-            showToast({
-              title: "Import Failed",
-              description: errorMessage,
-              variant: "destructive",
-            });
+            reportError("upload", error, "Import Failed");
           }
           break;
         }
@@ -253,11 +250,7 @@ export const handleImport = async (spacePath: string) => {
     const errorMessage =
       error instanceof Error ? error.message : "An unexpected error occurred";
     setResult({ error: errorMessage });
-    showToast({
-      title: "Operation Failed",
-      description: errorMessage,
-      variant: "destructive",
-    });
+    reportError("upload", error, "Operation Failed");
   }
 };
 
