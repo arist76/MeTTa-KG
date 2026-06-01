@@ -129,21 +129,6 @@
     box-shadow: var(--glow-shadow);
   }
 
-  .glow-intense {
-    box-shadow: var(--glow-intense);
-  }
-
-  .glow-text {
-    text-shadow: var(--glow-shadow);
-  }
-
-  .glow-border {
-    border-color: hsl(var(--accent));
-    box-shadow:
-      0 0 0 1px hsl(var(--accent) / 0.5),
-      var(--glow-shadow);
-  }
-
   /* Disable ALL glow/shadow effects when no-glow class is present */
   .no-glow,
   .no-glow * {
@@ -153,14 +138,8 @@
 
   /* Remove glow from utility classes */
   .no-glow .glow,
-  .no-glow .glow-intense,
-  .no-glow .glow-border,
   .no-glow [data-glow-element="true"]:hover {
     box-shadow: none !important;
-  }
-
-  .no-glow .glow-text {
-    text-shadow: none !important;
   }
 
   /* Remove inline style glows */
@@ -196,10 +175,6 @@
     box-shadow: none !important;
   }
 
-  /* Card hover without glow */
-  .no-glow .card-hover:hover {
-    box-shadow: 0 8px 30px -10px hsl(0 0% 0% / 0.5) !important;
-  }
 
   /* Gradient text */
   .gradient-text {
@@ -223,45 +198,6 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid hsl(var(--border) / 0.5);
-  }
-
-  /* Card hover effect */
-  .card-hover {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .card-hover:hover {
-    transform: translateY(-2px);
-    border-color: hsl(var(--accent) / 0.5);
-    box-shadow:
-      0 8px 30px -10px hsl(0 0% 0% / 0.5),
-      var(--glow-shadow);
-  }
-
-  /* Button shine effect */
-  .btn-shine {
-    position: relative;
-    overflow: hidden;
-  }
-
-  .btn-shine::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      hsl(var(--foreground) / 0.1),
-      transparent
-    );
-    transition: left 0.5s;
-  }
-
-  .btn-shine:hover::after {
-    left: 100%;
   }
 
   /* Pulse animation for active states */
@@ -294,120 +230,6 @@
   .animate-fade-in {
     animation: fade-in 0.3s ease-out forwards;
   }
-
-  /* Slide in from right */
-  @keyframes slide-in-right {
-    from {
-      opacity: 0;
-      transform: translateX(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
-  .animate-slide-in-right {
-    animation: slide-in-right 0.3s ease-out forwards;
-  }
-
-  /* Focus visible styling */
-  .focus-ring:focus-visible {
-    outline: none;
-    ring: 2px;
-    ring-offset: 2px;
-    ring-offset-background: hsl(var(--background));
-    ring-color: hsl(var(--accent));
-  }
-}
-
-@layer components {
-  /* Navigation styles */
-  .nav-link {
-    @apply relative px-3 py-2 text-sm font-medium text-muted-foreground transition-colors;
-  }
-
-  .nav-link:hover {
-    @apply text-foreground;
-  }
-
-  .nav-link.active {
-    @apply text-foreground;
-  }
-
-  .nav-link.active::after {
-    content: "";
-    @apply absolute bottom-0 left-0 right-0 h-0.5;
-    background: hsl(var(--accent));
-    box-shadow: var(--glow-shadow);
-  }
-
-  /* Section title */
-  .section-title {
-    @apply text-xs font-semibold uppercase tracking-widest text-muted-foreground;
-  }
-
-  /* Content card */
-  .content-card {
-    @apply rounded-xl border border-border bg-card p-6;
-    background: linear-gradient(
-      145deg,
-      hsl(var(--card)) 0%,
-      hsl(var(--card) / 0.8) 100%
-    );
-  }
-
-  /* Input styling */
-  .cyber-input {
-    @apply rounded-lg border border-border bg-background px-4 py-2.5 text-sm transition-all;
-  }
-
-  .cyber-input:focus {
-    @apply outline-none border-transparent;
-    box-shadow:
-      0 0 0 2px hsl(var(--accent) / 0.5),
-      var(--glow-shadow);
-  }
-
-  /* Primary button */
-  .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-primary-foreground transition-all;
-    background: hsl(var(--primary));
-  }
-
-  .btn-primary:hover {
-    filter: brightness(1.1);
-    box-shadow: var(--glow-shadow);
-  }
-
-  /* Secondary button */
-  .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-foreground transition-all;
-    background: hsl(var(--secondary));
-    border: 1px solid hsl(var(--border));
-  }
-
-  .btn-secondary:hover {
-    @apply border-border/80;
-    background: hsl(var(--secondary) / 0.8);
-  }
-
-  /* Ghost button */
-  .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-muted-foreground transition-all;
-  }
-
-  .btn-ghost:hover {
-    @apply text-foreground bg-muted;
-  }
-
-  /* Badge */
-  .cyber-badge {
-    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
-    background: hsl(var(--accent) / 0.15);
-    color: hsl(var(--accent));
-    border: 1px solid hsl(var(--accent) / 0.3);
-  }
 }
 
 /* Content width styles */
@@ -419,18 +241,6 @@
   @apply w-full px-4;
 }
 
-/* Print styles */
-@media print {
-  body {
-    background: white !important;
-    color: black !important;
-  }
-
-  .no-print {
-    display: none !important;
-  }
-}
-
 /* ============================================
    BACKGROUND PATTERNS
    ============================================ */
@@ -438,25 +248,6 @@
 /* Base pattern styles - all patterns mix with the gradient */
 .bg-pattern-none body {
   /* Just the gradient, no pattern */
-}
-
-/* Dot Grid - Fine dots using accent color */
-.bg-pattern-dots body::before {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  z-index: -1;
-  background-image: radial-gradient(
-    circle,
-    hsl(var(--accent) / 0.15) 1.5px,
-    transparent 1.5px
-  );
-  background-size: 20px 20px;
-  background-position: center;
 }
 
 /* Line Grid - Fine horizontal and vertical lines */
@@ -474,96 +265,6 @@
     linear-gradient(to bottom, hsl(var(--accent) / 0.05) 1px, transparent 1px);
   background-size: 40px 40px;
   background-position: center;
-}
-
-/* Circuit Board - Subtle traces and nodes */
-.bg-pattern-circuit body::before {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  z-index: -1;
-  background-image:
-    linear-gradient(
-      90deg,
-      transparent 48%,
-      hsl(var(--accent) / 0.04) 49%,
-      hsl(var(--accent) / 0.04) 51%,
-      transparent 52%
-    ),
-    linear-gradient(
-      0deg,
-      transparent 48%,
-      hsl(var(--accent) / 0.04) 49%,
-      hsl(var(--accent) / 0.04) 51%,
-      transparent 52%
-    );
-  background-size: 60px 60px;
-  background-position: center;
-}
-
-.bg-pattern-circuit body::after {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  z-index: -1;
-  background-image:
-    radial-gradient(
-      circle at 30% 30%,
-      hsl(var(--accent) / 0.1) 2px,
-      transparent 2px
-    ),
-    radial-gradient(
-      circle at 70% 70%,
-      hsl(var(--accent) / 0.1) 2px,
-      transparent 2px
-    );
-  background-size: 60px 60px;
-  background-position: center;
-}
-
-/* Hex Grid - Honeycomb pattern using CSS */
-.bg-pattern-hex body::before {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  z-index: -1;
-  background:
-    radial-gradient(
-      circle farthest-side at 0% 50%,
-      hsl(var(--accent) / 0.1) 2px,
-      transparent 2px
-    ),
-    radial-gradient(
-      circle farthest-side at 100% 50%,
-      hsl(var(--accent) / 0.1) 2px,
-      transparent 2px
-    ),
-    radial-gradient(
-        circle farthest-side at 100% 50%,
-        hsl(var(--accent) / 0.1) 2px,
-        transparent 2px
-      )
-      0 26px,
-    radial-gradient(
-        circle farthest-side at 0% 50%,
-        hsl(var(--accent) / 0.1) 2px,
-        transparent 2px
-      )
-      0 26px;
-  background-size: 26px 52px;
-  background-color: transparent;
 }
 
 /* Particles - Floating dots */
@@ -631,70 +332,9 @@
   background-size: 350px 200px;
 }
 
-/* Waves - Subtle wave lines */
-.bg-pattern-waves body::before {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  z-index: -1;
-  background-image:
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 40px,
-      hsl(var(--accent) / 0.03) 40px,
-      hsl(var(--accent) / 0.03) 41px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      transparent,
-      transparent 80px,
-      hsl(var(--accent) / 0.02) 80px,
-      hsl(var(--accent) / 0.02) 81px
-    );
-}
-
-/* Matrix - Vertical lines effect */
-.bg-pattern-matrix body::before {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  z-index: -1;
-  background: repeating-linear-gradient(
-    90deg,
-    transparent,
-    transparent 15px,
-    hsl(var(--accent) / 0.08) 15px,
-    hsl(var(--accent) / 0.08) 16px
-  );
-}
-
 /* ============================================
    PATTERN ANIMATIONS
    ============================================ */
-
-/* Dot grid pulse - works on opacity */
-@keyframes pattern-dots-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-.pattern-animated.bg-pattern-dots body::before {
-  animation: pattern-dots-pulse 3s ease-in-out infinite;
-}
 
 /* Line grid drift */
 @keyframes pattern-lines-drift {
@@ -710,25 +350,6 @@
   animation: pattern-lines-drift 20s linear infinite;
 }
 
-/* Circuit pulse - opacity on both before and after */
-@keyframes pattern-circuit-pulse {
-  0%,
-  100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-.pattern-animated.bg-pattern-circuit body::before {
-  animation: pattern-circuit-pulse 3s ease-in-out infinite;
-}
-
-.pattern-animated.bg-pattern-circuit body::after {
-  animation: pattern-circuit-pulse 3s ease-in-out infinite 1.5s;
-}
-
 /* Particles float - moves the background position */
 @keyframes pattern-stars-float {
   0% {
@@ -741,55 +362,6 @@
 
 .pattern-animated.bg-pattern-stars body::before {
   animation: pattern-stars-float 20s linear infinite;
-}
-
-/* Hex pulse - opacity only since transform doesn't work well on backgrounds */
-@keyframes pattern-hex-pulse {
-  0%,
-  100% {
-    opacity: 0.8;
-  }
-  50% {
-    opacity: 0.3;
-  }
-}
-
-.pattern-animated.bg-pattern-hex body::before {
-  animation: pattern-hex-pulse 4s ease-in-out infinite;
-}
-
-/* Waves flow */
-@keyframes pattern-waves-flow {
-  0% {
-    background-position: 0 0;
-  }
-  100% {
-    background-position: 0 81px;
-  }
-}
-
-.pattern-animated.bg-pattern-waves body::before {
-  animation: pattern-waves-flow 10s linear infinite;
-}
-
-/* Matrix rain - move gradient position */
-@keyframes pattern-matrix-rain {
-  0% {
-    background-position: 0 0;
-    filter: brightness(0.8);
-  }
-  50% {
-    background-position: 10px 0;
-    filter: brightness(1.2);
-  }
-  100% {
-    background-position: 0 0;
-    filter: brightness(0.8);
-  }
-}
-
-.pattern-animated.bg-pattern-matrix body::before {
-  animation: pattern-matrix-rain 2s ease-in-out infinite;
 }
 
 /* ============================================
