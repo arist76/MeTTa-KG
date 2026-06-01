@@ -1,4 +1,4 @@
-use crate::{db::establish_connection, model::Token};
+use crate::{db::DbPool, model::Token};
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl, SelectableHelper};
 use rocket::{
     self,
@@ -51,7 +51,14 @@ impl<'r> FromRequest<'r> for Token {
             }
         };
 
-        let conn = &mut establish_connection();
+        let pool = match request.rocket().state::<DbPool>() {
+            Some(p) => p,
+            None => return Outcome::Error((Status::InternalServerError, AuthError::Unknown)),
+        };
+        let mut conn = match pool.get() {
+            Ok(c) => c,
+            Err(_) => return Outcome::Error((Status::InternalServerError, AuthError::Unknown)),
+        };
 
         let result = tokens
             .select(Token::as_select())
