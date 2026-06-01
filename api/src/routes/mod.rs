@@ -63,7 +63,7 @@ impl<'r> FromRequest<'r> for Token {
         let result = tokens
             .select(Token::as_select())
             .filter(code.eq(token))
-            .get_result(conn);
+            .get_result(&mut conn);
 
         match result {
             Ok(claims) => Outcome::Success(claims),
