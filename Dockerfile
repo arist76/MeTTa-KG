@@ -47,8 +47,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM python:3.11-alpine AS python-builder
 WORKDIR /build
 
-# All deps have pre-built wheels (hyperon=0.1.x pure py, rdflib pure py, numpy manylinux)
-# so no compiler toolchain needed
+# All deps are pure Python (hyperon=0.1.x, rdflib) — no compiler toolchain needed
 COPY translations/requirements.txt requirements.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip \
