@@ -23,7 +23,7 @@ pub fn rocket() -> Rocket<Build> {
     let mut connection = db::establish_connection().expect("Failed to connect to database for migrations");
     connection
         .run_pending_migrations(MIGRATIONS)
-        .expect("Failed to run migrations");
+        .unwrap_or_else(|e| panic!("Failed to run database migrations: {e}"));
 
     // Configure CORS origins from environment variable
     let frontend_url = env::var("METTA_KG_FRONTEND_URL")
@@ -43,7 +43,7 @@ pub fn rocket() -> Rocket<Build> {
         ..Default::default()
     }
     .to_cors()
-    .unwrap();
+    .expect("Failed to configure CORS");
 
     rocket::build()
         .mount(
