@@ -22,7 +22,7 @@ import NotImplemented from "~/components/common/NotImplemented";
 import Trash2 from "lucide-solid/icons/trash-2";
 import CommandPalette from "~/components/common/CommandPalette";
 const UnionPage = lazy(() => import("../union/Union"));
-import { initSSE, isCommandRunning, commandProgress } from "~/lib/sse";
+import { initSSE, isCommandRunning } from "~/lib/sse";
 import { layoutMode } from "~/lib/theme";
 import { initTheme } from "~/lib/theme";
 
@@ -179,11 +179,15 @@ const AppLayout = (
             </div>
           </Show>
           {/* Progress Bar */}
+          {/* Progress Bar */}
           <Show when={isCommandRunning()}>
             <div class="w-full h-1 bg-muted overflow-hidden flex-shrink-0">
               <div
-                class="h-full bg-primary transition-all duration-300"
-                style={{ width: `${commandProgress()}%` }}
+                class="h-full bg-primary rounded-full"
+                style={{
+                  width: "33%",
+                  animation: "indeterminate 1.5s ease-in-out infinite",
+                }}
               />
             </div>
           </Show>
@@ -194,6 +198,7 @@ const AppLayout = (
           </main>
         </div>
       </div>
+      <style>{`@keyframes indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }`}</style>
     </>
   );
 };
