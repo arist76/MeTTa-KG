@@ -29,7 +29,9 @@ trait SourceTargetPermissions {
     fn target(&self) -> Vec<Self::Ns>;
 
     fn source_target_permissions(&self, token: Token) -> bool {
-        let token_namespace = token.namespace.strip_prefix("/").unwrap();
+        let Some(token_namespace) = token.namespace.strip_prefix("/") else {
+            return false;
+        };
 
         // check `permission read`
         let has_read_permission = self
@@ -126,7 +128,7 @@ pub async fn read(
     path: PathBuf,
     mm2: Option<Json<Mm2InputMulti>>,
 ) -> Result<Json<String>, Status> {
-    if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_read {
+    if !path.starts_with(token.namespace.strip_prefix("/").ok_or(Status::InternalServerError)?) || !token.permission_read {
         return Err(Status::Unauthorized);
     }
 
@@ -158,7 +160,7 @@ pub async fn upload(
     data: Data<'_>,
     state: &State<SseState>,
 ) -> Result<Json<bool>, Custom<String>> {
-    let token_namespace = token.namespace.strip_prefix("/").unwrap();
+    let token_namespace = token.namespace.strip_prefix("/").ok_or(Custom(Status::InternalServerError, "Internal error".to_string()))?;
     if !path.starts_with(token_namespace) || !token.permission_write {
         return Err(Custom(Status::Unauthorized, "Unauthorized".to_string()));
     }
@@ -199,7 +201,7 @@ pub async fn import(
     uri: String,
     state: &State<SseState>,
 ) -> Result<Json<bool>, Status> {
-    if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_write {
+    if !path.starts_with(token.namespace.strip_prefix("/").ok_or(Status::InternalServerError)?) || !token.permission_write {
         return Err(Status::Unauthorized);
     }
 
@@ -232,7 +234,7 @@ pub async fn explore(
     path: PathBuf,
     explore_input: Json<ExploreInput>,
 ) -> Result<Json<String>, Status> {
-    if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_read {
+    if !path.starts_with(token.namespace.strip_prefix("/").ok_or(Status::InternalServerError)?) || !token.permission_read {
         return Err(Status::Unauthorized);
     }
 
@@ -271,7 +273,7 @@ pub async fn export(
     export_input: Json<Mm2Input>,
     state: &State<SseState>,
 ) -> Result<Json<String>, Custom<Json<serde_json::Value>>> {
-    if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_read {
+    if !path.starts_with(token.namespace.strip_prefix("/").ok_or(Custom(Status::InternalServerError, Json(json!({}))))?) || !token.permission_read {
         return Err(Custom(
             Status::Unauthorized,
             Json(json!({ "message": "Unauthorized" })),
@@ -374,7 +376,7 @@ pub async fn clear(
     expr: String,
     state: &State<SseState>,
 ) -> Result<Json<bool>, Status> {
-    let token_namespace = token.namespace.strip_prefix("/").unwrap();
+    let token_namespace = token.namespace.strip_prefix("/").ok_or(Status::InternalServerError)?;
     if !path.starts_with(token_namespace) || !token.permission_write {
         return Err(Status::Unauthorized);
     }
@@ -670,6 +672,7 @@ fn spawn_job<R>(
 
 fn composition_transform(input: SetOperationInput) -> Result<TransformDetails, Status> {
     let mut template = String::new();
+    let target_ns = input.target.first().cloned().ok_or(Status::BadRequest)?;
 
     let patterns = input
         .source
@@ -690,7 +693,7 @@ fn composition_transform(input: SetOperationInput) -> Result<TransformDetails, S
             .patterns(patterns)
             .templates(vec![Mm2Cell::new_template(
                 template,
-                Namespace::from(PathBuf::from(input.target.first().cloned().unwrap())),
+                Namespace::from(PathBuf::from(target_ns)),
             )]);
 
     Ok(transform_input)
@@ -701,6 +704,8 @@ fn intersection_transform(input: SetOperationInput) -> Result<TransformDetails, 
     if input.source.len() < 2 || input.target.len() != 1 {
         return Err(Status::BadRequest);
     }
+
+    let target_ns = input.target.first().cloned().unwrap();
 
     let patterns = input
         .source
@@ -715,7 +720,7 @@ fn intersection_transform(input: SetOperationInput) -> Result<TransformDetails, 
             .patterns(patterns)
             .templates(vec![Mm2Cell::new_template(
                 "$x".to_string(),
-                Namespace::from(PathBuf::from(input.target.first().cloned().unwrap())),
+                Namespace::from(PathBuf::from(target_ns)),
             )]);
 
     Ok(transform_input)
@@ -729,6 +734,8 @@ fn union_transform(input: SetOperationInput) -> Result<Vec<TransformDetails>, St
         return Err(Status::BadRequest);
     }
 
+    let target_ns = input.target.first().cloned().ok_or(Status::BadRequest)?;
+
     let mut union_query: Vec<TransformDetails> = Vec::new();
 
     for source_ns in input.source.iter() {
@@ -740,7 +747,7 @@ fn union_transform(input: SetOperationInput) -> Result<Vec<TransformDetails>, St
                 )])
                 .templates(vec![Mm2Cell::new_template(
                     "$x".to_string(),
-                    Namespace::from_path_string(input.target.first().unwrap()),
+                    Namespace::from_path_string(&target_ns),
                 )]),
         );
     }
