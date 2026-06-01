@@ -20,7 +20,7 @@ pub fn rocket() -> Rocket<Build> {
 
     let pool = db::create_pool();
 
-    let mut connection = db::establish_connection();
+    let mut connection = db::establish_connection().expect("Failed to connect to database for migrations");
     connection
         .run_pending_migrations(MIGRATIONS)
         .expect("Failed to run migrations");

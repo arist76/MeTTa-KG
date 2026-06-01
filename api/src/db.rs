@@ -24,10 +24,10 @@ pub fn create_pool() -> DbPool {
         .expect("Failed to create database pool")
 }
 
-pub fn establish_connection() -> PgConnection {
-    let user = env::var("POSTGRES_USER").expect("POSTGRES_USER must be set");
-    let password = env::var("POSTGRES_PASSWORD").expect("POSTGRES_PASSWORD must be set");
-    let db_name = env::var("POSTGRES_DB").expect("POSTGRES_DB must be set");
+pub fn establish_connection() -> Result<PgConnection, String> {
+    let user = env::var("POSTGRES_USER").map_err(|_| "POSTGRES_USER must be set".to_string())?;
+    let password = env::var("POSTGRES_PASSWORD").map_err(|_| "POSTGRES_PASSWORD must be set".to_string())?;
+    let db_name = env::var("POSTGRES_DB").map_err(|_| "POSTGRES_DB must be set".to_string())?;
     let host = env::var("POSTGRES_HOST").unwrap_or_else(|_| "db".to_string());
     let port = env::var("POSTGRES_PORT").unwrap_or_else(|_| "5432".to_string());
 
@@ -39,5 +39,5 @@ pub fn establish_connection() -> PgConnection {
     );
 
     PgConnection::establish(&database_url)
-        .unwrap_or_else(|e| panic!("Error connecting to {database_url} {e}"))
+        .map_err(|e| format!("Error connecting to database: {e}"))
 }
