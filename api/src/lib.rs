@@ -6,6 +6,7 @@ use rocket_cors::AllowedOrigins;
 use std::env;
 
 pub mod db;
+pub use db::DbPool;
 pub mod model;
 pub mod mork_api;
 pub mod routes;
@@ -16,6 +17,8 @@ pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
 pub fn rocket() -> Rocket<Build> {
     dotenv::dotenv().ok();
+
+    let pool = db::create_pool();
 
     let mut connection = db::establish_connection();
     connection
@@ -73,4 +76,5 @@ pub fn rocket() -> Rocket<Build> {
         .attach(routes::sse::stage())
         .attach(cors.clone())
         .manage(cors)
+        .manage(pool)
 }
