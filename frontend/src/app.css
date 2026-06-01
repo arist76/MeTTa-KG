@@ -277,56 +277,57 @@
   bottom: 0;
   pointer-events: none;
   z-index: -1;
+  will-change: background-position;
   background-image:
     radial-gradient(
       3px 3px at 20px 30px,
-      hsl(var(--accent) / 0.25),
-      transparent
+      hsl(var(--accent) / 0.25) 1.5px,
+      transparent 1.5px
     ),
     radial-gradient(
       2px 2px at 40px 70px,
-      hsl(var(--accent) / 0.2),
-      transparent
+      hsl(var(--accent) / 0.2) 1px,
+      transparent 1px
     ),
     radial-gradient(
       3px 3px at 50px 160px,
-      hsl(var(--accent) / 0.25),
-      transparent
+      hsl(var(--accent) / 0.25) 1.5px,
+      transparent 1.5px
     ),
     radial-gradient(
       2px 2px at 90px 40px,
-      hsl(var(--accent) / 0.2),
-      transparent
+      hsl(var(--accent) / 0.2) 1px,
+      transparent 1px
     ),
     radial-gradient(
       3px 3px at 130px 80px,
-      hsl(var(--accent) / 0.25),
-      transparent
+      hsl(var(--accent) / 0.25) 1.5px,
+      transparent 1.5px
     ),
     radial-gradient(
       2px 2px at 160px 120px,
-      hsl(var(--accent) / 0.2),
-      transparent
+      hsl(var(--accent) / 0.2) 1px,
+      transparent 1px
     ),
     radial-gradient(
       3px 3px at 200px 50px,
-      hsl(var(--accent) / 0.25),
-      transparent
+      hsl(var(--accent) / 0.25) 1.5px,
+      transparent 1.5px
     ),
     radial-gradient(
       2px 2px at 250px 90px,
-      hsl(var(--accent) / 0.2),
-      transparent
+      hsl(var(--accent) / 0.2) 1px,
+      transparent 1px
     ),
     radial-gradient(
       2px 2px at 280px 150px,
-      hsl(var(--accent) / 0.2),
-      transparent
+      hsl(var(--accent) / 0.2) 1px,
+      transparent 1px
     ),
     radial-gradient(
       3px 3px at 320px 30px,
-      hsl(var(--accent) / 0.25),
-      transparent
+      hsl(var(--accent) / 0.25) 1.5px,
+      transparent 1.5px
     );
   background-repeat: repeat;
   background-size: 350px 200px;
@@ -362,6 +363,7 @@
 
 .pattern-animated.bg-pattern-stars body::before {
   animation: pattern-stars-float 20s linear infinite;
+  will-change: background-position;
 }
 
 /* ============================================
