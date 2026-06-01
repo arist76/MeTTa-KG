@@ -73,17 +73,21 @@ impl Fairing for RequestLogger {
 pub fn rocket() -> Rocket<Build> {
     dotenv::dotenv().ok();
 
+    tracing::info!(target: "startup", "Initializing database");
+
     let pool = db::create_pool();
 
     let mut connection = db::establish_connection().expect("Failed to connect to database for migrations");
     connection
         .run_pending_migrations(MIGRATIONS)
         .unwrap_or_else(|e| panic!("Failed to run database migrations: {e}"));
+    tracing::info!(target: "startup", "Database pool created, migrations complete");
 
     // Configure CORS origins from environment variable
     let frontend_url = env::var("METTA_KG_FRONTEND_URL")
         .unwrap_or_else(|_| "https://metta-kg.vercel.app".to_string());
 
+    tracing::info!(target: "startup", frontend_url = %frontend_url, "Configuring CORS");
     let origins = ["http://localhost:3000".to_string(), frontend_url];
 
     let allowed_origins =

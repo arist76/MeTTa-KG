@@ -217,15 +217,20 @@ impl MorkApiClient {
 
     pub async fn dispatch<R: Request>(&self, request: R) -> Result<String, Status> {
         let url = format!("{}{}", self.base_url, request.path());
+        let path = request.path();
+
+        tracing::debug!(target: "mork", path = %path, "Dispatching request to Mork");
+
         let mut http_request = self.client.request(request.method(), &url);
 
-        if request.path().starts_with("/upload/") || request.path() == "/transform" {
+        if path.starts_with("/upload/") || path == "/transform" {
             if let Some(body) = request.body() {
                 if let Some(body_str) = (&body as &dyn Any).downcast_ref::<String>() {
                     http_request = http_request
                         .header("Content-Type", "text/plain")
                         .body(body_str.clone());
                 } else {
+                    tracing::error!(target: "mork", path = %path, "Failed to downcast body for upload/transform");
                     return Err(Status::InternalServerError);
                 }
             }
@@ -235,11 +240,27 @@ impl MorkApiClient {
 
         http_request = http_request.timeout(request.timeout());
         match http_request.send().await {
-            Ok(resp) => match resp.text().await {
-                Ok(text) => Ok(text),
-                Err(_) => Err(Status::InternalServerError),
-            },
-            Err(_) => Err(Status::InternalServerError),
+            Ok(resp) => {
+                let status = resp.status();
+                match resp.text().await {
+                    Ok(text) => {
+                        if status.is_success() {
+                            tracing::debug!(target: "mork", path = %path, status = status.as_u16(), "Mork request succeeded");
+                        } else {
+                            tracing::warn!(target: "mork", path = %path, status = status.as_u16(), body = %text, "Mork returned error");
+                        }
+                        Ok(text)
+                    }
+                    Err(_) => {
+                        tracing::error!(target: "mork", path = %path, "Failed to read Mork response body");
+                        Err(Status::InternalServerError)
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!(target: "mork", path = %path, error = %e, "Mork request failed");
+                Err(Status::InternalServerError)
+            }
         }
     }
 }
