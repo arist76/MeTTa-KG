@@ -260,6 +260,7 @@
   bottom: 0;
   pointer-events: none;
   z-index: -1;
+  will-change: background-position;
   background-image:
     linear-gradient(to right, hsl(var(--accent) / 0.05) 1px, transparent 1px),
     linear-gradient(to bottom, hsl(var(--accent) / 0.05) 1px, transparent 1px);
@@ -349,6 +350,7 @@
 
 .pattern-animated.bg-pattern-lines body::before {
   animation: pattern-lines-drift 20s linear infinite;
+  will-change: background-position;
 }
 
 /* Particles float - moves the background position */
