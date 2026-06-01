@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { transform } from "~/lib/api";
 import { Mm2InputMultiWithNamespace, Item } from "~/lib/types";
 import { showToast } from "~/components/ui/Toast";
+import { reportError } from "~/lib/errors";
 import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
 import { refreshSpace } from "../load/lib";
 
@@ -47,14 +48,7 @@ export const executeTransform = async (patterns: Item[], templates: Item[]) => {
 
     await transform(input);
 
-    refreshSpace();
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "An unexpected error occurred.";
-    showToast({
-      title: "Error",
-      description: errorMessage,
-      variant: "destructive",
-    });
+    reportError("transform", error);
   }
 };
