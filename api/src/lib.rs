@@ -3,6 +3,8 @@ use rocket::http::Method;
 use rocket::routes;
 use rocket::{Build, Rocket};
 use rocket_cors::AllowedOrigins;
+use rocket::fairing::{Fairing, Info, Kind};
+use rocket::{Data, Request, Response};
 use std::env;
 
 pub mod db;
@@ -14,6 +16,59 @@ pub mod schema;
 pub mod sse_utils;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
+
+struct RequestLogger;
+
+#[rocket::async_trait]
+impl Fairing for RequestLogger {
+    fn info(&self) -> Info {
+        Info {
+            name: "Request Logger",
+            kind: Kind::Request | Kind::Response,
+        }
+    }
+
+    async fn on_request(&self, request: &mut Request<'_>, _: &mut Data<'_>) {
+        tracing::info!(
+            target: "http",
+            method = %request.method(),
+            path = %request.uri().path(),
+            "--> {} {}",
+            request.method(),
+            request.uri().path(),
+        );
+    }
+
+    async fn on_response<'r>(&self, request: &'r Request<'_>, response: &mut Response<'r>) {
+        let status = response.status();
+        if status.code >= 500 {
+            tracing::error!(
+                target: "http",
+                method = %request.method(),
+                path = %request.uri().path(),
+                status = status.code,
+                "<-- {} {} {}", request.method(), request.uri().path(), status,
+            );
+        } else if status.code >= 400 {
+            tracing::warn!(
+                target: "http",
+                method = %request.method(),
+                path = %request.uri().path(),
+                status = status.code,
+                "<-- {} {} {}", request.method(), request.uri().path(), status,
+            );
+        } else {
+            tracing::info!(
+                target: "http",
+                method = %request.method(),
+                path = %request.uri().path(),
+                status = status.code,
+                "<-- {} {} {}", request.method(), request.uri().path(), status,
+            );
+        }
+    }
+}
+
 
 pub fn rocket() -> Rocket<Build> {
     dotenv::dotenv().ok();
@@ -77,4 +132,5 @@ pub fn rocket() -> Rocket<Build> {
         .attach(cors.clone())
         .manage(cors)
         .manage(pool)
+        .attach(RequestLogger)
 }
