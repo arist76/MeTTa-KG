@@ -129,13 +129,39 @@ export default function CommandPalette() {
         e.preventDefault();
         setIsOpen(true);
       }
+
+      if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement;
+        if (
+          target.tagName !== "INPUT" &&
+          target.tagName !== "TEXTAREA" &&
+          !target.isContentEditable
+        ) {
+          e.preventDefault();
+          setIsOpen(true);
+        }
+      }
       if (e.key === "Escape") {
         if (selectedCommand()) closeComponentDialog();
         else if (isOpen()) closeCommandDialog();
       }
     };
+
+    // Listen for custom event from TopNavigation
+    const handleOpenCommandPalette = () => {
+      setIsOpen(true);
+    };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("open-command-palette", handleOpenCommandPalette);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener(
+        "open-command-palette",
+        handleOpenCommandPalette
+      );
+    };
   });
 
   return (

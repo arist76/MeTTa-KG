@@ -52,6 +52,7 @@ pub fn rocket() -> Rocket<Build> {
                 routes::translations::create_from_nt,
                 routes::translations::create_from_jsonld,
                 routes::translations::create_from_n3,
+                routes::translations::create_from_json,
                 routes::tokens::get_all,
                 routes::tokens::get,
                 routes::tokens::create,

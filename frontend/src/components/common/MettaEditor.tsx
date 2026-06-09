@@ -1,12 +1,16 @@
-import { Component, onMount, createSignal, createEffect, Show } from "solid-js";
-import { ParseError } from "../../types";
-import { EditorView, basicSetup } from "codemirror";
-import { EditorState } from "@codemirror/state";
 import {
-  syntaxHighlighting,
-  defaultHighlightStyle,
-} from "@codemirror/language";
-import { mettaLanguage } from "../../syntax/mettaLanguage";
+  Component,
+  Show,
+  createEffect,
+  createSignal,
+  onCleanup,
+  onMount,
+} from "solid-js";
+import { ParseError } from "../../types";
+import { createEditor, type PrismEditor } from "prism-code-editor";
+import "prism-code-editor/layout.css";
+import "prism-code-editor/themes/github-dark.css";
+import "../../syntax/mettaLanguage";
 
 // Component Prop Interfaces
 export interface MettaEditorProps {
@@ -20,10 +24,25 @@ export interface MettaEditorProps {
 const MettaEditor: Component<MettaEditorProps> = (props) => {
   const [text, setText] = createSignal(props.initialText);
   const [realTimeErrors, setRealTimeErrors] = createSignal<ParseError[]>([]);
-  let editorRef: HTMLDivElement | undefined;
-  let editorView: EditorView | undefined;
 
-  // Handle text changes from CodeMirror
+  let editorHostRef: HTMLDivElement | undefined;
+  let prismEditor: PrismEditor | undefined;
+  let lastInitialText = props.initialText;
+  let isProgrammaticUpdate = false;
+
+  const destroyPrismEditor = () => {
+    if (!prismEditor) {
+      return;
+    }
+
+    prismEditor.remove();
+    prismEditor = undefined;
+
+    if (editorHostRef) {
+      editorHostRef.innerHTML = "";
+    }
+  };
+
   const handleTextChange = (textValue: string) => {
     setText(textValue);
     props.onTextChange(textValue);
@@ -34,122 +53,92 @@ const MettaEditor: Component<MettaEditorProps> = (props) => {
     setRealTimeErrors([]);
   };
 
+  const mountPrismEditor = () => {
+    if (!editorHostRef || prismEditor) {
+      return;
+    }
+
+    prismEditor = createEditor(editorHostRef, {
+      class: "metta-prism-instance",
+      language: "metta",
+      value: text(),
+      lineNumbers: true,
+      wordWrap: false,
+      onUpdate: (value) => {
+        if (isProgrammaticUpdate) {
+          return;
+        }
+        handleTextChange(value);
+      },
+    });
+  };
+
   onMount(() => {
-    if (!editorRef) return;
-
-    // Create CodeMirror editor
-    const state = EditorState.create({
-      doc: props.initialText,
-      extensions: [
-        basicSetup,
-        mettaLanguage,
-        syntaxHighlighting(defaultHighlightStyle),
-        EditorView.updateListener.of((update) => {
-          if (update.docChanged) {
-            const newText = update.state.doc.toString();
-            handleTextChange(newText);
-          }
-        }),
-        EditorView.theme({
-          "&": {
-            fontSize: "13px",
-            fontFamily:
-              "'Courier New', Consolas, 'Liberation Mono', Menlo, Courier, monospace",
-            lineHeight: "1.5",
-            background: "hsl(var(--background))",
-            color: "hsl(var(--foreground))",
-            border: "none",
-            outline: "none",
-          },
-          ".cm-content": {
-            padding: "8px",
-            whiteSpace: "pre",
-            wordWrap: "break-word",
-            tabSize: "2",
-            background: "hsl(var(--background))",
-            color: "hsl(var(--foreground))",
-            lineHeight: "1.5",
-          },
-          ".cm-gutters": {
-            borderRight: "1px solid hsl(var(--border))",
-            fontFamily:
-              "'Courier New', Consolas, 'Liberation Mono', Menlo, Courier, monospace",
-            fontSize: "13px",
-            lineHeight: "1.5",
-            padding: "0px 4px",
-            background: "hsl(var(--muted))",
-            color: "hsl(var(--muted-foreground))",
-          },
-          ".cm-gutterElement": {
-            textAlign: "right",
-            paddingRight: "0px",
-          },
-          ".cm-activeLineGutter": {
-            background: "hsl(var(--accent))",
-            color: "hsl(var(--accent-foreground))",
-            fontWeight: "600",
-          },
-          ".cm-activeLine": {
-            background: "hsl(var(--accent) / 0.1)",
-          },
-          ".cm-selectionBackground": {
-            background: "hsl(var(--primary) / 0.2)",
-          },
-          ".cm-cursor": {
-            borderLeft: "2px solid hsl(var(--primary))",
-          },
-          ".cm-focused": {
-            outline: "none",
-          },
-          ".cm-editor": {
-            background: "hsl(var(--background))",
-          },
-          ".cm-scroller": {
-            background: "hsl(var(--background))",
-          },
-          // Error and warning lines with theme colors
-          ".cm-line.error-line": {
-            backgroundColor: "hsl(var(--destructive) / 0.1) !important",
-            borderLeft: "3px solid hsl(var(--destructive)) !important",
-            paddingLeft: "5px !important",
-            marginLeft: "-8px !important",
-          },
-          ".cm-line.warning-line": {
-            backgroundColor: "hsl(var(--warning) / 0.1) !important",
-            borderLeft: "3px solid hsl(var(--warning) / 0.8) !important",
-            paddingLeft: "5px !important",
-            marginLeft: "-8px !important",
-          },
-        }),
-      ],
-    });
-
-    editorView = new EditorView({
-      state,
-      parent: editorRef,
-    });
+    mountPrismEditor();
   });
 
-  // Update editor content when props change (only on initial load)
   createEffect(() => {
-    if (editorView && props.initialText !== text()) {
-      // Only update if the editor is empty (initial load)
-      if (editorView.state.doc.length === 0) {
-        const transaction = editorView.state.update({
-          changes: {
-            from: 0,
-            to: 0,
-            insert: props.initialText,
-          },
-        });
-        editorView.dispatch(transaction);
-        setText(props.initialText);
-      }
+    if (props.initialText === lastInitialText) {
+      return;
     }
+
+    lastInitialText = props.initialText;
+    setText(props.initialText);
+
+    if (prismEditor && prismEditor.value !== props.initialText) {
+      isProgrammaticUpdate = true;
+      prismEditor.setOptions({ value: props.initialText });
+      isProgrammaticUpdate = false;
+    }
+  });
+
+  onCleanup(() => {
+    destroyPrismEditor();
   });
 
   return (
     <div class="flex flex-col h-full w-full box-border">
+      <style>{`
+        .metta-prism-editor-host,
+        .metta-prism-editor-host .prism-code-editor,
+        .metta-prism-editor-host .pce-wrapper,
+        .metta-prism-editor-host .pce-textarea,
+        .metta-prism-editor-host .pce-line {
+          font-family: 'Courier New', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+          font-size: 13px;
+          line-height: 1.5;
+        }
+
+        .metta-prism-editor-host .prism-code-editor {
+          height: 100%;
+          margin: 0;
+          --pce-bg: hsl(var(--background));
+          --pce-cursor: hsl(var(--primary));
+          --pce-selection: hsl(var(--primary) / 0.2);
+          --pce-line-number: hsl(var(--muted-foreground));
+          --pce-bg-highlight: hsl(var(--accent) / 0.1);
+          --pce-border-highlight: 0 solid transparent;
+          --padding-inline: 8px;
+          --number-spacing: 8px;
+        }
+
+        .metta-prism-editor-host .pce-wrapper {
+          margin: 0;
+        }
+
+        .metta-prism-editor-host .show-line-numbers::before,
+        .metta-prism-editor-host .show-line-numbers .pce-line::before {
+          background: hsl(var(--muted));
+          border-right: 1px solid hsl(var(--border));
+          font-weight: 600;
+        }
+
+        .metta-prism-editor-host .show-line-numbers .active-line::before {
+          color: hsl(var(--accent-foreground));
+          background: hsl(var(--accent));
+        }
+      `}</style>
+
       <h3 class="m-0 mb-3 text-sm font-semibold flex-shrink-0 leading-tight text-foreground">
         {realTimeErrors().length > 0 && (
           <span class="ml-2 text-xs font-normal text-destructive">
@@ -161,15 +150,15 @@ const MettaEditor: Component<MettaEditorProps> = (props) => {
         )}
       </h3>
 
-      {/* Editor Container */}
       <div class="relative flex-1 min-h-0 mb-2 border border-border rounded bg-background overflow-hidden transition-all duration-300 ease-linear">
-        {/* CodeMirror Editor */}
-        <div ref={editorRef} class="h-full w-full bg-background" />
+        <div
+          ref={editorHostRef}
+          class="metta-prism-editor-host h-full w-full"
+        />
       </div>
 
-      {/* Action Buttons */}
       <Show when={props.showActionButtons ?? true}>
-        <div class="mb-2 flex gap-2 flex-shrink-0 items-center">
+        <div class="mb-2 flex gap-2 flex-shrink-0 items-center flex-wrap">
           <button
             class="px-2 py-1 text-xs border border-border rounded-sm bg-background text-foreground cursor-pointer transition-all duration-200 ease-linear hover:bg-accent hover:border-primary"
             onClick={() => {
@@ -180,37 +169,6 @@ const MettaEditor: Component<MettaEditorProps> = (props) => {
           </button>
         </div>
       </Show>
-
-      {/* Error Display Panel - Commented out as in original */}
-      {/* 
-      {(realTimeErrors().length > 0 || props.parseErrors.length > 0) && (
-        <div class="max-h-30 overflow-y-auto border border-border rounded bg-card flex-shrink-0 transition-all duration-300 ease-linear">
-          <div class="p-2 text-xs font-semibold bg-muted text-muted-foreground border-b border-border">
-            Issues ({realTimeErrors().filter(e => e.severity === 'error').length + props.parseErrors.filter(e => e.severity === 'error').length} errors, {realTimeErrors().filter(e => e.severity === 'warning').length + props.parseErrors.filter(e => e.severity === 'warning').length} warnings)
-          </div>
-          <div class="p-1">
-            <For each={[...realTimeErrors(), ...props.parseErrors]}>
-              {(error) => (
-                <div class={`p-1 px-2 my-0.5 border-l-2 rounded-sm text-xs leading-tight transition-all duration-300 ease-linear ${
-                  error.severity === 'error' 
-                    ? 'border-l-destructive bg-destructive/10' 
-                    : 'border-l-yellow-500 bg-yellow-500/10'
-                }`}>
-                  <div class={`font-semibold mb-0.5 ${
-                    error.severity === 'error' ? 'text-destructive' : 'text-yellow-600'
-                  }`}>
-                    {error.severity === 'error' ? '⚠️' : '⚡'} Line {error.line}:{error.column}
-                  </div>
-                  <div class="text-foreground">
-                    {error.message}
-                  </div>
-                </div>
-              )}
-            </For>
-          </div>
-        </div>
-      )}
-      */}
     </div>
   );
 };

@@ -10,6 +10,8 @@ import TokensPage from "../tokens/Tokens";
 import ClearPage from "../clear/Clear";
 import Sidebar from "~/pages/index/components/Sidebar";
 import Header from "~/pages/index/components/Header";
+import TopNavigation from "~/components/common/TopNavigation";
+import ContentWrapper from "~/components/common/ContentWrapper";
 import Upload from "lucide-solid/icons/upload";
 import Database from "lucide-solid/icons/database";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
@@ -20,10 +22,12 @@ import Trash2 from "lucide-solid/icons/trash-2";
 import CommandPalette from "~/components/common/CommandPalette";
 import UnionPage from "../union/Union";
 import { initSSE, isCommandRunning, commandProgress } from "~/lib/sse";
+import { layoutMode } from "~/lib/theme";
+import { initTheme } from "~/lib/theme";
 
 export const sidebarSections = [
   {
-    title: "Inspection and Visualization",
+    title: "Inspection & Visualization",
     items: [
       {
         id: "explore",
@@ -32,17 +36,10 @@ export const sidebarSections = [
         to: "/",
         component: LoadPage,
       },
-      {
-        id: "clear",
-        label: "Clear",
-        icon: Trash2,
-        to: "/clear",
-        component: ClearPage,
-      },
     ],
   },
   {
-    title: "Set and Algebraic Operations",
+    title: "Operations",
     items: [
       {
         id: "transform",
@@ -54,58 +51,58 @@ export const sidebarSections = [
       {
         id: "composition",
         label: "Composition",
-        icon: () => <span class="text-xl">∪</span>,
+        icon: () => <span class="text-lg">∘</span>,
         to: "/composition",
         component: CompositionPage,
       },
       {
         id: "union",
         label: "Union",
-        icon: () => <span class="text-xl">∪</span>,
+        icon: () => <span class="text-lg">∪</span>,
         to: "/union",
         component: UnionPage,
       },
       {
         id: "intersection",
         label: "Intersection",
-        icon: () => <span class="text-xl">∩</span>,
+        icon: () => <span class="text-lg">∩</span>,
         to: "/intersection",
         component: IntersectionPage,
       },
       {
         id: "difference",
         label: "Difference",
-        icon: () => <span class="text-xl font-bold">∖</span>,
+        icon: () => <span class="text-lg font-bold">∖</span>,
         to: "/difference",
       },
       {
         id: "restrict",
         label: "Restrict",
-        icon: () => <span class="text-xl font-bold">◁</span>,
+        icon: () => <span class="text-lg font-bold">◁</span>,
         to: "/restrict",
       },
       {
         id: "decapitate",
         label: "Decapitate",
-        icon: () => <span class="text-xl">T</span>,
+        icon: () => <span class="text-lg">⊤</span>,
         to: "/decapitate",
       },
       {
         id: "head",
         label: "Head",
-        icon: () => <span class="text-xl">H</span>,
+        icon: () => <span class="text-lg">⊢</span>,
         to: "/head",
       },
       {
         id: "cartesian",
         label: "Cartesian",
-        icon: () => <span class="text-xl">X</span>,
+        icon: () => <span class="text-lg">×</span>,
         to: "/cartesian",
       },
     ],
   },
   {
-    title: "Utility",
+    title: "Data Management",
     items: [
       {
         id: "upload",
@@ -128,6 +125,13 @@ export const sidebarSections = [
         to: "/tokens",
         component: TokensPage,
       },
+      {
+        id: "clear",
+        label: "Clear",
+        icon: Trash2,
+        to: "/clear",
+        component: ClearPage,
+      },
     ],
   },
 ];
@@ -139,38 +143,49 @@ const AppLayout = (
 
   return (
     <>
+      {/* Global Command Palette */}
       <CommandPalette />
-      <div class="w-full h-screen flex ">
-        <div class="flex h-full">
-          <Sidebar
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            sidebarSections={sidebarSections}
-          />
-        </div>
 
-        <div class="w-full h-full flex flex-col">
-          {/* <div class="flex items-center justify-between w-full h-14 shadow-lg shadow-[hsla(var(--secondary-foreground)/0.05)]">
-                    <div class="flex items-center">
-                        <span class={`text-3xl font-bold text-[hsla(var(--secondary-foreground)/0.7)] ml-10`}>MeTTa-KG</span>
-                        <div class="ml-24">
-                            <NameSpace />
-                        </div>
-                    </div>
-                </div> */}
-          <Header />
+      {/* Top Navigation - Only show in topnav mode */}
+      <Show when={layoutMode() !== "sidebar"}>
+        <TopNavigation activeTab={activeTab()} setActiveTab={setActiveTab} />
+      </Show>
+
+      {/* Main Layout */}
+      <div
+        class={`flex ${layoutMode() === "sidebar" ? "min-h-screen" : "min-h-[calc(100vh-4rem)]"}`}
+      >
+        {/* Sidebar - Only visible in sidebar layout mode */}
+        <Show when={layoutMode() === "sidebar"}>
+          <div class="hidden lg:block">
+            <Sidebar
+              activeTab={() => activeTab()}
+              setActiveTab={setActiveTab}
+              sidebarSections={sidebarSections}
+            />
+          </div>
+        </Show>
+
+        {/* Main Content Area */}
+        <div class="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+          <div class="flex-shrink-0">
+            <Header />
+          </div>
+
+          {/* Progress Bar */}
           <Show when={isCommandRunning()}>
-            <div class="w-full h-1 bg-gray-200">
+            <div class="w-full h-1 bg-muted overflow-hidden flex-shrink-0">
               <div
-                class="h-full bg-green-500 transition-all duration-300"
+                class="h-full bg-primary transition-all duration-300"
                 style={{ width: `${commandProgress()}%` }}
-              ></div>
+              />
             </div>
           </Show>
 
-          <div class="flex-1 w-full pl-4 pt-2 overflow-y-scroll">
-            {props.children}
-          </div>
+          {/* Page Content */}
+          <main class="flex-1 min-h-0 overflow-hidden">
+            <ContentWrapper>{props.children}</ContentWrapper>
+          </main>
         </div>
       </div>
     </>
@@ -183,11 +198,12 @@ const NotImplementedWrapper = (name: string) => () => (
 
 const App = () => {
   onMount(() => {
+    initTheme();
     initSSE();
   });
 
   return (
-    <div class="flex">
+    <div class="flex min-h-screen">
       <div class="flex-1 flex flex-col">
         <Router>
           <Route path="*" component={AppLayout}>

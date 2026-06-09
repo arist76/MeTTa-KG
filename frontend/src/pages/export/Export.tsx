@@ -30,11 +30,11 @@ import {
   result,
   exportError,
   handleExport,
+  ExportFormat,
   handleDownload,
   maxWrite,
   isInputValid,
   handleInput,
-  ExportFormat,
   activeExportAction,
 } from "./lib";
 
@@ -110,9 +110,9 @@ const ExportPage: Component = () => {
               <TextFieldInput
                 id="max-write"
                 type="number"
-                value={maxWrite() ?? 15}
+                value={maxWrite() ?? ""}
                 onInput={handleInput}
-                disabled={isLoading()}
+                disabled={!!isLoading() || isAppBusy()}
               />
             </TextField>
           </div>

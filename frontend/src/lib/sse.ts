@@ -27,6 +27,8 @@ export const isCommandQueued = (type: CommandType) =>
   commandLogs().some((line) => line.includes("waiting for turn"));
 
 let eventSource: EventSource | null = null;
+let lastErrorToastAt = 0;
+let commandResetTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export const initSSE = () => {
   if (
@@ -46,6 +48,11 @@ export const initSSE = () => {
   eventSource = new EventSource(eventsUrl);
 
   eventSource.onmessage = (event) => {
+    if (commandResetTimeout) {
+      clearTimeout(commandResetTimeout);
+      commandResetTimeout = null;
+    }
+
     const data = event.data;
 
     if (data.startsWith("PROCESS_STARTED")) {
@@ -101,11 +108,37 @@ export const initSSE = () => {
   };
 
   eventSource.onerror = () => {
-    showToast({
-      title: "Error",
-      description: `Error in SSE connection, attempting to reconnect...`,
-      variant: "destructive",
-    });
+    const now = Date.now();
+    if (now - lastErrorToastAt > 10000) {
+      lastErrorToastAt = now;
+      showToast({
+        title: "Error",
+        description: `Error in SSE connection, attempting to reconnect...`,
+        variant: "destructive",
+      });
+    }
+
+    if (eventSource?.readyState === EventSource.CLOSED) {
+      if (commandResetTimeout) {
+        clearTimeout(commandResetTimeout);
+        commandResetTimeout = null;
+      }
+      if (activeCommand()) {
+        setActiveCommand(null);
+        setCommandProgress(0);
+      }
+      return;
+    }
+
+    if (activeCommand() && !commandResetTimeout) {
+      commandResetTimeout = setTimeout(() => {
+        if (activeCommand()) {
+          setActiveCommand(null);
+          setCommandProgress(0);
+        }
+        commandResetTimeout = null;
+      }, 15000);
+    }
     // EventSource will attempt to reconnect automatically
   };
 };

@@ -11,9 +11,9 @@ import {
 export default function Header() {
   return (
     <>
-      {/* Header */}
-      <header class="bg-neutral-800 border-b border-neutral-700 flex items-center justify-between px-6">
-        <div class="h-14 flex items-center">
+      {/* Header with Namespace Breadcrumb */}
+      <header class="bg-card border-b border-border flex items-center justify-between px-4 py-3">
+        <div class="flex items-center">
           <NameSpace
             namespace={namespace()}
             setNamespace={setNamespace}
@@ -22,11 +22,12 @@ export default function Header() {
             getAllTokens={getAllTokens}
           />
         </div>
+
         {/* Links Section */}
         <div class="flex items-center gap-4 px-6 flex-shrink-0">
           <a
             href="https://github.com/trueagi-io/MORK"
-            class="uppercase text-neutral-400 hover:text-primary hover:underline text-sm"
+            class="uppercase text-muted-foreground hover:text-primary hover:underline text-sm transition-colors"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -35,7 +36,7 @@ export default function Header() {
           <span class="text-primary">·</span>
           <a
             href="https://github.com/trueagi-io/MORK/wiki"
-            class="uppercase text-neutral-400 hover:text-primary hover:underline text-sm"
+            class="uppercase text-muted-foreground hover:text-primary hover:underline text-sm transition-colors"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -44,7 +45,7 @@ export default function Header() {
           <span class="text-primary">·</span>
           <a
             href="https://chat.singularitynet.io/chat/channels/mork"
-            class="uppercase text-neutral-400 hover:text-primary hover:underline text-sm"
+            class="uppercase text-muted-foreground hover:text-primary hover:underline text-sm transition-colors"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -54,8 +55,7 @@ export default function Header() {
       </header>
 
       {/* Tabs */}
-
-      <NamespaceTabs class="h-10 flex items-stretch" />
+      <NamespaceTabs />
     </>
   );
 }
