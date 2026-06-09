@@ -10,7 +10,9 @@ use rocket::serde::json::serde_json;
 use rocket::serde::json::serde_json::json;
 use rocket::{get, post, Data, State};
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::sync::broadcast;
+use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration, Instant};
 
 use crate::model::Token;
@@ -20,6 +22,7 @@ use crate::mork_api::{
     TransformDetails, TransformRequest, UploadRequest,
 };
 use crate::routes::sse::SseState;
+use crate::scheduler::acquire_write_lock;
 use crate::sse_utils::{JobRunner, ServerEvent};
 
 trait SourceTargetPermissions {
@@ -186,7 +189,15 @@ pub async fn upload(
         .data(body);
 
     let broadcaster = state.broadcaster.clone();
-    spawn_job("UPLOAD", broadcaster, mork_api_client, request, path);
+    let write_lock = state.write_lock.clone();
+    spawn_job(
+        "UPLOAD",
+        broadcaster,
+        write_lock,
+        mork_api_client,
+        request,
+        path,
+    );
 
     Ok(Json(true))
 }
@@ -213,9 +224,11 @@ pub async fn import(
     let request = ImportRequest::new().to(template).uri(uri);
 
     let broadcaster = state.broadcaster.clone();
+    let write_lock = state.write_lock.clone();
     spawn_job(
         "IMPORT",
         broadcaster,
+        write_lock,
         mork_api_client,
         request,
         path.clone(),
@@ -319,11 +332,14 @@ pub async fn export(
             let _ = broadcaster.send(ServerEvent::Log {
                 message: "Export completed successfully.".to_string(),
             });
+            let _ = broadcaster.send(ServerEvent::Success {
+                message: "EXPORT".to_string(),
+            });
             data
         }
         Err(e) => {
             let _ = broadcaster.send(ServerEvent::Error {
-                message: format!("{:?}", e),
+                message: "EXPORT".to_string(),
             });
 
             return Err(Custom(e, Json(json!({ "message": "Mork API Error" }))));
@@ -383,7 +399,15 @@ pub async fn clear(
     let request = ClearRequest::new().namespace(path.clone()).expr(expr);
 
     let broadcaster = state.broadcaster.clone();
-    spawn_job("CLEAR", broadcaster, mork_api_client, request, path.clone());
+    let write_lock = state.write_lock.clone();
+    spawn_job(
+        "CLEAR",
+        broadcaster,
+        write_lock,
+        mork_api_client,
+        request,
+        path.clone(),
+    );
 
     Ok(Json(true))
 }
@@ -408,6 +432,7 @@ pub async fn transform(
     );
 
     let broadcaster = state.broadcaster.clone();
+    let write_lock = state.write_lock.clone();
     // We need a target path to poll. In transform, templates define the target.
     // Assuming the first template's namespace is the target for polling.
     let request_path = match mm2.templates.first() {
@@ -419,7 +444,14 @@ pub async fn transform(
     // Convert Namespace to PathBuf for polling
     let path_buf = PathBuf::from(request_path.to_string());
 
-    spawn_job("TRANSFORM", broadcaster, mork_api_client, request, path_buf);
+    spawn_job(
+        "TRANSFORM",
+        broadcaster,
+        write_lock,
+        mork_api_client,
+        request,
+        path_buf,
+    );
 
     Ok(Json(true))
 }
@@ -455,6 +487,7 @@ pub async fn composition(
     let request = TransformRequest::new().transform_input(transform_input.clone());
     let mork_api_client = MorkApiClient::new();
     let broadcaster = state.broadcaster.clone();
+    let write_lock = state.write_lock.clone();
 
     // Target path for polling is the first target in the input
     let request_path = match input.target.first() {
@@ -465,6 +498,7 @@ pub async fn composition(
     spawn_job(
         "COMPOSITION",
         broadcaster,
+        write_lock,
         mork_api_client,
         request,
         request_path,
@@ -500,6 +534,7 @@ pub async fn intersection(
     let request = TransformRequest::new().transform_input(transform_input);
     let mork_api_client = MorkApiClient::new();
     let broadcaster = state.broadcaster.clone();
+    let write_lock = state.write_lock.clone();
 
     // Target path for polling is the first target in the input
     let request_path = match input.target.first() {
@@ -510,6 +545,7 @@ pub async fn intersection(
     spawn_job(
         "INTERSECTION",
         broadcaster,
+        write_lock,
         mork_api_client,
         request,
         request_path,
@@ -538,6 +574,7 @@ pub async fn union(
     let transform_inputs = union_transform(operation_input.into_inner())?;
     let mork_api_client = MorkApiClient::new();
     let broadcaster = state.broadcaster.clone();
+    let write_lock = state.write_lock.clone();
 
     JobRunner::spawn(
         "UNION",
@@ -545,7 +582,10 @@ pub async fn union(
         move |tx: broadcast::Sender<ServerEvent>| {
             let client = mork_api_client;
             let path = request_path;
+            let write_lock = write_lock;
             async move {
+                let lock_guard = acquire_write_lock(&write_lock, &tx).await;
+
                 let _ = tx.send(ServerEvent::Log {
                     message: "Starting union operation...".to_string(),
                 });
@@ -566,6 +606,8 @@ pub async fn union(
                         .await
                         .map_err(|e| format!("Processing timeout: {:?}", e))?;
                 }
+
+                drop(lock_guard);
                 Ok("Union complete".to_string())
             }
         },
@@ -628,6 +670,7 @@ async fn poll_and_broadcast(
 fn spawn_job<R>(
     command: &str,
     broadcaster: broadcast::Sender<ServerEvent>,
+    write_lock: Arc<Mutex<()>>,
     mork_api_client: MorkApiClient,
     request: R,
     request_path: PathBuf,
@@ -650,6 +693,8 @@ fn spawn_job<R>(
         command,
         broadcaster,
         move |tx: broadcast::Sender<ServerEvent>| async move {
+            let lock_guard = acquire_write_lock(&write_lock, &tx).await;
+
             mork_api_client
                 .dispatch(request)
                 .await
@@ -662,6 +707,8 @@ fn spawn_job<R>(
             poll_and_broadcast(request_path, &mork_api_client, &tx)
                 .await
                 .map_err(|e| format!("Processing timeout: {:?}", e))?;
+
+            drop(lock_guard);
 
             Ok(success_msg)
         },

@@ -2,11 +2,11 @@ import { createSignal } from "solid-js";
 import { transform } from "~/lib/api";
 import { Mm2InputMultiWithNamespace, Item } from "~/lib/types";
 import { showToast } from "~/components/ui/Toast";
-import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
+import { isCommandActive, isCommandQueued } from "~/lib/sse";
 import { refreshSpace } from "../load/lib";
 
 export const isLoading = () => isCommandActive("TRANSFORM");
-export const isAppBusy = isAnyCommandActive;
+export const isQueued = () => isCommandQueued("TRANSFORM");
 export const [isPolling, setIsPolling] = createSignal(false);
 
 export const stopPolling = () => {

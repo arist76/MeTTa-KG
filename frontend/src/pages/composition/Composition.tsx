@@ -13,7 +13,7 @@ import { getAllTokens } from "~/lib/api";
 import { rootToken, tokenRootNamespace } from "~/lib/state";
 import {
   isLoading,
-  isAppBusy,
+  isQueued,
   isPolling,
   executeComposition,
   stopPolling,
@@ -203,7 +203,7 @@ const CompositionPage: Component = () => {
 
         <Button
           onClick={handleComposition}
-          disabled={isAppBusy() || !canCompose()}
+          disabled={isLoading() || !canCompose()}
           class="inline-flex items-center justify-center w-[180px] h-10 mt-4"
         >
           <Show when={isLoading() || isPolling()}>
@@ -230,7 +230,9 @@ const CompositionPage: Component = () => {
               </Show>
             }
           >
-            Performing Composition...
+            <Show when={isQueued()} fallback={"Performing Composition..."}>
+              Queued...
+            </Show>
           </Show>
         </Button>
       </CommandCard>

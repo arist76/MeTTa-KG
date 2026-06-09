@@ -24,7 +24,7 @@ import {
   activeTab,
   setActiveTab,
   isLoading,
-  isAppBusy,
+  isQueued,
   isFileUploadImplemented,
   handleFileSelect,
   handleImport,
@@ -97,7 +97,7 @@ export const UploadPage: Component = () => {
           <Show when={activeTab() !== "file" || isFileUploadImplemented}>
             <Button
               onClick={handleImportClick}
-              disabled={isAppBusy() || !isFormValid()}
+              disabled={isLoading() || !isFormValid()}
               class="mt-4 px-6"
             >
               <Show
@@ -113,7 +113,10 @@ export const UploadPage: Component = () => {
                   </>
                 }
               >
-                <Loader class="mr-2 h-4 w-4 animate-spin" /> Processing...
+                <Loader class="mr-2 h-4 w-4 animate-spin" />
+                <Show when={isQueued()} fallback={"Processing..."}>
+                  Queued...
+                </Show>
               </Show>
             </Button>
           </Show>

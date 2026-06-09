@@ -13,7 +13,7 @@ import { getAllTokens } from "~/lib/api";
 import { rootToken, tokenRootNamespace } from "~/lib/state";
 import {
   isLoading,
-  isAppBusy,
+  isQueued,
   isPolling,
   executeUnion,
   stopPolling,
@@ -206,7 +206,7 @@ const UnionPage: Component = () => {
 
         <Button
           onClick={handleUnion}
-          disabled={isAppBusy() || isPolling() || !canUnion()}
+          disabled={isLoading() || isPolling() || !canUnion()}
           class="inline-flex items-center justify-center w-[180px] h-10 mt-4"
         >
           <Show when={isLoading() || isPolling()}>
@@ -233,7 +233,9 @@ const UnionPage: Component = () => {
               </Show>
             }
           >
-            Performing Union...
+            <Show when={isQueued()} fallback={"Performing Union..."}>
+              Queued...
+            </Show>
           </Show>
         </Button>
       </CommandCard>

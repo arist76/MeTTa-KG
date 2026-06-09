@@ -8,8 +8,8 @@ import {
   expression,
   setExpression,
   isLoading,
+  isQueued,
   handleClear,
-  isAppBusy,
 } from "./lib";
 
 const ClearPage: Component = () => {
@@ -31,13 +31,15 @@ const ClearPage: Component = () => {
           <div class="flex items-center gap-4 pt-2">
             <Button
               onClick={() => handleClear(formatedNamespace())}
-              disabled={isAppBusy() || isLoading() || !expression().trim()}
+              disabled={isLoading() || !expression().trim()}
               variant="destructive"
               class="w-36"
             >
               <Show when={isLoading()} fallback={"Clear Data"}>
                 <Loader2 class="animate-spin mr-2" />
-                Clearing...
+                <Show when={isQueued()} fallback={"Clearing..."}>
+                  Queued...
+                </Show>
               </Show>
             </Button>
             <p class="text-sm text-muted-foreground">

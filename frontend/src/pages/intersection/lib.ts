@@ -2,11 +2,11 @@ import { createSignal } from "solid-js";
 import { request } from "~/lib/api";
 import { namespace } from "~/lib/state";
 import { showToast } from "~/components/ui/Toast";
-import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
+import { isCommandActive, isCommandQueued } from "~/lib/sse";
 import { refreshSpace } from "../load/lib";
 
 export const isLoading = () => isCommandActive("INTERSECTION");
-export const isAppBusy = isAnyCommandActive;
+export const isQueued = () => isCommandQueued("INTERSECTION");
 export const [isPolling, setIsPolling] = createSignal(false);
 
 export const stopPolling = () => {

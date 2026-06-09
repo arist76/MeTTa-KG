@@ -2,7 +2,7 @@ import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { exportSpace } from "~/lib/api";
 import { Mm2Input } from "~/lib/types";
-import { isAnyCommandActive, isCommandActive } from "~/lib/sse";
+import { isCommandActive, isCommandQueued } from "~/lib/sse";
 
 export type ExportFormat = "metta" | "json" | "csv" | "raw";
 export const [uri, setUri] = createSignal("");
@@ -11,7 +11,7 @@ export const [activeExportAction, setActiveExportAction] = createSignal<
 >(false);
 export const [format, setFormat] = createSignal<ExportFormat>("metta");
 export const isLoading = () => isCommandActive("EXPORT");
-export const isAppBusy = isAnyCommandActive;
+export const isQueued = () => isCommandQueued("EXPORT");
 export const [pattern, setPattern] = createSignal("$x\n\n\n");
 export const [template, setTemplate] = createSignal("$x\n\n\n");
 export const [result, setResult] = createSignal<string | null>(null);

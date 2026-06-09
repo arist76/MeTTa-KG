@@ -22,6 +22,9 @@ export const [commandLogs, setCommandLogs] = createSignal<string[]>([]);
 export const isCommandActive = (type: CommandType) => activeCommand() === type;
 export const isAnyCommandActive = () => activeCommand() !== null;
 export const isCommandRunning = isAnyCommandActive;
+export const isCommandQueued = (type: CommandType) =>
+  isCommandActive(type) &&
+  commandLogs().some((line) => line.includes("waiting for turn"));
 
 let eventSource: EventSource | null = null;
 let lastErrorToastAt = 0;
@@ -62,10 +65,14 @@ export const initSSE = () => {
       return;
     }
 
-    if (data === "PROCESS_EXIT_SUCCESS") {
-      const cmdName = activeCommand();
-      setCommandProgress(100);
-      setActiveCommand(null);
+    if (data.startsWith("PROCESS_EXIT_SUCCESS")) {
+      const parts = data.split(":");
+      const cmdName =
+        parts.length > 1 ? (parts[1] as CommandType) : activeCommand();
+      if (activeCommand() === cmdName) {
+        setCommandProgress(100);
+        setActiveCommand(null);
+      }
       showToast({
         title: "Success",
         description: `${cmdName} completed successfully`,
@@ -73,9 +80,13 @@ export const initSSE = () => {
       return;
     }
 
-    if (data === "PROCESS_EXIT_ERROR") {
-      const cmdName = activeCommand();
-      setActiveCommand(null);
+    if (data.startsWith("PROCESS_EXIT_ERROR")) {
+      const parts = data.split(":");
+      const cmdName =
+        parts.length > 1 ? (parts[1] as CommandType) : activeCommand();
+      if (activeCommand() === cmdName) {
+        setActiveCommand(null);
+      }
       showToast({
         title: "Error",
         description: `${cmdName} failed`,

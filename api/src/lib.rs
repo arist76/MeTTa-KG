@@ -9,6 +9,7 @@ pub mod db;
 pub mod model;
 pub mod mork_api;
 pub mod routes;
+pub mod scheduler;
 pub mod schema;
 pub mod sse_utils;
 

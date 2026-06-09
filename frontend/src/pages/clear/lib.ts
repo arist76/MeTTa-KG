@@ -1,12 +1,12 @@
 import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { clearSpace } from "~/lib/api";
-import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
+import { isCommandActive, isCommandQueued } from "~/lib/sse";
 import { refreshSpace } from "../load/lib";
 
 export const [expression, setExpression] = createSignal("$x \n \n \n");
 export const isLoading = () => isCommandActive("CLEAR");
-export const isAppBusy = isAnyCommandActive;
+export const isQueued = () => isCommandQueued("CLEAR");
 
 export const handleClear = async (spacePath: string) => {
   if (!expression().trim()) {
