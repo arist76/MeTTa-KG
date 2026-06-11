@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createSignal, createMutable } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { API_URL } from "./api";
 
@@ -17,7 +17,7 @@ export type CommandType =
 export const [activeCommand, setActiveCommand] =
   createSignal<CommandType>(null);
 export const [commandProgress, setCommandProgress] = createSignal(0);
-export const [commandLogs, setCommandLogs] = createSignal<string[]>([]);
+export const commandLogs = createMutable<string[]>([]);
 
 export const isCommandActive = (type: CommandType) => activeCommand() === type;
 export const isAnyCommandActive = () => activeCommand() !== null;
@@ -58,7 +58,7 @@ export const initSSE = () => {
         parts.length > 1 ? (parts[1] as CommandType) : "UNKNOWN";
       setActiveCommand(commandType);
       setCommandProgress(0);
-      setCommandLogs([]);
+      commandLogs.length = 0;
       return;
     }
 
@@ -86,7 +86,7 @@ export const initSSE = () => {
 
     // Handle stdout/stderr
     // If the message is not a lifecycle event, treat it as log output
-    setCommandLogs((prev) => [...prev, data]);
+    commandLogs.push(data);
 
     // Increment progress (cap at 90%)
     // We use a functional update to ensure we're working with the latest value

@@ -4,7 +4,6 @@ import { namespace } from "~/lib/state";
 import { showToast } from "~/components/ui/Toast";
 import { reportError } from "~/lib/errors";
 import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
-import { refreshSpace } from "../load/lib";
 
 export const isLoading = () => isCommandActive("INTERSECTION");
 export const isAppBusy = isAnyCommandActive;
@@ -71,7 +70,6 @@ export const executeIntersection = async (
       });
     }
 
-    refreshSpace();
   } catch (error) {
     reportError("intersection", error);
     setError(

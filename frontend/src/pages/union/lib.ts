@@ -3,7 +3,6 @@ import { union } from "~/lib/api";
 import { showToast } from "~/components/ui/Toast";
 import { reportError } from "~/lib/errors";
 import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
-import { refreshSpace } from "../load/lib";
 
 export const isLoading = () => isCommandActive("UNION");
 export const isAppBusy = isAnyCommandActive;

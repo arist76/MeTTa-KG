@@ -4,7 +4,6 @@ import { Mm2InputMultiWithNamespace, Item } from "~/lib/types";
 import { showToast } from "~/components/ui/Toast";
 import { reportError } from "~/lib/errors";
 import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
-import { refreshSpace } from "../load/lib";
 
 export const isLoading = () => isCommandActive("TRANSFORM");
 export const isAppBusy = isAnyCommandActive;

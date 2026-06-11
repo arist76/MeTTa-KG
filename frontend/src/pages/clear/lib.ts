@@ -3,7 +3,6 @@ import { showToast } from "~/components/ui/Toast";
 import { reportError } from "~/lib/errors";
 import { clearSpace } from "~/lib/api";
 import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
-import { refreshSpace } from "../load/lib";
 
 export const [expression, setExpression] = createSignal("$x \n \n \n");
 export const isLoading = () => isCommandActive("CLEAR");

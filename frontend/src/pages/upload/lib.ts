@@ -1,9 +1,8 @@
 import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { reportError } from "~/lib/errors";
-import { importData, uploadTextToSpace, importSpace } from "~/lib/api";
+import { importData, uploadTextToSpace } from "~/lib/api";
 import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
-import { refreshSpace } from "../load/lib";
 
 type UploadResult =
   | null
@@ -94,7 +93,6 @@ export const handleImport = async (spacePath: string) => {
                 title: "Import Successful",
                 description: `JSON data was imported from "${uri()}".`,
               });
-              setTimeout(() => refreshSpace(), 1000);
             } else {
               setResult({ error: importResponse.message });
               showToast({
@@ -113,24 +111,24 @@ export const handleImport = async (spacePath: string) => {
           }
           break;
         }
-
-        const response = await importSpace(spacePath, uri());
-
-        if (response) {
-          setResult("Import initiated successfully");
+        // Fetch from frontend (browser) so MORK in Docker doesn't need URL access
+        try {
+          const response = await fetch(uri());
+          if (!response.ok) throw new Error(`Failed to fetch from URL: ${response.statusText}`);
+          const content = await response.text();
+          await uploadTextToSpace(spacePath, content);
+          setResult({ data: "Import initiated", status: "success" });
           showToast({
             title: "Import Started",
             description: `Data import from "${uri()}" has started.`,
           });
-
-          refreshSpace();
-        } else {
-          setResult({ error: "Error initiating import" });
-          showToast({
-            title: "Import Failed",
-            description: "Could not initiate import.",
-            variant: "destructive",
-          });
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to fetch or process data from URL";
+          setResult({ error: errorMessage });
+          reportError("upload", error, "Import Failed");
         }
         break;
       }
@@ -166,7 +164,6 @@ export const handleImport = async (spacePath: string) => {
             title: "File Upload Started",
             description: `File "${fileState.name}" upload started.`,
           });
-          refreshSpace();
         } else {
           setResult({ error: response.message });
           showToast({
@@ -217,7 +214,6 @@ export const handleImport = async (spacePath: string) => {
               title: "Text Uploaded",
               description: `JSON text was uploaded to the "${spacePath}" space.`,
             });
-            refreshSpace();
           } else {
             setResult({ error: response.message });
             showToast({

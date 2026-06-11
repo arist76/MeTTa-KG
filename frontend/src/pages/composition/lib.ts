@@ -3,8 +3,6 @@ import { composition } from "~/lib/api";
 import { showToast } from "~/components/ui/Toast";
 import { reportError } from "~/lib/errors";
 import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
-import { refreshSpace } from "../load/lib";
-
 export const isLoading = () => isCommandActive("COMPOSITION");
 export const isAppBusy = isAnyCommandActive;
 export const [isPolling, setIsPolling] = createSignal(false);
