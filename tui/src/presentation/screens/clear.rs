@@ -13,6 +13,7 @@ pub struct ClearScreen {
     status: OperationStatus,
     space_service: Option<Arc<SpaceService>>,
     pending_result: Arc<Mutex<Option<Result<bool, String>>>>,
+    confirming: bool,
 }
 
 impl ClearScreen {
@@ -23,11 +24,28 @@ impl ClearScreen {
             status: OperationStatus::Idle,
             space_service: None,
             pending_result: Arc::new(Mutex::new(None)),
+            confirming: false,
         }
     }
 
     pub fn set_space_service(&mut self, service: Arc<SpaceService>) {
         self.space_service = Some(service);
+    }
+
+    fn execute_clear(&mut self) {
+        let (service, path, expr, pending) = (
+            self.space_service.clone(),
+            self.namespace.clone(),
+            self.expression.clone(),
+            self.pending_result.clone(),
+        );
+        if let Some(service) = service {
+            tokio::spawn(async move {
+                let result = service.clear(&path, &expr).await.map_err(|e| e.to_string());
+                *pending.lock().unwrap() = Some(result);
+            });
+        }
+        self.status = OperationStatus::Running;
     }
 }
 
@@ -48,7 +66,6 @@ impl Screen for ClearScreen {
             }
         }
     }
-
     fn render(&mut self, f: &mut Frame, area: Rect, theme: &AppTheme) {
         let chunks = Layout::vertical([
             Constraint::Length(3),
@@ -63,7 +80,7 @@ impl Screen for ClearScreen {
         f.render_widget(header, header_area);
 
         let expr_block = Block::default()
-            .title(" Expression (Enter to clear) ")
+            .title(" Expression ")
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme.primary));
         let expr_inner = expr_block.inner(editor_area);
@@ -77,34 +94,52 @@ impl Screen for ClearScreen {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme.error));
         f.render_widget(btn_block, button_area);
+
+        if self.confirming {
+            let overlay = Rect {
+                x: area.width / 4,
+                y: area.height / 3,
+                width: area.width / 2,
+                height: 5,
+            };
+            let confirm_block = Block::default()
+                .title(" Confirm ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.warning))
+                .bg(theme.background);
+            let confirm_inner = confirm_block.inner(overlay);
+            f.render_widget(confirm_block, overlay);
+            let msg = Paragraph::new("Are you sure? This will clear data in the space.\n\nEnter to confirm  Esc to cancel")
+                .style(Style::default().fg(theme.text))
+                .alignment(Alignment::Center);
+            f.render_widget(msg, confirm_inner);
+        }
     }
 
     fn handle_paste(&mut self, text: &str) -> Option<ScreenAction> {
         self.expression.push_str(text);
         None
     }
-
     fn handle_key(&mut self, key: KeyEvent) -> Option<ScreenAction> {
-        match key.code {
-            KeyCode::Enter => {
-                let (service, path, expr, pending) = (
-                    self.space_service.clone(),
-                    self.namespace.clone(),
-                    self.expression.clone(),
-                    self.pending_result.clone(),
-                );
-                if let Some(service) = service {
-                    tokio::spawn(async move {
-                        let result = service.clear(&path, &expr).await.map_err(|e| e.to_string());
-                        *pending.lock().unwrap() = Some(result);
-                    });
+        if self.confirming {
+            match key.code {
+                KeyCode::Enter => {
+                    self.confirming = false;
+                    self.execute_clear();
                 }
-                self.status = OperationStatus::Running;
-                None
+                KeyCode::Esc => {
+                    self.confirming = false;
+                }
+                _ => {}
             }
+            return None;
+        }
+        match key.code {
+            KeyCode::Enter => { self.confirming = true; None }
             KeyCode::Char(c) => { self.expression.push(c); None }
             KeyCode::Backspace => { self.expression.pop(); None }
             _ => None,
         }
     }
+
 }
