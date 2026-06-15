@@ -458,8 +458,7 @@ impl App {
             KeyCode::Esc => self.command_palette.toggle(),
             KeyCode::Enter => {
                 if let Some(id) = self.command_palette.selected_id() {
-                    let id_str: &'static str = Box::leak(id.to_string().into_boxed_str());
-                    self.navigate(id_str);
+                    self.navigate(id);
                 }
                 self.command_palette.toggle();
             }
@@ -482,8 +481,7 @@ impl App {
                         y += 1;
                         for item in &section.items {
                             if mouse.row == y {
-                                let id: &'static str = Box::leak(item.id.to_string().into_boxed_str());
-                                self.navigate(id);
+                                self.navigate(item.id);
                                 return;
                             }
                             y += 1;
