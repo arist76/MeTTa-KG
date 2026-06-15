@@ -1,11 +1,13 @@
 use ratatui::prelude::*;
 use ratatui::widgets::*;
-use crossterm::event::{KeyEvent, KeyCode};
+use crossterm::event::{KeyEvent, KeyCode, KeyModifiers};
 use super::{Screen, ScreenAction};
 use crate::presentation::theme::*;
 use crate::domain::models::{OperationStatus, Mm2Input};
 use crate::application::space_service::SpaceService;
 use std::sync::{Arc, Mutex};
+use std::fs;
+use std::io::Write;
 
 pub struct ExportScreen {
     pub namespace: String,
@@ -154,12 +156,11 @@ impl Screen for ExportScreen {
             let hint = Span::styled(scroll_hint, Style::default().fg(theme.text_dim));
             f.render_widget(Paragraph::new(hint).alignment(Alignment::Right),
                 Rect::new(output_area.x + 2, output_area.y + output_area.height - 1, output_area.width.saturating_sub(4), 1));
-        }
-
         f.render_widget(Block::default()
-            .title(format!(" [Enter] Export [Tab] Focus [F] Format: {} ", self.format))
+            .title(format!(" [Enter] Export [Tab] Focus [F] Format: {}  [Ctrl+S] Save ", self.format))
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme.primary)), button_area);
+        }
     }
 
     fn handle_paste(&mut self, text: &str) -> Option<ScreenAction> {
@@ -169,6 +170,26 @@ impl Screen for ExportScreen {
 
     fn handle_key(&mut self, key: KeyEvent) -> Option<ScreenAction> {
         match key.code {
+            KeyCode::Char('s') | KeyCode::Char('S') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if self.output.is_empty() {
+                    self.status = OperationStatus::Failed("Nothing to save".to_string());
+                    return None;
+                }
+                let name = format!("export_{}_{}.txt",
+                    self.namespace.trim_end_matches('/').replace('/', "_"),
+                    self.format);
+                match fs::File::create(&name) {
+                    Ok(mut f) => {
+                        if writeln!(f, "{}", self.output).is_ok() {
+                            self.status = OperationStatus::Completed(format!("Saved to {}", name));
+                        } else {
+                            self.status = OperationStatus::Failed("Write failed".to_string());
+                        }
+                    }
+                    Err(e) => self.status = OperationStatus::Failed(format!("Cannot create file: {}", e)),
+                }
+                None
+            }
             KeyCode::Tab => { self.focused = (self.focused + 1) % 3; self.output_scroll = 0; None }
             KeyCode::Char('f') | KeyCode::Char('F') => { self.cycle_format(); None }
             KeyCode::Enter => {

@@ -28,6 +28,7 @@ pub struct TokensScreen {
     selected_parent_idx: usize,
     namespace_picker_visible: bool,
     pending_operation: Arc<Mutex<Option<Result<String, String>>>>,
+    confirming_delete: bool,
 }
 
 #[derive(PartialEq)]
@@ -65,6 +66,7 @@ impl TokensScreen {
             selected_parent_idx: 0,
             namespace_picker_visible: false,
             pending_operation: Arc::new(Mutex::new(None)),
+            confirming_delete: false,
         }
     }
 
@@ -126,8 +128,11 @@ impl TokensScreen {
             }
         }
     }
-
     fn delete_selected(&mut self) {
+        self.confirming_delete = true;
+    }
+
+    fn execute_delete(&mut self) {
         let ids = self.table.selected_ids();
         if ids.is_empty() { return; }
         let token_index = ids[0];
@@ -428,6 +433,26 @@ impl Screen for TokensScreen {
             OperationStatus::Idle => Paragraph::new("").style(Style::default()),
         };
         f.render_widget(footer.block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(theme.border))), footer_area);
+
+        if self.confirming_delete {
+            let overlay = Rect {
+                x: area.width / 4,
+                y: area.height / 3,
+                width: area.width / 2,
+                height: 5,
+            };
+            let confirm_block = Block::default()
+                .title(" Confirm Delete ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.warning))
+                .bg(theme.background);
+            let confirm_inner = confirm_block.inner(overlay);
+            f.render_widget(confirm_block, overlay);
+            let msg = Paragraph::new("Delete this token?\n\nEnter to confirm  Esc to cancel")
+                .style(Style::default().fg(theme.text))
+                .alignment(Alignment::Center);
+            f.render_widget(msg, confirm_inner);
+        }
     }
 
     fn handle_paste(&mut self, text: &str) -> Option<ScreenAction> {
@@ -442,6 +467,19 @@ impl Screen for TokensScreen {
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> Option<ScreenAction> {
+        if self.confirming_delete {
+            match key.code {
+                KeyCode::Enter => {
+                    self.confirming_delete = false;
+                    self.execute_delete();
+                }
+                KeyCode::Esc => {
+                    self.confirming_delete = false;
+                }
+                _ => {}
+            }
+            return None;
+        }
         match self.mode {
             TokenMode::List => match key.code {
                 KeyCode::Char('c') | KeyCode::Char('C') => {
