@@ -198,14 +198,14 @@ impl ApiClient {
         Ok(resp.text().await?)
     }
 
-    pub async fn upload_space(&self, path: &str, data: &str) -> Result<String> {
+    pub async fn upload_space(&self, path: &str, data: String) -> Result<String> {
         let url = self.space_url("upload", path);
         let resp = self
             .client
             .post(&url)
             .headers(self.auth_headers()?)
             .header("Content-Type", "text/plain")
-            .body(data.to_owned())
+            .body(data)
             .send()
             .await?;
         if !resp.status().is_success() {

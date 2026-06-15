@@ -145,7 +145,7 @@ impl Screen for ImportScreen {
                         ImportTab::Text => {
                             let text = self.text_input.clone();
                             tokio::spawn(async move {
-                                let result = service.upload(&ns, &text).await
+                                let result = service.upload(&ns, text).await
                                     .map(|r| format!("Uploaded into {}: {}", ns, r))
                                     .map_err(|e| e.to_string());
                                 *pending.lock().unwrap() = Some(result);

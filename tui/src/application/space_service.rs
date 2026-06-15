@@ -21,7 +21,7 @@ impl SpaceService {
         self.api.read_space(path).await
     }
 
-    pub async fn upload(&self, path: &str, data: &str) -> Result<String> {
+    pub async fn upload(&self, path: &str, data: String) -> Result<String> {
         self.api.upload_space(path, data).await
     }
 
