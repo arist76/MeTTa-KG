@@ -244,6 +244,7 @@ fn set_children_flat(nodes: &mut [TreeNode], target: usize, children: Vec<TreeNo
 pub struct ExploreScreen {
     pub namespace: String,
     pattern: String,
+    pattern_cursor: usize,
     status: OperationStatus,
     space_service: Option<Arc<SpaceService>>,
     nodes: Vec<TreeNode>,
@@ -264,6 +265,7 @@ impl ExploreScreen {
         Self {
             namespace: "/".to_string(),
             pattern: "$x".to_string(),
+            pattern_cursor: 0,
             status: OperationStatus::Idle,
             space_service: None,
             nodes: Vec::new(),
@@ -403,8 +405,13 @@ impl Screen for ExploreScreen {
             .border_style(pattern_border);
         let pattern_inner = pattern_block.inner(pattern_area);
         f.render_widget(pattern_block, pattern_area);
-        f.render_widget(Paragraph::new(self.pattern.as_str()).style(Style::default().fg(theme.text)), pattern_inner);
-
+        let display = if self.pattern_cursor <= self.pattern.len() {
+            let (before, after) = self.pattern.split_at(self.pattern_cursor);
+            format!("{}█{}", before, after)
+        } else {
+            self.pattern.clone()
+        };
+        f.render_widget(Paragraph::new(display).style(Style::default().fg(theme.text)), pattern_inner);
         let list_block = Block::default()
             .title(" Results ")
             .borders(Borders::ALL)
@@ -442,7 +449,8 @@ impl Screen for ExploreScreen {
     }
 
     fn handle_paste(&mut self, text: &str) -> Option<ScreenAction> {
-        self.pattern.push_str(text);
+        self.pattern.insert_str(self.pattern_cursor, text);
+        self.pattern_cursor += text.len();
         None
     }
     fn handle_key(&mut self, key: KeyEvent) -> Option<ScreenAction> {
@@ -459,7 +467,7 @@ impl Screen for ExploreScreen {
                         *pending.lock() = Some((gen, result));
                     });
                 }
-                self.status = OperationStatus::Running;
+                self.pattern_cursor = self.pattern.len();
                 if !self.pattern.is_empty() {
                     self.pattern_history.retain(|p| p != &self.pattern);
                     self.pattern_history.push(self.pattern.clone());
@@ -476,6 +484,7 @@ impl Screen for ExploreScreen {
                     let new_idx = idx - 1;
                     self.pattern = self.pattern_history[new_idx].clone();
                     self.pattern_history_idx = Some(new_idx);
+                    self.pattern_cursor = self.pattern.len();
                 }
                 None
             }
@@ -488,6 +497,19 @@ impl Screen for ExploreScreen {
                         self.pattern.clear();
                         self.pattern_history_idx = None;
                     }
+                    self.pattern_cursor = self.pattern.len();
+                }
+                None
+            }
+            KeyCode::Right if key.modifiers.contains(KeyModifiers::ALT) => {
+                if self.pattern_cursor < self.pattern.len() {
+                    self.pattern_cursor += 1;
+                }
+                None
+            }
+            KeyCode::Left if key.modifiers.contains(KeyModifiers::ALT) => {
+                if self.pattern_cursor > 0 {
+                    self.pattern_cursor -= 1;
                 }
                 None
             }
@@ -506,8 +528,18 @@ impl Screen for ExploreScreen {
                 self.status = OperationStatus::Running;
                 None
             }
-            KeyCode::Char(c) => { self.pattern.push(c); None }
-            KeyCode::Backspace => { self.pattern.pop(); None }
+            KeyCode::Char(c) => {
+                self.pattern.insert(self.pattern_cursor, c);
+                self.pattern_cursor += 1;
+                None
+            }
+            KeyCode::Backspace => {
+                if self.pattern_cursor > 0 {
+                    self.pattern.remove(self.pattern_cursor - 1);
+                    self.pattern_cursor -= 1;
+                }
+                None
+            }
             KeyCode::Up => {
                 if self.selected > 0 { self.selected -= 1; }
                 if self.selected < self.scroll { self.scroll = self.selected; }
