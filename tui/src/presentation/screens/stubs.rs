@@ -36,12 +36,12 @@ impl Screen for StubScreen {
         let block = Block::default()
             .title(format!(" {} ", self.name))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(theme.warning));
+            .border_style(Style::default().fg(theme.secondary));
 
         let inner_area = block.inner(inner);
         f.render_widget(block, inner);
 
-        let text = Paragraph::new(format!("{} Is Coming Soon", self.name))
+        let text = Paragraph::new("Coming soon")
             .style(Style::default().fg(theme.text_dim))
             .alignment(Alignment::Center);
         f.render_widget(text, inner_area);
