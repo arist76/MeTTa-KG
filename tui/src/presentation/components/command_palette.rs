@@ -3,6 +3,18 @@ use ratatui::widgets::*;
 use crate::presentation::theme::*;
 use crate::presentation::components::sidebar::default_sidebar_sections;
 
+
+fn shortcut_for(id: &str) -> Option<&'static str> {
+    match id {
+        "explore" => Some("Ctrl+E"),
+        "clear" => Some("Ctrl+C"),
+        "transform" => Some("Ctrl+T"),
+        "import" => Some("Ctrl+I"),
+        "export" => Some("Ctrl+X"),
+        "tokens" => Some("Ctrl+K"),
+        _ => None,
+    }
+}
 pub struct CommandPalette {
     pub visible: bool,
     pub query: String,
@@ -105,17 +117,6 @@ impl CommandPalette {
 
         let inner = block.inner(overlay);
         f.render_widget(block, overlay);
-
-        let search_box = Paragraph::new(self.query.as_str())
-            .style(Style::default().fg(theme.text))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" Search ")
-                    .border_style(Style::default().fg(theme.accent)),
-            );
-        f.render_widget(search_box, Rect::new(inner.x, inner.y, inner.width, 3));
-
         let list_area = Rect::new(inner.x, inner.y + 3, inner.width, inner.height.saturating_sub(4));
 
         let items: Vec<ListItem> = self
@@ -128,7 +129,13 @@ impl CommandPalette {
                 } else {
                     Style::default().fg(theme.text)
                 };
-                ListItem::new(*id).style(style)
+                let shortcut = shortcut_for(id);
+                let label = if let Some(k) = shortcut {
+                    format!("{} ({})", id, k)
+                } else {
+                    id.to_string()
+                };
+                ListItem::new(label).style(style)
             })
             .collect();
 
