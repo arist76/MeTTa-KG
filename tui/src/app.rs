@@ -485,18 +485,12 @@ impl App {
             MouseEventKind::Down(button) if button == crossterm::event::MouseButton::Left => {
                 let sidebar_w = sidebar_width();
                 if mouse.column < sidebar_w {
-                    let sections = default_sidebar_sections();
-                    let mut y = 3u16;
-                    for section in &sections {
-                        y += 1;
-                        for item in &section.items {
-                            if mouse.row == y {
-                                self.navigate(item.id);
-                                return;
-                            }
-                            y += 1;
+                    let regions = sidebar_click_regions(Rect::new(0, 0, sidebar_w, 1000));
+                    for (id, area) in &regions {
+                        if area.contains(Position { x: mouse.column, y: mouse.row }) {
+                            self.navigate(id);
+                            return;
                         }
-                        y += 1;
                     }
                 }
             }

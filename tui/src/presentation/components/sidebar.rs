@@ -47,6 +47,21 @@ pub fn default_sidebar_sections() -> Vec<SidebarSection> {
     ]
 }
 
+pub fn sidebar_click_regions(area: Rect) -> Vec<(&'static str, Rect)> {
+    let sections = default_sidebar_sections();
+    let mut regions = Vec::new();
+    let mut y = area.y + 2;
+    for section in &sections {
+        y += 1;
+        for item in &section.items {
+            regions.push((item.id, Rect::new(area.x, y, area.width, 1)));
+            y += 1;
+        }
+        y += 1;
+    }
+    regions
+}
+
 pub fn render_sidebar(f: &mut Frame, area: Rect, active_id: &str, theme: &AppTheme) {
     let sections = default_sidebar_sections();
 
