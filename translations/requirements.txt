@@ -1,3 +1,2 @@
 hyperon~=0.1.5
 rdflib~=7.0.0
-numpy~=1.24.2

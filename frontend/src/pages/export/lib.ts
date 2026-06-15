@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { exportSpace } from "~/lib/api";
 import { Mm2Input } from "~/lib/types";
+import { reportError } from "~/lib/errors";
 import { isAnyCommandActive, isCommandActive } from "~/lib/sse";
 
 export type ExportFormat = "metta" | "json" | "csv" | "raw";
@@ -44,26 +45,11 @@ export const handleExport = async (spacePath: string) => {
 
     const defaultResult = exportInput.format === "Metta" ? "()" : "";
     setResult(exportResponse || defaultResult);
-
-    showToast({
-      title: "Export Complete",
-      description: `Exported data with pattern: ${exportInput.pattern}`,
-    });
   } catch (e) {
     const error = e instanceof Error ? e : new Error("Failed to export data");
     setExportError(error);
-
-    let errorMessage = error.message;
-    if (errorMessage.includes("Incompatible metta file")) {
-      errorMessage = "Incompatible metta file";
-    }
-
     setResult(null);
-    showToast({
-      title: "Error",
-      description: errorMessage,
-      variant: "destructive",
-    });
+    reportError("export", error);
   } finally {
     setActiveExportAction(false);
   }
@@ -110,18 +96,8 @@ export const handleDownload = async (spacePath: string) => {
   } catch (e) {
     const error = e instanceof Error ? e : new Error("Failed to download data");
     setExportError(error);
-
-    let errorMessage = error.message;
-    if (errorMessage.includes("Incompatible metta file")) {
-      errorMessage = "Incompatible metta file";
-    }
-
     setResult(null);
-    showToast({
-      title: "Error",
-      description: errorMessage,
-      variant: "destructive",
-    });
+    reportError("export", error);
   } finally {
     setActiveExportAction(false);
   }

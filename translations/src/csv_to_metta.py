@@ -1,6 +1,5 @@
 import csv
 import hyperon
-import numpy as np
 
 from io import StringIO
 
@@ -82,11 +81,11 @@ def matrix_from_header_row_based(m: hyperon.MeTTa) -> list[list[str]]:
 
 # column based
 def matrix_to_column_based_metta(csvmatrix: list[list[str]]) -> str:
-    return matrix_to_row_based_metta([list(a) for a in np.transpose(csvmatrix)])
+    return matrix_to_row_based_metta([list(a) for a in zip(*csvmatrix)])
 
 
 def matrix_from_column_based_metta(metta: hyperon.MeTTa) -> list[list[str, str]]:
-    return [list(a) for a in np.transpose(matrix_from_row_based_metta(metta))]
+    return [list(a) for a in zip(*matrix_from_row_based_metta(metta))]
 
 # column based with header
 def dict_to_column_based_header_metta(dictlist: list[dict[str, str]]) -> str:

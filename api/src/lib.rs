@@ -3,9 +3,12 @@ use rocket::http::Method;
 use rocket::routes;
 use rocket::{Build, Rocket};
 use rocket_cors::AllowedOrigins;
+use rocket::fairing::{Fairing, Info, Kind};
+use rocket::{Data, Request, Response};
 use std::env;
 
 pub mod db;
+pub use db::DbPool;
 pub mod model;
 pub mod mork_api;
 pub mod routes;
@@ -14,18 +17,77 @@ pub mod sse_utils;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
+struct RequestLogger;
+
+#[rocket::async_trait]
+impl Fairing for RequestLogger {
+    fn info(&self) -> Info {
+        Info {
+            name: "Request Logger",
+            kind: Kind::Request | Kind::Response,
+        }
+    }
+
+    async fn on_request(&self, request: &mut Request<'_>, _: &mut Data<'_>) {
+        tracing::info!(
+            target: "http",
+            method = %request.method(),
+            path = %request.uri().path(),
+            "--> {} {}",
+            request.method(),
+            request.uri().path(),
+        );
+    }
+
+    async fn on_response<'r>(&self, request: &'r Request<'_>, response: &mut Response<'r>) {
+        let status = response.status();
+        if status.code >= 500 {
+            tracing::error!(
+                target: "http",
+                method = %request.method(),
+                path = %request.uri().path(),
+                status = status.code,
+                "<-- {} {} {}", request.method(), request.uri().path(), status,
+            );
+        } else if status.code >= 400 {
+            tracing::warn!(
+                target: "http",
+                method = %request.method(),
+                path = %request.uri().path(),
+                status = status.code,
+                "<-- {} {} {}", request.method(), request.uri().path(), status,
+            );
+        } else {
+            tracing::info!(
+                target: "http",
+                method = %request.method(),
+                path = %request.uri().path(),
+                status = status.code,
+                "<-- {} {} {}", request.method(), request.uri().path(), status,
+            );
+        }
+    }
+}
+
+
 pub fn rocket() -> Rocket<Build> {
     dotenv::dotenv().ok();
 
-    let mut connection = db::establish_connection();
+    tracing::info!(target: "startup", "Initializing database");
+
+    let pool = db::create_pool();
+
+    let mut connection = db::establish_connection().expect("Failed to connect to database for migrations");
     connection
         .run_pending_migrations(MIGRATIONS)
-        .expect("Failed to run migrations");
+        .unwrap_or_else(|e| panic!("Failed to run database migrations: {e}"));
+    tracing::info!(target: "startup", "Database pool created, migrations complete");
 
     // Configure CORS origins from environment variable
     let frontend_url = env::var("METTA_KG_FRONTEND_URL")
         .unwrap_or_else(|_| "https://metta-kg.vercel.app".to_string());
 
+    tracing::info!(target: "startup", frontend_url = %frontend_url, "Configuring CORS");
     let origins = ["http://localhost:3000".to_string(), frontend_url];
 
     let allowed_origins =
@@ -40,7 +102,7 @@ pub fn rocket() -> Rocket<Build> {
         ..Default::default()
     }
     .to_cors()
-    .unwrap();
+    .expect("Failed to configure CORS");
 
     rocket::build()
         .mount(
@@ -73,4 +135,6 @@ pub fn rocket() -> Rocket<Build> {
         .attach(routes::sse::stage())
         .attach(cors.clone())
         .manage(cors)
+        .manage(pool)
+        .attach(RequestLogger)
 }

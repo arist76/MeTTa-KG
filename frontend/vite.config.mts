@@ -13,10 +13,7 @@ export default defineConfig({
     target: "esnext",
   },
   optimizeDeps: {
-    include: ["**/*.module.scss"],
-  },
-  css: {
-    modules: {},
+    include: [],
   },
   resolve: {
     alias: {

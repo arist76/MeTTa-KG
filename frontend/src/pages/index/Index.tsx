@@ -1,15 +1,16 @@
 import { Route, Router } from "@solidjs/router";
-import { createSignal, For, Show, onMount } from "solid-js";
-import LoadPage from "../load/Load";
-import UploadPage from "../upload/Upload";
-import TransformPage from "../transform/Transform";
-import CompositionPage from "../composition/Composition";
-import IntersectionPage from "../intersection/Intersection";
-import ExportPage from "../export/Export";
-import TokensPage from "../tokens/Tokens";
-import ClearPage from "../clear/Clear";
-import Sidebar from "~/pages/index/components/Sidebar";
+import { createSignal, For, Show, onMount, lazy } from "solid-js";
+const LoadPage = lazy(() => import("../load/Load"));
+const UploadPage = lazy(() => import("../upload/Upload"));
+const TransformPage = lazy(() => import("../transform/Transform"));
+const CompositionPage = lazy(() => import("../composition/Composition"));
+const IntersectionPage = lazy(() => import("../intersection/Intersection"));
+const ExportPage = lazy(() => import("../export/Export"));
+const TokensPage = lazy(() => import("../tokens/Tokens"));
+const ClearPage = lazy(() => import("../clear/Clear"));
 import Header from "~/pages/index/components/Header";
+import NamespaceTabs from "~/pages/index/components/NamespaceTabs";
+import Sidebar from "~/pages/index/components/Sidebar";
 import TopNavigation from "~/components/common/TopNavigation";
 import ContentWrapper from "~/components/common/ContentWrapper";
 import Upload from "lucide-solid/icons/upload";
@@ -20,8 +21,8 @@ import Key from "lucide-solid/icons/key";
 import NotImplemented from "~/components/common/NotImplemented";
 import Trash2 from "lucide-solid/icons/trash-2";
 import CommandPalette from "~/components/common/CommandPalette";
-import UnionPage from "../union/Union";
-import { initSSE, isCommandRunning, commandProgress } from "~/lib/sse";
+const UnionPage = lazy(() => import("../union/Union"));
+import { initSSE, isCommandRunning } from "~/lib/sse";
 import { layoutMode } from "~/lib/theme";
 import { initTheme } from "~/lib/theme";
 
@@ -157,7 +158,7 @@ const AppLayout = (
       >
         {/* Sidebar - Only visible in sidebar layout mode */}
         <Show when={layoutMode() === "sidebar"}>
-          <div class="hidden lg:block">
+          <div class="hidden lg:block sticky top-0 self-start h-screen">
             <Sidebar
               activeTab={() => activeTab()}
               setActiveTab={setActiveTab}
@@ -166,18 +167,27 @@ const AppLayout = (
           </div>
         </Show>
 
-        {/* Main Content Area */}
         <div class="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
-          <div class="flex-shrink-0">
-            <Header />
-          </div>
-
+          <Show when={layoutMode() === "sidebar"}>
+            <div class="flex-shrink-0">
+              <Header />
+            </div>
+          </Show>
+          <Show when={layoutMode() !== "sidebar"}>
+            <div class="flex-shrink-0">
+              <NamespaceTabs />
+            </div>
+          </Show>
+          {/* Progress Bar */}
           {/* Progress Bar */}
           <Show when={isCommandRunning()}>
             <div class="w-full h-1 bg-muted overflow-hidden flex-shrink-0">
               <div
-                class="h-full bg-primary transition-all duration-300"
-                style={{ width: `${commandProgress()}%` }}
+                class="h-full bg-primary rounded-full"
+                style={{
+                  width: "33%",
+                  animation: "indeterminate 1.5s ease-in-out infinite",
+                }}
               />
             </div>
           </Show>
@@ -188,6 +198,7 @@ const AppLayout = (
           </main>
         </div>
       </div>
+      <style>{`@keyframes indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }`}</style>
     </>
   );
 };

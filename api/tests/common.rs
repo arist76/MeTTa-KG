@@ -23,7 +23,7 @@ pub fn create_test_database_if_not_exists() {
 }
 
 pub fn drop_tokens_table() {
-    let conn = &mut establish_connection();
+    let conn = &mut establish_connection().expect("Failed to connect to test DB");
     let sql = r#"DROP TABLE IF EXISTS tokens"#;
     diesel::sql_query(sql)
         .execute(conn)
@@ -44,7 +44,7 @@ pub fn is_database_running() -> bool {
 }
 
 pub fn create_test_token(namespace: &str, permission_read: bool, permission_write: bool) -> Token {
-    let conn = &mut establish_connection();
+    let conn = &mut establish_connection().expect("Failed to connect to test DB");
     let code = format!("test_token_{}", Utc::now().timestamp_nanos_opt().unwrap());
 
     let token_insert = TokenInsert {
@@ -78,7 +78,7 @@ pub fn setup(mork_base_url: &str) {
     env::set_var("POSTGRES_DB", "metta-kg-test");
     env::set_var("POSTGRES_HOST", "localhost");
 
-    let mut connection = establish_connection();
+    let mut connection = establish_connection().expect("Failed to connect to test DB");
     connection
         .run_pending_migrations(MIGRATIONS)
         .expect("Failed to run migrations in test setup");

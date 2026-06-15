@@ -1,4 +1,4 @@
-use crate::{db::establish_connection, model::Token};
+use crate::{db::DbPool, model::Token};
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl, SelectableHelper};
 use rocket::{
     self,
@@ -47,20 +47,31 @@ impl<'r> FromRequest<'r> for Token {
         let token = match request.headers().get_one("authorization") {
             Some(token) => token,
             None => {
+                tracing::warn!(target: "audit", "Missing authorization header");
                 return request::Outcome::Error((Status::Unauthorized, Self::Error::InvalidToken))
             }
         };
 
-        let conn = &mut establish_connection();
+        let pool = match request.rocket().state::<DbPool>() {
+            Some(p) => p,
+            None => return Outcome::Error((Status::InternalServerError, AuthError::Unknown)),
+        };
+        let mut conn = match pool.get() {
+            Ok(c) => c,
+            Err(_) => return Outcome::Error((Status::InternalServerError, AuthError::Unknown)),
+        };
 
         let result = tokens
             .select(Token::as_select())
             .filter(code.eq(token))
-            .get_result(conn);
+            .get_result(&mut conn);
 
         match result {
             Ok(claims) => Outcome::Success(claims),
-            Err(_) => Outcome::Error((Status::Unauthorized, Self::Error::Unknown)),
+            Err(_) => {
+                tracing::warn!(target: "audit", token = %token, "Authentication failed: invalid or missing token");
+                Outcome::Error((Status::Unauthorized, Self::Error::Unknown))
+            }
         }
     }
 }

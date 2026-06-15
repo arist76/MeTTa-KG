@@ -211,3 +211,29 @@ export function pathToSExpr(parts: string[], leaf: string = "$x"): string {
   }
   return expr;
 }
+
+function safeGetItem(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetItem(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // silently fail — quota exceeded or private browsing
+  }
+}
+
+function safeRemoveItem(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // silently fail
+  }
+}
+
+export { safeGetItem, safeSetItem, safeRemoveItem };

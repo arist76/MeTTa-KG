@@ -2,12 +2,14 @@ import { createSignal } from "solid-js";
 import { request } from "~/lib/api";
 import { namespace } from "~/lib/state";
 import { showToast } from "~/components/ui/Toast";
+import { reportError } from "~/lib/errors";
 import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
-import { refreshSpace } from "../load/lib";
 
 export const isLoading = () => isCommandActive("INTERSECTION");
 export const isAppBusy = isAnyCommandActive;
 export const [isPolling, setIsPolling] = createSignal(false);
+export const [error, setError] = createSignal<string | null>(null);
+
 
 export const stopPolling = () => {
   setIsPolling(false);
@@ -68,14 +70,10 @@ export const executeIntersection = async (
       });
     }
 
-    refreshSpace();
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "An unexpected error occurred.";
-    showToast({
-      title: "Error",
-      description: errorMessage,
-      variant: "destructive",
-    });
+    reportError("intersection", error);
+    setError(
+      error instanceof Error ? error.message : "An unexpected error occurred.",
+    );
   }
 };

@@ -1,99 +1,67 @@
-import {
-  Component,
-  Show,
-  createEffect,
-  createSignal,
-  onCleanup,
-  onMount,
-} from "solid-js";
-import { ParseError } from "../../types";
-import { createEditor, type PrismEditor } from "prism-code-editor";
-import "prism-code-editor/layout.css";
-import "prism-code-editor/themes/github-dark.css";
-import "../../syntax/mettaLanguage";
+import { Component, onMount, createSignal, createEffect, onCleanup } from "solid-js";
+import { CodeJar } from "codejar";
+import { highlightMetta } from "../../syntax/mettaLanguage";
 
-// Component Prop Interfaces
-export interface MettaEditorProps {
+interface MettaEditorProps {
   initialText: string;
   onTextChange: (text: string) => void;
   onPatternLoad: (pattern: string) => void;
-  parseErrors: ParseError[];
+  parseErrors: { line: number; column: number; message: string; severity: string }[];
   showActionButtons?: boolean;
+}
+
+function syncGutter(gutter: HTMLDivElement, code: string) {
+  const lines = code.split("\n");
+  gutter.innerHTML = lines
+    .map(
+      (_, i) =>
+        `<div class="text-right px-1.5 text-[13px] leading-[1.5] text-muted-foreground select-none font-mono" style="min-width:2ch">${i + 1}</div>`
+    )
+    .join("");
 }
 
 const MettaEditor: Component<MettaEditorProps> = (props) => {
   const [text, setText] = createSignal(props.initialText);
-  const [realTimeErrors, setRealTimeErrors] = createSignal<ParseError[]>([]);
+  const [realTimeErrors] = createSignal<{ line: number; column: number; message: string; severity: string }[]>([]);
 
-  let editorHostRef: HTMLDivElement | undefined;
-  let prismEditor: PrismEditor | undefined;
-  let lastInitialText = props.initialText;
-  let isProgrammaticUpdate = false;
-
-  const destroyPrismEditor = () => {
-    if (!prismEditor) {
-      return;
-    }
-
-    prismEditor.remove();
-    prismEditor = undefined;
-
-    if (editorHostRef) {
-      editorHostRef.innerHTML = "";
-    }
-  };
+  let editorRef: HTMLDivElement | undefined;
+  let gutterRef: HTMLDivElement | undefined;
+  let jar: CodeJar | undefined;
 
   const handleTextChange = (textValue: string) => {
     setText(textValue);
     props.onTextChange(textValue);
-
-    // Perform real-time validation
-    // const validation = validateSyntax(textValue);
-    // setRealTimeErrors([...validation.errors, ...validation.warnings]);
-    setRealTimeErrors([]);
-  };
-
-  const mountPrismEditor = () => {
-    if (!editorHostRef || prismEditor) {
-      return;
-    }
-
-    prismEditor = createEditor(editorHostRef, {
-      class: "metta-prism-instance",
-      language: "metta",
-      value: text(),
-      lineNumbers: true,
-      wordWrap: false,
-      onUpdate: (value) => {
-        if (isProgrammaticUpdate) {
-          return;
-        }
-        handleTextChange(value);
-      },
-    });
   };
 
   onMount(() => {
-    mountPrismEditor();
+    if (!editorRef || !gutterRef) return;
+
+    jar = CodeJar(editorRef, highlightMetta, {
+      tab: "  ",
+      indentOn: /[([]$/,
+    });
+
+    jar.onUpdate((code) => {
+      handleTextChange(code);
+      syncGutter(gutterRef!, code);
+    });
+
+    if (props.initialText) {
+      jar.updateCode(props.initialText);
+    }
   });
 
   createEffect(() => {
-    if (props.initialText === lastInitialText) {
-      return;
-    }
-
-    lastInitialText = props.initialText;
-    setText(props.initialText);
-
-    if (prismEditor && prismEditor.value !== props.initialText) {
-      isProgrammaticUpdate = true;
-      prismEditor.setOptions({ value: props.initialText });
-      isProgrammaticUpdate = false;
+    if (jar && props.initialText !== text() && props.initialText.length > 0) {
+      if (jar.toString().length === 0) {
+        jar.updateCode(props.initialText);
+        setText(props.initialText);
+      }
     }
   });
 
   onCleanup(() => {
-    destroyPrismEditor();
+    jar?.destroy();
   });
 
   return (
@@ -140,35 +108,53 @@ const MettaEditor: Component<MettaEditorProps> = (props) => {
       `}</style>
 
       <h3 class="m-0 mb-3 text-sm font-semibold flex-shrink-0 leading-tight text-foreground">
-        {realTimeErrors().length > 0 && (
+        {realTimeErrors().filter((e) => e.severity === "error").length > 0 && (
           <span class="ml-2 text-xs font-normal text-destructive">
-            ({realTimeErrors().filter((e) => e.severity === "error").length}{" "}
-            errors,{" "}
-            {realTimeErrors().filter((e) => e.severity === "warning").length}{" "}
-            warnings)
+            ({realTimeErrors().filter((e) => e.severity === "error").length} errors,{" "}
+            {realTimeErrors().filter((e) => e.severity === "warning").length} warnings)
           </span>
         )}
       </h3>
 
-      <div class="relative flex-1 min-h-0 mb-2 border border-border rounded bg-background overflow-hidden transition-all duration-300 ease-linear">
-        <div
-          ref={editorHostRef}
-          class="metta-prism-editor-host h-full w-full"
-        />
+      {/* Editor Container */}
+      <div class="relative flex-1 min-h-0 mb-2 border border-border rounded bg-background overflow-hidden">
+        <div class="flex h-full w-full">
+          {/* Gutter */}
+          <div
+            ref={gutterRef}
+            class="flex-shrink-0 pt-2 bg-muted border-r border-border overflow-hidden"
+            style="padding-top:8px"
+          />
+          {/* CodeJar Editor */}
+          <div
+            ref={editorRef}
+            class="flex-1 overflow-auto bg-background"
+            style={{
+              padding: "8px",
+              "font-family": "'Courier New', Consolas, 'Liberation Mono', Menlo, Courier, monospace",
+              "font-size": "13px",
+              "line-height": "1.5",
+              color: "hsl(var(--foreground))",
+              outline: "none",
+              "white-space": "pre",
+              "word-wrap": "break-word",
+              "tab-size": "2",
+            }}
+          />
+        </div>
       </div>
 
-      <Show when={props.showActionButtons ?? true}>
-        <div class="mb-2 flex gap-2 flex-shrink-0 items-center flex-wrap">
+      {/* Action Buttons */}
+      {props.showActionButtons !== false && (
+        <div class="mb-2 flex gap-2 flex-shrink-0 items-center">
           <button
             class="px-2 py-1 text-xs border border-border rounded-sm bg-background text-foreground cursor-pointer transition-all duration-200 ease-linear hover:bg-accent hover:border-primary"
-            onClick={() => {
-              props.onPatternLoad(text());
-            }}
+            onClick={() => props.onPatternLoad(text())}
           >
             Visualize
           </button>
         </div>
-      </Show>
+      )}
     </div>
   );
 };

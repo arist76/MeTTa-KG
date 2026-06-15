@@ -3,13 +3,13 @@ import {
   createResource,
   createRoot,
   createEffect,
+  on,
 } from "solid-js";
 import { formatedNamespace } from "~/lib/state";
 import { ParseError } from "~/types";
 import { exploreSpace } from "~/lib/api";
-import { showToast } from "~/components/ui/Toast";
+import { activeCommand } from "~/lib/sse";
 import { treeStore } from "./components/expandableList/store";
-import { isCommandRunning } from "~/lib/sse";
 
 type ExploreResponse = {
   id: string;
@@ -40,57 +40,29 @@ export const [subSpace, { refetch: refetchSubSpace, mutate: mutateSubSpace }] =
       token: Uint8Array.from([]),
     }),
     async ({ path, expr, token }) => {
-      try {
-        const data = JSON.parse(
-          await exploreSpace(path, expr, token)
-        ) as ExploreResponse[];
-        showToast({
-          title: "Success",
-          description: `Loaded ${data.length} nodes.`,
-        });
-        return data;
-      } catch (e) {
-        const msg =
-          e instanceof Error && e.message === "noRootToken"
-            ? "No token found, please add one in the Tokens page"
-            : "Failed to load space data.";
-        showToast({ title: "Error", description: msg, variant: "destructive" });
-        return [];
-      }
+      const raw = await exploreSpace(path, expr, token);
+      return JSON.parse(raw) as ExploreResponse[];
     }
   );
-
-export const refreshSpace = async () => {
-  // If a command is running, wait for it to finish
-  if (isCommandRunning()) {
-    await new Promise<void>((resolve) => {
-      let settled = false;
-      let disposeRoot = () => {};
-
-      const timeoutId = window.setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        disposeRoot();
-        resolve();
-      }, 10000);
-
-      createRoot((dispose) => {
-        disposeRoot = dispose;
-        createEffect(() => {
-          if (!isCommandRunning() && !settled) {
-            settled = true;
-            clearTimeout(timeoutId);
-            dispose();
-            resolve();
-          }
-        });
-      });
-    });
-  }
+export const refreshSpace = () => {
   mutateSubSpace([]);
   treeStore.reset();
-  return refetchSubSpace();
+  refetchSubSpace();
 };
+
+// Reactive refresh: when any command finishes (activeCommand transitions from
+// non-null to null), refresh the explore page data automatically.
+createRoot(() => {
+  createEffect(
+    on(activeCommand, (current, prev) => {
+      if (prev !== undefined && prev !== null && current === null) {
+        mutateSubSpace([]);
+        treeStore.reset();
+        refetchSubSpace();
+      }
+    })
+  );
+});
 
 export const handleTextChange = (text: string) => setMettaText(text);
 

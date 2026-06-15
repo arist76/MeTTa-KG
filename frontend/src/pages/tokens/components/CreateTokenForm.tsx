@@ -9,6 +9,7 @@ import {
   TextFieldInput,
 } from "~/components/ui/TextField";
 import { showToast } from "~/components/ui/Toast";
+import { reportError } from "~/lib/errors";
 import AlertTriangle from "lucide-solid/icons/alert-triangle";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import {
@@ -169,11 +170,7 @@ export const CreateTokenForm: Component<CreateTokenFormProps> = (props) => {
         permission_share_share: false,
       });
     } catch {
-      showToast({
-        title: "Error",
-        description: "Failed to create token.",
-        variant: "destructive",
-      });
+      reportError("tokens", new Error("Failed to create token."));
     }
   };
 

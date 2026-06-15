@@ -1,4 +1,4 @@
-import { createSignal, Show, For, type Component } from "solid-js";
+import { createSignal, createEffect, onCleanup, Show, For, type Component } from "solid-js";
 import { A, useLocation, useNavigate } from "@solidjs/router";
 import { Button } from "~/components/ui/Button";
 import {
@@ -8,6 +8,7 @@ import {
   Network,
   Search,
   Command as CommandIcon,
+  ExternalLink,
 } from "lucide-solid";
 import Settings from "./Settings";
 import NamespaceSelector from "./NamespaceSelector";
@@ -47,6 +48,44 @@ export default function TopNavigation(props: TopNavigationProps) {
     setMobileMenuOpen(false);
   };
 
+  const [openSectionIdx, setOpenSectionIdx] = createSignal<number | null>(null);
+  const [hoverSectionIdx, setHoverSectionIdx] = createSignal<number | null>(null);
+  const [extLinksOpen, setExtLinksOpen] = createSignal(false);
+  let extLinksRef: HTMLDivElement | undefined;
+  let navRef: HTMLElement | undefined;
+
+  const activeSectionIdx = () => {
+    const path = location.pathname;
+    return sidebarSections.findIndex((section) =>
+      section.items.some(
+        (item) => item.to === path || props.activeTab === item.id,
+      ),
+    );
+  };
+
+  const isSectionOpen = (idx: number) =>
+    openSectionIdx() === idx || hoverSectionIdx() === idx;
+
+
+  // Close nav section / extLinks when clicking outside header
+  createEffect(() => {
+    if (openSectionIdx() === null && !extLinksOpen()) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const inHeader = !!target.closest("header");
+      if (!inHeader) {
+        setOpenSectionIdx(null);
+        setExtLinksOpen(false);
+        return;
+      }
+      if (extLinksOpen() && extLinksRef && !extLinksRef.contains(target)) {
+        setExtLinksOpen(false);
+      }
+    };
+    document.addEventListener("click", handler);
+    onCleanup(() => document.removeEventListener("click", handler));
+  });
+
   return (
     <>
       {/* Main Navigation Bar */}
@@ -73,20 +112,43 @@ export default function TopNavigation(props: TopNavigationProps) {
             </div>
 
             {/* Desktop Navigation */}
-            <nav class="hidden md:flex items-center gap-1">
+            <nav ref={navRef} class="hidden md:flex items-center gap-1">
               <For each={sidebarSections}>
-                {(section) => (
-                  <div class="relative group">
+                {(section, idx) => (
+                  <div
+                    class="relative"
+                    onMouseEnter={() => setHoverSectionIdx(idx())}
+                    onMouseLeave={() => setHoverSectionIdx(null)}
+                  >
                     <Button
                       variant="ghost"
-                      class="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+                      class={`flex items-center gap-1 text-sm font-medium transition-colors ${
+                        activeSectionIdx() === idx()
+                          ? "text-primary"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      onClick={() =>
+                        setOpenSectionIdx(
+                          openSectionIdx() === idx() ? null : idx(),
+                        )
+                      }
                     >
                       {section.title.split(" ")[0]}
-                      <ChevronDown class="h-3 w-3 opacity-50" />
+                      <ChevronDown
+                        class={`h-3 w-3 transition-transform ${
+                          isSectionOpen(idx()) ? "rotate-180" : ""
+                        } opacity-50`}
+                      />
                     </Button>
 
                     {/* Dropdown */}
-                    <div class="absolute top-full left-0 pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                    <div
+                      class={`absolute top-full left-0 pt-2 transition-all duration-200 ${
+                        isSectionOpen(idx())
+                          ? "opacity-100 visible"
+                          : "opacity-0 invisible"
+                      }`}
+                    >
                       <div class="w-56 rounded-xl border border-border bg-popover shadow-2xl p-2">
                         <div class="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                           {section.title}
@@ -129,6 +191,7 @@ export default function TopNavigation(props: TopNavigationProps) {
             </nav>
 
             {/* Right Side Actions */}
+
             <div class="flex items-center gap-2">
               {/* Command Palette Trigger */}
               <Button
@@ -166,9 +229,51 @@ export default function TopNavigation(props: TopNavigationProps) {
                   <Menu class="h-5 w-5" />
                 </Show>
               </Button>
-            </div>
+              {/* External Links */}
+              <div ref={extLinksRef} class="relative hidden md:flex items-center">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="text-muted-foreground hover:text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setExtLinksOpen(!extLinksOpen());
+                  }}
+                >
+                  <ExternalLink class="h-4 w-4" />
+                </Button>
+                <Show when={extLinksOpen()}>
+                  <div class="absolute top-full right-0 mt-1 w-36 rounded-xl border border-border bg-popover shadow-2xl p-1.5 z-50">
+                    <a
+                      href="https://github.com/trueagi-io/MORK"
+                      class="flex items-center px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      MORK
+                    </a>
+                    <a
+                      href="https://github.com/trueagi-io/MORK/wiki"
+                      class="flex items-center px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      DOCS
+                    </a>
+                    <a
+                      href="https://chat.singularitynet.io/chat/channels/mork"
+                      class="flex items-center px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      COMMUNITY
+                    </a>
+                  </div>
+                </Show>
+              </div>
           </div>
         </div>
+          </div>
       </header>
 
       {/* Spacer for fixed header */}

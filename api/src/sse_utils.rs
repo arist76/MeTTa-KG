@@ -24,24 +24,28 @@ impl From<ServerEvent> for Event {
 pub struct JobRunner;
 
 impl JobRunner {
-    // Spawns a background job with standard lifecycle events.
     pub fn spawn<F, Fut>(command_name: &str, broadcaster: Sender<ServerEvent>, task: F)
     where
         F: FnOnce(Sender<ServerEvent>) -> Fut + Send + 'static,
         Fut: std::future::Future<Output = Result<String, String>> + Send,
     {
-        let command = command_name.to_string();
+        let command_str = command_name.to_string();
+        tracing::info!(target: "job", command = %command_str, "Starting background job");
         tokio::spawn(async move {
-            let _ = broadcaster.send(ServerEvent::Started { command });
+            let _ = broadcaster.send(ServerEvent::Started {
+                command: command_str.clone(),
+            });
 
             match task(broadcaster.clone()).await {
                 Ok(msg) => {
+                    tracing::info!(target: "job", command = %command_str, "Job completed");
                     let _ = broadcaster.send(ServerEvent::Log { message: msg });
                     let _ = broadcaster.send(ServerEvent::Success {
                         message: "Done".into(),
                     });
                 }
                 Err(err) => {
+                    tracing::error!(target: "job", command = %command_str, error = %err, "Job failed");
                     let _ = broadcaster.send(ServerEvent::Log {
                         message: format!("Error: {}", err),
                     });
