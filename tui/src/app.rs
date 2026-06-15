@@ -40,6 +40,7 @@ pub struct App {
     pub editing_namespace: bool,
     pub     toast_manager: ToastManager,
     last_toast: Option<(&'static str, String)>,
+    spinner_frame: usize,
 }
 
 impl App {
@@ -114,6 +115,7 @@ impl App {
             current_namespace: "/".to_string(),
             editing_namespace: false,
             toast_manager: ToastManager::new(),
+            spinner_frame: 0,
             last_toast: None,
         }
     }
@@ -269,13 +271,26 @@ impl App {
 
         self.screen.render(f, screen_area, &self.theme);
 
+        self.spinner_frame = self.spinner_frame.wrapping_add(1);
+        let status = self.screen.get_status();
+        let spinner = if matches!(*status, OperationStatus::Running) {
+            const CHARS: &[u8] = b"|/-\\";
+            Some(CHARS[self.spinner_frame % 4] as char)
+        } else {
+            None
+        };
+
         let screen_hints = self.screen.key_hints();
         let hints = if screen_hints.is_empty() {
             "F1:Help  Ctrl+P:Palette  Esc:Back  Ctrl+C:Quit".to_string()
         } else {
             format!("{}  |  F1:Help  Ctrl+P:Palette  Ctrl+C:Quit", screen_hints)
         };
-        render_status_bar(f, footer_area, &self.theme, &self.status_message, &hints);
+        let msg = match spinner {
+            Some(c) => format!(" {} {}", c, self.status_message),
+            None => self.status_message.clone(),
+        };
+        render_status_bar(f, footer_area, &self.theme, &msg, &hints);
 
         self.toast_manager.render(f, area, &self.theme);
     }
