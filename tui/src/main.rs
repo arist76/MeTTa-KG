@@ -19,6 +19,9 @@ struct Cli {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    if !cli.backend.starts_with("https://") {
+        eprintln!("Warning: backend URL uses HTTP — tokens and data will be sent in cleartext");
+    }
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::WARN)
         .init();
