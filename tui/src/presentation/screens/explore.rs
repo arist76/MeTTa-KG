@@ -1,6 +1,6 @@
 use ratatui::prelude::*;
 use ratatui::widgets::*;
-use crossterm::event::{KeyEvent, KeyCode};
+use crossterm::event::{KeyEvent, KeyCode, KeyModifiers};
 use serde::Deserialize;
 use super::{Screen, ScreenAction};
 use crate::presentation::theme::*;
@@ -252,12 +252,13 @@ pub struct ExploreScreen {
     pending_explore: Arc<Mutex<Option<(u64, Result<String, String>)>>>,
     pending_read: Arc<Mutex<Option<(u64, Result<String, String>)>>>,
     pending_expand: Arc<Mutex<Option<(u64, usize, Result<Vec<TreeNode>, String>)>>>,
+    pattern_history: Vec<String>,
+    pattern_history_idx: Option<usize>,
     cached_node_count: Cell<usize>,
     explore_gen: AtomicU64,
     read_gen: AtomicU64,
     expand_gen: AtomicU64,
 }
-
 impl ExploreScreen {
     pub fn new() -> Self {
         Self {
@@ -271,6 +272,8 @@ impl ExploreScreen {
             pending_explore: Arc::new(Mutex::new(None)),
             pending_read: Arc::new(Mutex::new(None)),
             pending_expand: Arc::new(Mutex::new(None)),
+            pattern_history: Vec::new(),
+            pattern_history_idx: None,
             cached_node_count: Cell::new(0),
             explore_gen: AtomicU64::new(0),
             read_gen: AtomicU64::new(0),
@@ -457,6 +460,35 @@ impl Screen for ExploreScreen {
                     });
                 }
                 self.status = OperationStatus::Running;
+                if !self.pattern.is_empty() {
+                    self.pattern_history.retain(|p| p != &self.pattern);
+                    self.pattern_history.push(self.pattern.clone());
+                    if self.pattern_history.len() > 20 {
+                        self.pattern_history.remove(0);
+                    }
+                }
+                self.pattern_history_idx = None;
+                None
+            }
+            KeyCode::Up if key.modifiers.contains(KeyModifiers::ALT) => {
+                let idx = self.pattern_history_idx.unwrap_or(self.pattern_history.len());
+                if idx > 0 {
+                    let new_idx = idx - 1;
+                    self.pattern = self.pattern_history[new_idx].clone();
+                    self.pattern_history_idx = Some(new_idx);
+                }
+                None
+            }
+            KeyCode::Down if key.modifiers.contains(KeyModifiers::ALT) => {
+                if let Some(idx) = self.pattern_history_idx {
+                    if idx + 1 < self.pattern_history.len() {
+                        self.pattern = self.pattern_history[idx + 1].clone();
+                        self.pattern_history_idx = Some(idx + 1);
+                    } else {
+                        self.pattern.clear();
+                        self.pattern_history_idx = None;
+                    }
+                }
                 None
             }
             KeyCode::Char('r') | KeyCode::Char('R') => {
