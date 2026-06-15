@@ -14,9 +14,7 @@ fn rocket_main() -> Rocket<Build> {
             .with_env_filter(env_filter)
             .init();
     } else {
-        tracing_subscriber::fmt()
-            .with_env_filter(env_filter)
-            .init();
+        tracing_subscriber::fmt().with_env_filter(env_filter).init();
     }
 
     // Bridge Rocket's log crate output to tracing

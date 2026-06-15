@@ -79,7 +79,7 @@ const getInitialLayoutMode = (): LayoutMode => {
   const persisted = safeGetItem("theme-layout");
   return persisted === "sidebar" || persisted === "topnav"
     ? persisted
-    : "sidebar"
+    : "sidebar";
 };
 
 const getInitialPattern = (): keyof typeof backgroundPatterns => {
@@ -92,10 +92,7 @@ const getInitialPattern = (): keyof typeof backgroundPatterns => {
 // Theme state
 const [currentAccent, setCurrentAccent] = createSignal<
   keyof typeof accentColors
->(
-  (safeGetItem("theme-accent") as keyof typeof accentColors) ||
-    "neonGreen"
-);
+>((safeGetItem("theme-accent") as keyof typeof accentColors) || "neonGreen");
 
 const [glowEnabled, setGlowEnabled] = createSignal(
   safeGetItem("theme-glow") === "true"
@@ -123,10 +120,7 @@ const persistTheme = () => {
   safeSetItem("theme-layout", layoutMode());
   safeSetItem("theme-width", contentWidth());
   safeSetItem("theme-pattern", backgroundPattern());
-  safeSetItem(
-    "theme-pattern-animation",
-    patternAnimationEnabled().toString()
-  );
+  safeSetItem("theme-pattern-animation", patternAnimationEnabled().toString());
 };
 
 // Apply theme to document

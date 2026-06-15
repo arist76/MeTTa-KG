@@ -12,7 +12,6 @@ import type { SpaceNode } from "~/lib/space";
 import { formatedNamespace } from "~/lib/state";
 import ExpressionListItem from "./ExpressionListItem";
 import { treeStore, type FlatNode } from "./store";
-import { showToast } from "~/components/ui/Toast";
 import { reportError } from "~/lib/errors";
 import { shouldFillViewport, setShouldFillViewport } from "../../lib";
 

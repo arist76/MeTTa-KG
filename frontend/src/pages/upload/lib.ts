@@ -114,7 +114,8 @@ export const handleImport = async (spacePath: string) => {
         // Fetch from frontend (browser) so MORK in Docker doesn't need URL access
         try {
           const response = await fetch(uri());
-          if (!response.ok) throw new Error(`Failed to fetch from URL: ${response.statusText}`);
+          if (!response.ok)
+            throw new Error(`Failed to fetch from URL: ${response.statusText}`);
           const content = await response.text();
           await uploadTextToSpace(spacePath, content);
           setResult({ data: "Import initiated", status: "success" });

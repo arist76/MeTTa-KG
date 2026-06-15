@@ -23,7 +23,7 @@ export function showToast(options: ToastOptions) {
 }
 export function removeToast(id: number) {
   setToasts((prev) =>
-    prev.map((t) => (t.id === id ? { ...t, exiting: true } : t)),
+    prev.map((t) => (t.id === id ? { ...t, exiting: true } : t))
   );
   window.setTimeout(() => {
     setToasts((prev) => {

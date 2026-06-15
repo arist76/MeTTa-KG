@@ -10,7 +10,6 @@ export const isAppBusy = isAnyCommandActive;
 export const [isPolling, setIsPolling] = createSignal(false);
 export const [error, setError] = createSignal<string | null>(null);
 
-
 export const stopPolling = () => {
   setIsPolling(false);
 };
@@ -51,7 +50,7 @@ export const executeTransform = async (patterns: Item[], templates: Item[]) => {
   } catch (error) {
     reportError("transform", error);
     setError(
-      error instanceof Error ? error.message : "An unexpected error occurred.",
+      error instanceof Error ? error.message : "An unexpected error occurred."
     );
   }
 };

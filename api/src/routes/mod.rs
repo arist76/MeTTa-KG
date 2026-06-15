@@ -48,7 +48,7 @@ impl<'r> FromRequest<'r> for Token {
             Some(token) => token,
             None => {
                 tracing::warn!(target: "audit", "Missing authorization header");
-                return request::Outcome::Error((Status::Unauthorized, Self::Error::InvalidToken))
+                return request::Outcome::Error((Status::Unauthorized, Self::Error::InvalidToken));
             }
         };
 

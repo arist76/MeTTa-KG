@@ -1,10 +1,10 @@
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use rocket::fairing::{Fairing, Info, Kind};
 use rocket::http::Method;
 use rocket::routes;
 use rocket::{Build, Rocket};
-use rocket_cors::AllowedOrigins;
-use rocket::fairing::{Fairing, Info, Kind};
 use rocket::{Data, Request, Response};
+use rocket_cors::AllowedOrigins;
 use std::env;
 
 pub mod db;
@@ -69,7 +69,6 @@ impl Fairing for RequestLogger {
     }
 }
 
-
 pub fn rocket() -> Rocket<Build> {
     dotenv::dotenv().ok();
 
@@ -77,7 +76,8 @@ pub fn rocket() -> Rocket<Build> {
 
     let pool = db::create_pool();
 
-    let mut connection = db::establish_connection().expect("Failed to connect to database for migrations");
+    let mut connection =
+        db::establish_connection().expect("Failed to connect to database for migrations");
     connection
         .run_pending_migrations(MIGRATIONS)
         .unwrap_or_else(|e| panic!("Failed to run database migrations: {e}"));

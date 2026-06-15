@@ -244,7 +244,9 @@ const UnionPage: Component = () => {
           <div class="mt-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
             <div class="flex items-start justify-between">
               <div class="flex-1">
-                <h4 class="text-sm font-semibold text-destructive">Operation Failed</h4>
+                <h4 class="text-sm font-semibold text-destructive">
+                  Operation Failed
+                </h4>
                 <p class="text-sm mt-1 text-destructive/80">{error()}</p>
               </div>
               <button

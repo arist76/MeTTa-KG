@@ -128,7 +128,13 @@ pub async fn read(
     path: PathBuf,
     mm2: Option<Json<Mm2InputMulti>>,
 ) -> Result<Json<String>, Status> {
-    if !path.starts_with(token.namespace.strip_prefix("/").ok_or(Status::InternalServerError)?) || !token.permission_read {
+    if !path.starts_with(
+        token
+            .namespace
+            .strip_prefix("/")
+            .ok_or(Status::InternalServerError)?,
+    ) || !token.permission_read
+    {
         return Err(Status::Unauthorized);
     }
 
@@ -160,7 +166,10 @@ pub async fn upload(
     data: Data<'_>,
     state: &State<SseState>,
 ) -> Result<Json<bool>, Custom<String>> {
-    let token_namespace = token.namespace.strip_prefix("/").ok_or(Custom(Status::InternalServerError, "Internal error".to_string()))?;
+    let token_namespace = token.namespace.strip_prefix("/").ok_or(Custom(
+        Status::InternalServerError,
+        "Internal error".to_string(),
+    ))?;
     if !path.starts_with(token_namespace) || !token.permission_write {
         return Err(Custom(Status::Unauthorized, "Unauthorized".to_string()));
     }
@@ -201,7 +210,13 @@ pub async fn import(
     uri: String,
     state: &State<SseState>,
 ) -> Result<Json<bool>, Status> {
-    if !path.starts_with(token.namespace.strip_prefix("/").ok_or(Status::InternalServerError)?) || !token.permission_write {
+    if !path.starts_with(
+        token
+            .namespace
+            .strip_prefix("/")
+            .ok_or(Status::InternalServerError)?,
+    ) || !token.permission_write
+    {
         return Err(Status::Unauthorized);
     }
 
@@ -234,7 +249,13 @@ pub async fn explore(
     path: PathBuf,
     explore_input: Json<ExploreInput>,
 ) -> Result<Json<String>, Status> {
-    if !path.starts_with(token.namespace.strip_prefix("/").ok_or(Status::InternalServerError)?) || !token.permission_read {
+    if !path.starts_with(
+        token
+            .namespace
+            .strip_prefix("/")
+            .ok_or(Status::InternalServerError)?,
+    ) || !token.permission_read
+    {
         return Err(Status::Unauthorized);
     }
 
@@ -273,7 +294,13 @@ pub async fn export(
     export_input: Json<Mm2Input>,
     state: &State<SseState>,
 ) -> Result<Json<String>, Custom<Json<serde_json::Value>>> {
-    if !path.starts_with(token.namespace.strip_prefix("/").ok_or(Custom(Status::InternalServerError, Json(json!({}))))?) || !token.permission_read {
+    if !path.starts_with(
+        token
+            .namespace
+            .strip_prefix("/")
+            .ok_or(Custom(Status::InternalServerError, Json(json!({}))))?,
+    ) || !token.permission_read
+    {
         return Err(Custom(
             Status::Unauthorized,
             Json(json!({ "message": "Unauthorized" })),
@@ -376,7 +403,10 @@ pub async fn clear(
     expr: String,
     state: &State<SseState>,
 ) -> Result<Json<bool>, Status> {
-    let token_namespace = token.namespace.strip_prefix("/").ok_or(Status::InternalServerError)?;
+    let token_namespace = token
+        .namespace
+        .strip_prefix("/")
+        .ok_or(Status::InternalServerError)?;
     if !path.starts_with(token_namespace) || !token.permission_write {
         return Err(Status::Unauthorized);
     }

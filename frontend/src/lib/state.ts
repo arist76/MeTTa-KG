@@ -10,7 +10,9 @@ export interface NamespaceTab {
   label: string;
 }
 
-const initialNamespace = safeGetItem("tokenNamespace") ? JSON.parse(safeGetItem("tokenNamespace")!) : [""];
+const initialNamespace = safeGetItem("tokenNamespace")
+  ? JSON.parse(safeGetItem("tokenNamespace")!)
+  : [""];
 
 const [tokenRootNamespace, setTokenRootNamespace] =
   createSignal<string[]>(initialNamespace);

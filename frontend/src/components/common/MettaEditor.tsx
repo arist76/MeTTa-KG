@@ -1,4 +1,10 @@
-import { Component, onMount, createSignal, createEffect, onCleanup } from "solid-js";
+import {
+  Component,
+  onMount,
+  createSignal,
+  createEffect,
+  onCleanup,
+} from "solid-js";
 import { CodeJar } from "codejar";
 import { highlightMetta } from "../../syntax/mettaLanguage";
 
@@ -6,7 +12,12 @@ interface MettaEditorProps {
   initialText: string;
   onTextChange: (text: string) => void;
   onPatternLoad: (pattern: string) => void;
-  parseErrors: { line: number; column: number; message: string; severity: string }[];
+  parseErrors: {
+    line: number;
+    column: number;
+    message: string;
+    severity: string;
+  }[];
   showActionButtons?: boolean;
 }
 
@@ -22,7 +33,9 @@ function syncGutter(gutter: HTMLDivElement, code: string) {
 
 const MettaEditor: Component<MettaEditorProps> = (props) => {
   const [text, setText] = createSignal(props.initialText);
-  const [realTimeErrors] = createSignal<{ line: number; column: number; message: string; severity: string }[]>([]);
+  const [realTimeErrors] = createSignal<
+    { line: number; column: number; message: string; severity: string }[]
+  >([]);
 
   let editorRef: HTMLDivElement | undefined;
   let gutterRef: HTMLDivElement | undefined;
@@ -110,8 +123,10 @@ const MettaEditor: Component<MettaEditorProps> = (props) => {
       <h3 class="m-0 mb-3 text-sm font-semibold flex-shrink-0 leading-tight text-foreground">
         {realTimeErrors().filter((e) => e.severity === "error").length > 0 && (
           <span class="ml-2 text-xs font-normal text-destructive">
-            ({realTimeErrors().filter((e) => e.severity === "error").length} errors,{" "}
-            {realTimeErrors().filter((e) => e.severity === "warning").length} warnings)
+            ({realTimeErrors().filter((e) => e.severity === "error").length}{" "}
+            errors,{" "}
+            {realTimeErrors().filter((e) => e.severity === "warning").length}{" "}
+            warnings)
           </span>
         )}
       </h3>
@@ -131,7 +146,8 @@ const MettaEditor: Component<MettaEditorProps> = (props) => {
             class="flex-1 overflow-auto bg-background"
             style={{
               padding: "8px",
-              "font-family": "'Courier New', Consolas, 'Liberation Mono', Menlo, Courier, monospace",
+              "font-family":
+                "'Courier New', Consolas, 'Liberation Mono', Menlo, Courier, monospace",
               "font-size": "13px",
               "line-height": "1.5",
               color: "hsl(var(--foreground))",

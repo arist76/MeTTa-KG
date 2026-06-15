@@ -49,7 +49,7 @@ export const executeComposition = async (
   } catch (error) {
     reportError("composition", error);
     setError(
-      error instanceof Error ? error.message : "An unexpected error occurred.",
+      error instanceof Error ? error.message : "An unexpected error occurred."
     );
   }
 };

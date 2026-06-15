@@ -26,7 +26,9 @@ render(() => {
     <>
       <ColorModeScript storageType={storageManager.type} />
       <ColorModeProvider storageManager={storageManager}>
-        <ErrorBoundary><App /></ErrorBoundary>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
         <ToastViewport />
       </ColorModeProvider>
     </>

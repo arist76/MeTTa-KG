@@ -1,8 +1,7 @@
-use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::pg::PgConnection;
+use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::Connection;
 use std::env;
-
 
 pub type DbPool = Pool<ConnectionManager<PgConnection>>;
 
@@ -26,7 +25,8 @@ pub fn create_pool() -> DbPool {
 
 pub fn establish_connection() -> Result<PgConnection, String> {
     let user = env::var("POSTGRES_USER").map_err(|_| "POSTGRES_USER must be set".to_string())?;
-    let password = env::var("POSTGRES_PASSWORD").map_err(|_| "POSTGRES_PASSWORD must be set".to_string())?;
+    let password =
+        env::var("POSTGRES_PASSWORD").map_err(|_| "POSTGRES_PASSWORD must be set".to_string())?;
     let db_name = env::var("POSTGRES_DB").map_err(|_| "POSTGRES_DB must be set".to_string())?;
     let host = env::var("POSTGRES_HOST").unwrap_or_else(|_| "db".to_string());
     let port = env::var("POSTGRES_PORT").unwrap_or_else(|_| "5432".to_string());
@@ -38,6 +38,5 @@ pub fn establish_connection() -> Result<PgConnection, String> {
         user, password, host, port, db_name, ssl_mode
     );
 
-    PgConnection::establish(&database_url)
-        .map_err(|e| format!("Error connecting to database: {e}"))
+    PgConnection::establish(&database_url).map_err(|e| format!("Error connecting to database: {e}"))
 }

@@ -108,7 +108,9 @@ const LoadPage = () => {
               <Database class="h-8 w-8 text-destructive" />
             </div>
             <div class="text-center">
-              <p class="text-lg font-medium text-foreground mb-1">Failed to Load</p>
+              <p class="text-lg font-medium text-foreground mb-1">
+                Failed to Load
+              </p>
               <p class="text-sm text-muted-foreground">
                 {subSpace.error.message || "An unexpected error occurred"}
               </p>
@@ -122,7 +124,12 @@ const LoadPage = () => {
           </div>
         </Show>
         <Show
-          when={!subSpace.loading && !subSpace.error && subSpace() && subSpace()!.length > 0}
+          when={
+            !subSpace.loading &&
+            !subSpace.error &&
+            subSpace() &&
+            subSpace()!.length > 0
+          }
           fallback={
             <Show when={!subSpace.error}>
               <div class="flex flex-col items-center justify-center h-full w-full gap-4">

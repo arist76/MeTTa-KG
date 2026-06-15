@@ -1,4 +1,11 @@
-import { createSignal, createEffect, onCleanup, Show, For, type Component } from "solid-js";
+import {
+  createSignal,
+  createEffect,
+  onCleanup,
+  Show,
+  For,
+  type Component,
+} from "solid-js";
 import { A, useLocation, useNavigate } from "@solidjs/router";
 import { Button } from "~/components/ui/Button";
 import {
@@ -49,7 +56,9 @@ export default function TopNavigation(props: TopNavigationProps) {
   };
 
   const [openSectionIdx, setOpenSectionIdx] = createSignal<number | null>(null);
-  const [hoverSectionIdx, setHoverSectionIdx] = createSignal<number | null>(null);
+  const [hoverSectionIdx, setHoverSectionIdx] = createSignal<number | null>(
+    null
+  );
   const [extLinksOpen, setExtLinksOpen] = createSignal(false);
   let extLinksRef: HTMLDivElement | undefined;
   let navRef: HTMLElement | undefined;
@@ -58,14 +67,13 @@ export default function TopNavigation(props: TopNavigationProps) {
     const path = location.pathname;
     return sidebarSections.findIndex((section) =>
       section.items.some(
-        (item) => item.to === path || props.activeTab === item.id,
-      ),
+        (item) => item.to === path || props.activeTab === item.id
+      )
     );
   };
 
   const isSectionOpen = (idx: number) =>
     openSectionIdx() === idx || hoverSectionIdx() === idx;
-
 
   // Close nav section / extLinks when clicking outside header
   createEffect(() => {
@@ -129,7 +137,7 @@ export default function TopNavigation(props: TopNavigationProps) {
                       }`}
                       onClick={() =>
                         setOpenSectionIdx(
-                          openSectionIdx() === idx() ? null : idx(),
+                          openSectionIdx() === idx() ? null : idx()
                         )
                       }
                     >
@@ -230,7 +238,10 @@ export default function TopNavigation(props: TopNavigationProps) {
                 </Show>
               </Button>
               {/* External Links */}
-              <div ref={extLinksRef} class="relative hidden md:flex items-center">
+              <div
+                ref={extLinksRef}
+                class="relative hidden md:flex items-center"
+              >
                 <Button
                   variant="ghost"
                   size="icon"
@@ -271,9 +282,9 @@ export default function TopNavigation(props: TopNavigationProps) {
                   </div>
                 </Show>
               </div>
+            </div>
           </div>
         </div>
-          </div>
       </header>
 
       {/* Spacer for fixed header */}

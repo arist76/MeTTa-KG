@@ -9,7 +9,6 @@ export const isAppBusy = isAnyCommandActive;
 export const [isPolling, setIsPolling] = createSignal(false);
 export const [error, setError] = createSignal<string | null>(null);
 
-
 export type setOperationInput = {
   pattern: string[];
   template: string[];
@@ -48,7 +47,7 @@ export const executeUnion = async (unionQuery: setOperationInput) => {
   } catch (error) {
     reportError("union", error);
     setError(
-      error instanceof Error ? error.message : "An unexpected error occurred.",
+      error instanceof Error ? error.message : "An unexpected error occurred."
     );
   }
 };

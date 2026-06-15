@@ -27,7 +27,6 @@ export const handleClear = async (spacePath: string) => {
         description: "Waiting for results...",
       });
     }
-
   } catch (error) {
     reportError("clear", error);
   }

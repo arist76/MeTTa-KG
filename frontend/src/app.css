@@ -175,7 +175,6 @@
     box-shadow: none !important;
   }
 
-
   /* Gradient text */
   .gradient-text {
     background: linear-gradient(
@@ -371,10 +370,25 @@
 /* ============================================
    SYNTAX HIGHLIGHTING TOKENS (CodeJar)
    ============================================ */
-.token.comment { color: hsl(120, 40%, 55%); font-style: italic; }
-.token.string { color: hsl(15, 75%, 60%); }
-.token.number { color: hsl(40, 85%, 60%); }
-.token.keyword { color: hsl(var(--primary)); }
-.token.variable { color: hsl(var(--foreground)); }
-.token.operator { color: hsl(180, 55%, 55%); }
-.token.bracket { color: hsl(220, 55%, 65%); }
+.token.comment {
+  color: hsl(120, 40%, 55%);
+  font-style: italic;
+}
+.token.string {
+  color: hsl(15, 75%, 60%);
+}
+.token.number {
+  color: hsl(40, 85%, 60%);
+}
+.token.keyword {
+  color: hsl(var(--primary));
+}
+.token.variable {
+  color: hsl(var(--foreground));
+}
+.token.operator {
+  color: hsl(180, 55%, 55%);
+}
+.token.bracket {
+  color: hsl(220, 55%, 65%);
+}

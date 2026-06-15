@@ -50,7 +50,11 @@ pub fn get(token: Token) -> Result<Json<Token>, Status> {
 }
 
 #[post("/tokens", data = "<new_token>")]
-pub fn create(token: Token, new_token: Json<Token>, pool: &State<DbPool>) -> Result<Json<Token>, Status> {
+pub fn create(
+    token: Token,
+    new_token: Json<Token>,
+    pool: &State<DbPool>,
+) -> Result<Json<Token>, Status> {
     use crate::schema::tokens::dsl::*;
     let mut conn = pool.get().map_err(|_| Status::InternalServerError)?;
 
@@ -115,7 +119,11 @@ pub fn create(token: Token, new_token: Json<Token>, pool: &State<DbPool>) -> Res
 }
 
 #[delete("/tokens", data = "<token_ids>")]
-pub fn delete_batch(token: Token, token_ids: Json<Vec<i32>>, pool: &State<DbPool>) -> Result<Json<i32>, Status> {
+pub fn delete_batch(
+    token: Token,
+    token_ids: Json<Vec<i32>>,
+    pool: &State<DbPool>,
+) -> Result<Json<i32>, Status> {
     use crate::schema::tokens::dsl::*;
     let mut conn = pool.get().map_err(|_| Status::InternalServerError)?;
 
@@ -198,8 +206,8 @@ pub fn delete(token: Token, token_id: i32, pool: &State<DbPool>) -> Status {
 
     // filtering by parent ID prevents root token from being deleted
 
-    let result =
-        diesel::delete(tokens.filter(id.eq(token_id)).filter(parent.eq(&token.id))).execute(&mut conn);
+    let result = diesel::delete(tokens.filter(id.eq(token_id)).filter(parent.eq(&token.id)))
+        .execute(&mut conn);
 
     match result {
         Ok(_) => {
