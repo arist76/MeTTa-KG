@@ -59,8 +59,7 @@ impl Screen for UnionScreen {
         }
     }
 
-    fn render(&mut self, f: &mut Frame, area: Rect) {
-        let theme = AppTheme::dark();
+    fn render(&mut self, f: &mut Frame, area: Rect, theme: &AppTheme) {
         let chunks = Layout::vertical([
             Constraint::Length(3),
             Constraint::Min(5),

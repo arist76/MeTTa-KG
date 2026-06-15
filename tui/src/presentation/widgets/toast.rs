@@ -91,12 +91,10 @@ impl ToastManager {
         self.toasts.retain(|t| !t.expired());
     }
 
-    pub fn render(&self, f: &mut Frame, area: Rect) {
+    pub fn render(&self, f: &mut Frame, area: Rect, theme: &AppTheme) {
         if self.toasts.is_empty() {
             return;
         }
-
-        let theme = AppTheme::dark();
 
         let toast_height = 3u16;
         let toast_width = area.width.saturating_sub(8).min(50);

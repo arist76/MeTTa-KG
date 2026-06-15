@@ -251,8 +251,7 @@ impl Screen for TokensScreen {
         }
     }
 
-    fn render(&mut self, f: &mut Frame, area: Rect) {
-        let theme = AppTheme::dark();
+    fn render(&mut self, f: &mut Frame, area: Rect, theme: &AppTheme) {
         let chunks = Layout::vertical([Constraint::Min(3), Constraint::Min(10), Constraint::Min(3)]);
         let [header_area, main_area, footer_area] = chunks.areas(area);
 

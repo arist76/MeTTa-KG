@@ -267,11 +267,11 @@ impl App {
 
         self.render_namespace_bar(f, ns_bar_area, has_token);
 
-        self.screen.render(f, screen_area);
+        self.screen.render(f, screen_area, &self.theme);
 
         render_status_bar(f, footer_area, &self.theme, &self.status_message, "Ctrl+P:Palette  Esc:Back  Ctrl+C:Quit");
 
-        self.toast_manager.render(f, area);
+        self.toast_manager.render(f, area, &self.theme);
     }
 
     fn render_namespace_bar(&mut self, f: &mut Frame, area: Rect, _has_token: bool) {
@@ -354,7 +354,7 @@ impl App {
     }
 
     fn handle_events(&mut self) -> anyhow::Result<()> {
-        if !event::poll(std::time::Duration::from_millis(100))? {
+        if !event::poll(std::time::Duration::from_millis(16))? {
             return Ok(());
         }
 

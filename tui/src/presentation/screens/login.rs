@@ -74,8 +74,7 @@ impl Screen for LoginScreen {
 
     fn update(&mut self) {}
 
-    fn render(&mut self, f: &mut Frame, area: Rect) {
-        let theme = AppTheme::dark();
+    fn render(&mut self, f: &mut Frame, area: Rect, theme: &AppTheme) {
 
         let vertical = Layout::vertical([Constraint::Percentage(40), Constraint::Min(5), Constraint::Percentage(40)]);
         let top = vertical.split(area)[1];

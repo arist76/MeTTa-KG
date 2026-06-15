@@ -1,6 +1,7 @@
 use ratatui::prelude::*;
 use crossterm::event::{KeyEvent, MouseEvent};
 use crate::domain::models::OperationStatus;
+use crate::presentation::theme::AppTheme;
 
 pub mod login;
 pub mod explore;
@@ -15,7 +16,7 @@ pub mod tokens;
 pub mod stubs;
 
 pub trait Screen {
-    fn render(&mut self, f: &mut Frame, area: Rect);
+    fn render(&mut self, f: &mut Frame, area: Rect, theme: &AppTheme);
     fn handle_key(&mut self, key: KeyEvent) -> Option<ScreenAction>;
     fn handle_mouse(&mut self, _mouse: MouseEvent, _area: Rect) -> Option<ScreenAction> {
         None

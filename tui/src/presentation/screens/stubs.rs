@@ -26,9 +26,7 @@ impl Screen for StubScreen {
 
     fn reset_status(&mut self) {}
 
-    fn render(&mut self, f: &mut Frame, area: Rect) {
-        let theme = AppTheme::dark();
-
+    fn render(&mut self, f: &mut Frame, area: Rect, theme: &AppTheme) {
         let vertical = Layout::vertical([Constraint::Percentage(40), Constraint::Min(3), Constraint::Percentage(40)]);
         let center = vertical.split(area)[1];
 
