@@ -39,6 +39,8 @@ pub struct App {
     pub current_namespace: String,
     pub editing_namespace: bool,
     pub     toast_manager: ToastManager,
+    namespace_suggestions: Vec<String>,
+    namespace_suggest_idx: usize,
     last_toast: Option<(&'static str, String)>,
     spinner_frame: usize,
 }
@@ -113,6 +115,8 @@ impl App {
             command_palette: CommandPalette::new(),
             show_help: false,
             current_namespace: "/".to_string(),
+            namespace_suggestions: Vec::new(),
+            namespace_suggest_idx: 0,
             editing_namespace: false,
             toast_manager: ToastManager::new(),
             spinner_frame: 0,
@@ -194,6 +198,24 @@ impl App {
         self.screen = new_screen;
         self.active_screen = id;
         self.status_message = format!("Switched to {}", id);
+    }
+
+    fn add_recent_namespace(&mut self, ns: &str) {
+        if !ns.is_empty() && ns != "/" {
+            self.namespace_suggestions.retain(|n| n != ns);
+            self.namespace_suggestions.push(ns.to_string());
+            if self.namespace_suggestions.len() > 10 {
+                self.namespace_suggestions.remove(0);
+            }
+        }
+        self.namespace_suggest_idx = 0;
+    }
+
+    fn update_namespace_suggestions(&mut self) {
+        let prefix = &self.current_namespace;
+        self.namespace_suggestions.retain(|n| n.starts_with(prefix));
+        self.namespace_suggestions.sort();
+        self.namespace_suggest_idx = 0;
     }
 
     pub fn run(&mut self) -> anyhow::Result<()> {
@@ -329,6 +351,22 @@ impl App {
         let path = Paragraph::new(path_text)
             .style(path_style);
         f.render_widget(path, path_area);
+
+        if self.editing_namespace && !self.namespace_suggestions.is_empty() {
+            let max_height = self.namespace_suggestions.len().min(5) as u16;
+            let suggest_area = Rect::new(path_area.x, path_area.y + 1, path_area.width, max_height + 1);
+            let items: Vec<ListItem> = self.namespace_suggestions.iter().enumerate().map(|(i, n)| {
+                let style = if i == self.namespace_suggest_idx {
+                    Style::default().bg(theme.primary).fg(Color::Black)
+                } else {
+                    Style::default().fg(theme.text)
+                };
+                ListItem::new(n.as_str()).style(style)
+            }).collect();
+            let list = List::new(items)
+                .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(theme.primary)).bg(theme.background));
+            f.render_widget(list, suggest_area);
+        }
     }
 
     fn render_help(&self, f: &mut Frame, area: Rect) {
@@ -412,15 +450,27 @@ impl App {
                 if self.editing_namespace {
                     match key.code {
                         KeyCode::Enter | KeyCode::Esc => {
+                            if !self.namespace_suggestions.is_empty() {
+                                self.current_namespace = self.namespace_suggestions[self.namespace_suggest_idx].clone();
+                            }
                             self.editing_namespace = false;
                             self.screen.set_namespace(&self.current_namespace);
                             self.status_message = format!("Namespace: {}", self.current_namespace);
+                            let ns = self.current_namespace.clone();
+                            self.add_recent_namespace(&ns);
+                        }
+                        KeyCode::Tab => {
+                            if !self.namespace_suggestions.is_empty() {
+                                self.namespace_suggest_idx = (self.namespace_suggest_idx + 1) % self.namespace_suggestions.len();
+                            }
                         }
                         KeyCode::Char(c) => {
                             self.current_namespace.push(c);
+                            self.update_namespace_suggestions();
                         }
                         KeyCode::Backspace => {
                             self.current_namespace.pop();
+                            self.update_namespace_suggestions();
                         }
                         _ => {}
                     }
