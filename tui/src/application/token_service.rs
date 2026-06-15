@@ -68,6 +68,6 @@ impl TokenService {
     }
 
     pub fn has_token(&self) -> bool {
-        self.api.get_auth_token().is_some()
+        self.api.has_auth_token()
     }
 }
