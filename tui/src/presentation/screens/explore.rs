@@ -6,8 +6,10 @@ use super::{Screen, ScreenAction};
 use crate::presentation::theme::*;
 use crate::domain::models::OperationStatus;
 use crate::application::space_service::SpaceService;
-use std::sync::{Arc, Mutex};
-
+use std::cell::Cell;
+use std::sync::Arc;
+use parking_lot::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 #[derive(Debug, Clone, Deserialize)]
 pub struct ExploreResponse {
     pub expr: String,
@@ -102,12 +104,18 @@ fn parse_sexpr(s: &str) -> Option<SExpr> {
     }
     None
 }
-
 fn serialize_sexpr(expr: &SExpr) -> String {
+    serialize_sexpr_depth(expr, 0)
+}
+
+fn serialize_sexpr_depth(expr: &SExpr, depth: usize) -> String {
+    if depth > 256 {
+        return String::new();
+    }
     match expr {
         SExpr::Atom(s) => s.clone(),
         SExpr::List(items) => {
-            let inner: Vec<String> = items.iter().map(serialize_sexpr).collect();
+            let inner: Vec<String> = items.iter().map(|i| serialize_sexpr_depth(i, depth + 1)).collect();
             format!("({})", inner.join(" "))
         }
     }
@@ -178,23 +186,28 @@ fn compute_data_tag(namespace: &str) -> String {
 }
 
 fn process_response(raw: &str, namespace: &str) -> Vec<TreeNode> {
-    let unescaped: Option<String> = serde_json::from_str(raw).ok();
-    let inner = unescaped.as_deref().unwrap_or(raw);
     let data_tag = compute_data_tag(namespace);
 
-    serde_json::from_str::<Vec<ExploreResponse>>(inner)
-        .unwrap_or_default()
-        .into_iter()
-        .map(|r| {
-            let cleaned = unwrap_expr(&r.expr, namespace, &data_tag);
-            let label = build_label(&cleaned);
-            TreeNode {
-                expr: r.expr, token: r.token,
-                children: Vec::new(), expanded: false,
-                depth: 0, loaded: false, label,
-            }
-        })
-        .collect()
+    // Try direct parse first (common case), fall back to unescaping JSON string encoding
+    let items = match serde_json::from_str::<Vec<ExploreResponse>>(raw) {
+        Ok(items) => items,
+        Err(_) => {
+            serde_json::from_str::<String>(raw)
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default()
+        }
+    };
+
+    items.into_iter().map(|r| {
+        let cleaned = unwrap_expr(&r.expr, namespace, &data_tag);
+        let label = build_label(&cleaned);
+        TreeNode {
+            expr: r.expr, token: r.token,
+            children: Vec::new(), expanded: false,
+            depth: 0, loaded: false, label,
+        }
+    }).collect()
 }
 
 fn collapse_flat(nodes: &mut [TreeNode], target: usize) {
@@ -228,7 +241,6 @@ fn set_children_flat(nodes: &mut [TreeNode], target: usize, children: Vec<TreeNo
     let mut ch = Some(children);
     go(nodes, &mut i, target, &mut ch);
 }
-
 pub struct ExploreScreen {
     pub namespace: String,
     pattern: String,
@@ -237,9 +249,13 @@ pub struct ExploreScreen {
     nodes: Vec<TreeNode>,
     selected: usize,
     scroll: usize,
-    pending_explore: Arc<Mutex<Option<Result<String, String>>>>,
-    pending_read: Arc<Mutex<Option<Result<String, String>>>>,
-    pending_expand: Arc<Mutex<Option<(usize, Result<Vec<TreeNode>, String>)>>>,
+    pending_explore: Arc<Mutex<Option<(u64, Result<String, String>)>>>,
+    pending_read: Arc<Mutex<Option<(u64, Result<String, String>)>>>,
+    pending_expand: Arc<Mutex<Option<(u64, usize, Result<Vec<TreeNode>, String>)>>>,
+    cached_node_count: Cell<usize>,
+    explore_gen: AtomicU64,
+    read_gen: AtomicU64,
+    expand_gen: AtomicU64,
 }
 
 impl ExploreScreen {
@@ -255,6 +271,10 @@ impl ExploreScreen {
             pending_explore: Arc::new(Mutex::new(None)),
             pending_read: Arc::new(Mutex::new(None)),
             pending_expand: Arc::new(Mutex::new(None)),
+            cached_node_count: Cell::new(0),
+            explore_gen: AtomicU64::new(0),
+            read_gen: AtomicU64::new(0),
+            expand_gen: AtomicU64::new(0),
         }
     }
 
@@ -273,6 +293,20 @@ impl ExploreScreen {
         go(&self.nodes, 0, &mut out);
         out
     }
+
+    fn invalidate_cache(&self) {
+        self.cached_node_count.set(0);
+    }
+
+    fn flatten_len(&self) -> usize {
+        let cached = self.cached_node_count.get();
+        if cached > 0 {
+            return cached;
+        }
+        let count = self.flatten().len();
+        self.cached_node_count.set(count);
+        count
+    }
 }
 
 impl Screen for ExploreScreen {
@@ -282,11 +316,14 @@ impl Screen for ExploreScreen {
     fn set_namespace(&mut self, ns: &str) { self.namespace = ns.to_string(); }
 
     fn update(&mut self) {
-        let result = self.pending_explore.lock().ok().and_then(|mut g| g.take());
-        if let Some(result) = result {
+        if let Some((gen, result)) = self.pending_explore.lock().take() {
+            if gen != self.explore_gen.load(Ordering::Relaxed) {
+                return;
+            }
             match result {
                 Ok(raw) => {
                     self.nodes = process_response(&raw, &self.namespace);
+                    self.invalidate_cache();
                     self.selected = 0;
                     self.scroll = 0;
                     let count = self.nodes.len();
@@ -299,11 +336,12 @@ impl Screen for ExploreScreen {
             return;
         }
 
-        let result = self.pending_read.lock().ok().and_then(|mut g| g.take());
-        if let Some(result) = result {
+        if let Some((gen, result)) = self.pending_read.lock().take() {
+            if gen != self.read_gen.load(Ordering::Relaxed) {
+                return;
+            }
             match result {
                 Ok(raw) => {
-                    // Unwrap JSON string encoding, then split lines into tree nodes
                     let inner: String = serde_json::from_str(&raw).unwrap_or(raw);
                     let lines: Vec<&str> = inner.lines().filter(|l| !l.trim().is_empty()).collect();
                     self.nodes = lines.into_iter().map(|line| {
@@ -314,6 +352,7 @@ impl Screen for ExploreScreen {
                             depth: 0, loaded: false, label,
                         }
                     }).collect();
+                    self.invalidate_cache();
                     self.selected = 0;
                     self.scroll = 0;
                     let count = self.nodes.len();
@@ -326,20 +365,21 @@ impl Screen for ExploreScreen {
             return;
         }
 
-        let result = self.pending_expand.lock().ok().and_then(|mut g| g.take());
-        if let Some((idx, result)) = result {
+        if let Some((gen, idx, result)) = self.pending_expand.lock().take() {
+            if gen != self.expand_gen.load(Ordering::Relaxed) {
+                return;
+            }
             match result {
                 Ok(children) => {
                     set_children_flat(&mut self.nodes, idx, children);
+                    self.invalidate_cache();
                     self.status = OperationStatus::Completed("Expanded".to_string());
                 }
                 Err(e) => self.status = OperationStatus::Failed(e),
             }
         }
     }
-
-    fn render(&mut self, f: &mut Frame, area: Rect) {
-        let theme = AppTheme::dark();
+    fn render(&mut self, f: &mut Frame, area: Rect, theme: &AppTheme) {
         let chunks = Layout::vertical([
             Constraint::Length(3),
             Constraint::Length(3),
@@ -401,10 +441,10 @@ impl Screen for ExploreScreen {
         self.pattern.push_str(text);
         None
     }
-
     fn handle_key(&mut self, key: KeyEvent) -> Option<ScreenAction> {
         match key.code {
             KeyCode::Enter => {
+                let gen = self.explore_gen.fetch_add(1, Ordering::Relaxed) + 1;
                 let (service, path, pattern, pending) = (
                     self.space_service.clone(), self.namespace.clone(),
                     self.pattern.clone(), self.pending_explore.clone(),
@@ -412,13 +452,14 @@ impl Screen for ExploreScreen {
                 if let Some(service) = service {
                     tokio::spawn(async move {
                         let result = service.explore(&path, &pattern, "").await.map_err(|e| e.to_string());
-                        *pending.lock().unwrap() = Some(result);
+                        *pending.lock() = Some((gen, result));
                     });
                 }
                 self.status = OperationStatus::Running;
                 None
             }
             KeyCode::Char('r') | KeyCode::Char('R') => {
+                let gen = self.read_gen.fetch_add(1, Ordering::Relaxed) + 1;
                 let (service, path, pending) = (
                     self.space_service.clone(), self.namespace.clone(),
                     self.pending_read.clone(),
@@ -426,7 +467,7 @@ impl Screen for ExploreScreen {
                 if let Some(service) = service {
                     tokio::spawn(async move {
                         let result = service.read(&path).await.map_err(|e| e.to_string());
-                        *pending.lock().unwrap() = Some(result);
+                        *pending.lock() = Some((gen, result));
                     });
                 }
                 self.status = OperationStatus::Running;
@@ -440,7 +481,7 @@ impl Screen for ExploreScreen {
                 None
             }
             KeyCode::Down => {
-                let len = self.flatten().len();
+                let len = self.flatten_len();
                 if len > 0 && self.selected + 1 < len { self.selected += 1; }
                 if self.selected >= self.scroll + 10 { self.scroll = self.selected.saturating_sub(5); }
                 None
@@ -456,8 +497,10 @@ impl Screen for ExploreScreen {
 
                 if is_expanded {
                     collapse_flat(&mut self.nodes, self.selected);
+                    self.invalidate_cache();
                     self.status = OperationStatus::Completed("Collapsed".to_string());
                 } else if can_expand {
+                    let gen = self.expand_gen.fetch_add(1, Ordering::Relaxed) + 1;
                     let (service, ns, pattern, pending) = (
                         self.space_service.clone(), self.namespace.clone(),
                         self.pattern.clone(), self.pending_expand.clone(),
@@ -471,7 +514,7 @@ impl Screen for ExploreScreen {
                                 Ok(raw) => Ok(process_response(raw, &ns)),
                                 Err(e) => Err(e.clone()),
                             };
-                            *pending.lock().unwrap() = Some((idx, children));
+                            *pending.lock() = Some((gen, idx, children));
                         });
                     }
                     self.status = OperationStatus::Running;
