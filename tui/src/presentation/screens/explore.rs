@@ -314,6 +314,7 @@ impl Screen for ExploreScreen {
     fn get_status(&self) -> &OperationStatus { &self.status }
     fn namespace(&self) -> &str { &self.namespace }
     fn set_namespace(&mut self, ns: &str) { self.namespace = ns.to_string(); }
+    fn key_hints(&self) -> &str { "Enter:explore  R:read  ↑↓:nav  ←→:expand  Esc:back" }
 
     fn update(&mut self) {
         if let Some((gen, result)) = self.pending_explore.lock().take() {
@@ -394,7 +395,7 @@ impl Screen for ExploreScreen {
 
         let pattern_border = Style::default().fg(theme.primary);
         let pattern_block = Block::default()
-            .title(" Pattern (Enter:explore, R:read, ↑↓:navigate, ←→:expand/collapse) ")
+            .title(" Pattern ")
             .borders(Borders::ALL)
             .border_style(pattern_border);
         let pattern_inner = pattern_block.inner(pattern_area);

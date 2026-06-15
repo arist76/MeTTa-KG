@@ -269,7 +269,13 @@ impl App {
 
         self.screen.render(f, screen_area, &self.theme);
 
-        render_status_bar(f, footer_area, &self.theme, &self.status_message, "F1:Help  Ctrl+P:Palette  Esc:Back  Ctrl+C:Quit");
+        let screen_hints = self.screen.key_hints();
+        let hints = if screen_hints.is_empty() {
+            "F1:Help  Ctrl+P:Palette  Esc:Back  Ctrl+C:Quit".to_string()
+        } else {
+            format!("{}  |  F1:Help  Ctrl+P:Palette  Ctrl+C:Quit", screen_hints)
+        };
+        render_status_bar(f, footer_area, &self.theme, &self.status_message, &hints);
 
         self.toast_manager.render(f, area, &self.theme);
     }

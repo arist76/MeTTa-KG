@@ -30,6 +30,7 @@ pub trait Screen {
     fn reset_status(&mut self) {}
     fn update(&mut self) {}
     fn get_id(&self) -> &'static str;
+    fn key_hints(&self) -> &str { "" }
 }
 
 #[derive(Debug, Clone, PartialEq)]
