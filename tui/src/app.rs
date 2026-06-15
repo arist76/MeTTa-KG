@@ -108,7 +108,7 @@ impl App {
             api_client,
             token_service,
             space_service,
-            status_message: "Ctrl+P: Command Palette | Ctrl+C: Quit".to_string(),
+            status_message: "F1:Help  Ctrl+P:Palette  Ctrl+C:Quit".to_string(),
             command_palette: CommandPalette::new(),
             show_help: false,
             current_namespace: "/".to_string(),
@@ -269,7 +269,7 @@ impl App {
 
         self.screen.render(f, screen_area, &self.theme);
 
-        render_status_bar(f, footer_area, &self.theme, &self.status_message, "Ctrl+P:Palette  Esc:Back  Ctrl+C:Quit");
+        render_status_bar(f, footer_area, &self.theme, &self.status_message, "F1:Help  Ctrl+P:Palette  Esc:Back  Ctrl+C:Quit");
 
         self.toast_manager.render(f, area, &self.theme);
     }
@@ -329,6 +329,7 @@ impl App {
         let help_items = vec![
             ("Ctrl+P", "Open command palette"),
             ("Ctrl+C / Ctrl+Q", "Quit application"),
+            ("F1", "Open/close help"),
             ("↑ / ↓ / Tab", "Navigate between elements"),
             ("Enter", "Execute action / submit"),
             ("Esc", "Go back / cancel"),
@@ -412,6 +413,9 @@ impl App {
                         } else {
                             self.navigate("explore");
                         }
+                    }
+                    KeyCode::F(1) => {
+                        self.show_help = !self.show_help;
                     }
                     _ => {
                         if let Some(action) = self.screen.handle_key(key) {
