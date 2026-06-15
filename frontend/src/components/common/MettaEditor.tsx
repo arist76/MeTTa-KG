@@ -66,6 +66,47 @@ const MettaEditor: Component<MettaEditorProps> = (props) => {
 
   return (
     <div class="flex flex-col h-full w-full box-border">
+      <style>{`
+        .metta-prism-editor-host,
+        .metta-prism-editor-host .prism-code-editor,
+        .metta-prism-editor-host .pce-wrapper,
+        .metta-prism-editor-host .pce-textarea,
+        .metta-prism-editor-host .pce-line {
+          font-family: 'Courier New', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+          font-size: 13px;
+          line-height: 1.5;
+        }
+
+        .metta-prism-editor-host .prism-code-editor {
+          height: 100%;
+          margin: 0;
+          --pce-bg: hsl(var(--background));
+          --pce-cursor: hsl(var(--primary));
+          --pce-selection: hsl(var(--primary) / 0.2);
+          --pce-line-number: hsl(var(--muted-foreground));
+          --pce-bg-highlight: hsl(var(--accent) / 0.1);
+          --pce-border-highlight: 0 solid transparent;
+          --padding-inline: 8px;
+          --number-spacing: 8px;
+        }
+
+        .metta-prism-editor-host .pce-wrapper {
+          margin: 0;
+        }
+
+        .metta-prism-editor-host .show-line-numbers::before,
+        .metta-prism-editor-host .show-line-numbers .pce-line::before {
+          background: hsl(var(--muted));
+          border-right: 1px solid hsl(var(--border));
+          font-weight: 600;
+        }
+
+        .metta-prism-editor-host .show-line-numbers .active-line::before {
+          color: hsl(var(--accent-foreground));
+          background: hsl(var(--accent));
+        }
+      `}</style>
+
       <h3 class="m-0 mb-3 text-sm font-semibold flex-shrink-0 leading-tight text-foreground">
         {realTimeErrors().filter((e) => e.severity === "error").length > 0 && (
           <span class="ml-2 text-xs font-normal text-destructive">
