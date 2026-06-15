@@ -1,4 +1,5 @@
-import { createSignal, createMutable } from "solid-js";
+import { createSignal } from "solid-js";
+import { createMutable } from "solid-js/store";
 import { showToast } from "~/components/ui/Toast";
 import { API_URL } from "./api";
 
