@@ -40,15 +40,6 @@ impl Toast {
         self.created.elapsed().as_millis() > self.duration_ms
     }
 
-    pub fn opacity(&self) -> f32 {
-        let elapsed = self.created.elapsed().as_millis();
-        let total = self.duration_ms;
-        if elapsed > total.saturating_sub(500) {
-            (total - elapsed) as f32 / 500.0
-        } else {
-            1.0
-        }
-    }
 }
 
 pub struct ToastManager {
