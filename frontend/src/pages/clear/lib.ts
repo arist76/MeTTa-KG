@@ -1,10 +1,12 @@
 import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
+import { reportError } from "~/lib/errors";
 import { clearSpace } from "~/lib/api";
-import { refreshSpace } from "../load/lib";
+import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
 
 export const [expression, setExpression] = createSignal("$x \n \n \n");
-export const [isLoading, setIsLoading] = createSignal(false);
+export const isLoading = () => isCommandActive("CLEAR");
+export const isAppBusy = isAnyCommandActive;
 
 export const handleClear = async (spacePath: string) => {
   if (!expression().trim()) {
@@ -16,33 +18,16 @@ export const handleClear = async (spacePath: string) => {
     return;
   }
 
-  setIsLoading(true);
-
   try {
-    const success = await clearSpace(expression(), spacePath);
+    const initiated = await clearSpace(expression(), spacePath);
 
-    if (success) {
+    if (initiated) {
       showToast({
-        title: "Cleared Successfully",
-        description: `Space "${spacePath}" has been cleared.`,
-      });
-      refreshSpace();
-    } else {
-      showToast({
-        title: "Clear Operation Failed",
-        description: `Could not clear space "${spacePath}". Check server logs for details.`,
-        variant: "destructive",
+        title: "Clear Initiated",
+        description: "Waiting for results...",
       });
     }
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "An unexpected error occurred.";
-    showToast({
-      title: "API Error",
-      description: errorMessage,
-      variant: "destructive",
-    });
-  } finally {
-    setIsLoading(false);
+    reportError("clear", error);
   }
 };

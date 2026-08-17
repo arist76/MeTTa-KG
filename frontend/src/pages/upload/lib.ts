@@ -1,7 +1,8 @@
 import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
-import { importData, uploadTextToSpace, importSpace } from "~/lib/api";
-import { refreshSpace } from "../load/lib";
+import { reportError } from "~/lib/errors";
+import { importData, uploadTextToSpace } from "~/lib/api";
+import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
 
 type UploadResult =
   | null
@@ -25,7 +26,9 @@ export const [textContent, setTextContent] = createSignal(`()`);
 export const [textFormat, setTextFormat] = createSignal("metta");
 export const [fileFormat, setFileFormat] = createSignal("metta");
 export const [activeTab, setActiveTab] = createSignal("url");
-export const [isLoading, setIsLoading] = createSignal(false);
+export const isLoading = () =>
+  isCommandActive("IMPORT") || isCommandActive("UPLOAD");
+export const isAppBusy = isAnyCommandActive;
 export const [result, setResult] = createSignal<UploadResult>(null);
 
 export const isFileUploadImplemented = true;
@@ -44,7 +47,6 @@ export const handleFileSelect = async (event: Event) => {
 };
 
 export const handleImport = async (spacePath: string) => {
-  setIsLoading(true);
   setResult(null);
 
   try {
@@ -58,30 +60,76 @@ export const handleImport = async (spacePath: string) => {
           });
           return;
         }
-        if (urlFormat() !== "metta") {
+        if (urlFormat() !== "metta" && urlFormat() !== "json") {
           showToast({
             title: "Format Not Supported Yet",
-            description: `${urlFormat()} format not supported yet. Please use metta format.`,
+            description: `${urlFormat()} format not supported yet. Please use metta or json format.`,
             variant: "destructive",
           });
           return;
         }
-        const response = await importSpace(spacePath, uri());
 
-        if (response) {
-          setResult("Successfully imported to space");
+        if (urlFormat() === "json") {
+          try {
+            const response = await fetch(uri());
+            if (!response.ok) throw new Error("Failed to fetch JSON from URL");
+            const jsonText = await response.text();
+            const file = new File([jsonText], "imported.json", {
+              type: "application/json",
+            });
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const importResponse = await importData(
+              "file",
+              formData,
+              "json",
+              spacePath
+            );
+
+            if (importResponse.status === "success") {
+              setResult({ data: importResponse.data, status: "success" });
+              showToast({
+                title: "Import Successful",
+                description: `JSON data was imported from "${uri()}".`,
+              });
+            } else {
+              setResult({ error: importResponse.message });
+              showToast({
+                title: "Import Failed",
+                description: importResponse.message,
+                variant: "destructive",
+              });
+            }
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch or process JSON from URL";
+            setResult({ error: errorMessage });
+            reportError("upload", error, "Import Failed");
+          }
+          break;
+        }
+        // Fetch from frontend (browser) so MORK in Docker doesn't need URL access
+        try {
+          const response = await fetch(uri());
+          if (!response.ok)
+            throw new Error(`Failed to fetch from URL: ${response.statusText}`);
+          const content = await response.text();
+          await uploadTextToSpace(spacePath, content);
+          setResult({ data: "Import initiated", status: "success" });
           showToast({
-            title: "Import Successful",
-            description: `Data was imported from "${uri()}".`,
+            title: "Import Started",
+            description: `Data import from "${uri()}" has started.`,
           });
-          setTimeout(() => refreshSpace(), 1000);
-        } else {
-          setResult({ error: "Error importing to space" });
-          showToast({
-            title: "Import Failed",
-            description: "Could not import from URL.",
-            variant: "destructive",
-          });
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to fetch or process data from URL";
+          setResult({ error: errorMessage });
+          reportError("upload", error, "Import Failed");
         }
         break;
       }
@@ -110,13 +158,13 @@ export const handleImport = async (spacePath: string) => {
           fileFormat(),
           spacePath
         );
+
         if (response.status === "success") {
           setResult({ data: response.data, status: "success" });
           showToast({
-            title: "File Uploaded",
-            description: `File "${fileState.name}" uploaded.`,
+            title: "File Upload Started",
+            description: `File "${fileState.name}" upload started.`,
           });
-          refreshSpace();
         } else {
           setResult({ error: response.message });
           showToast({
@@ -138,25 +186,57 @@ export const handleImport = async (spacePath: string) => {
           return;
         }
 
-        if (textFormat() !== "metta") {
+        if (textFormat() !== "metta" && textFormat() !== "json") {
           showToast({
             title: "Format Not Supported Yet",
-            description: `${textFormat()} format not supported yet. Please use metta format.`,
+            description: `${textFormat()} format not supported yet. Please use metta or json format.`,
             variant: "destructive",
           });
           return;
         }
 
+        if (textFormat() === "json") {
+          const file = new File([textContent()], "pasted.json", {
+            type: "application/json",
+          });
+          const formData = new FormData();
+          formData.append("file", file);
+
+          const response = await importData(
+            "file",
+            formData,
+            "json",
+            spacePath
+          );
+
+          if (response.status === "success") {
+            setResult({ data: response.data, status: "success" });
+            showToast({
+              title: "Text Uploaded",
+              description: `JSON text was uploaded to the "${spacePath}" space.`,
+            });
+          } else {
+            setResult({ error: response.message });
+            showToast({
+              title: "Upload Failed",
+              description: response.message,
+              variant: "destructive",
+            });
+          }
+          break;
+        }
+
         const cleanText = textContent()
           .replace(/[\r\n]+/g, "\n")
           .trim();
-        const response = await uploadTextToSpace(spacePath, cleanText);
-        setResult({ data: response, status: "success" });
+
+        await uploadTextToSpace(spacePath, cleanText);
+
+        setResult({ data: "Upload initiated", status: "success" });
         showToast({
-          title: "Text Uploaded",
-          description: `Text was uploaded to the "${spacePath}" space.`,
+          title: "Text Upload Started",
+          description: `Text upload to "${spacePath}" started.`,
         });
-        refreshSpace();
         break;
       }
 
@@ -167,13 +247,7 @@ export const handleImport = async (spacePath: string) => {
     const errorMessage =
       error instanceof Error ? error.message : "An unexpected error occurred";
     setResult({ error: errorMessage });
-    showToast({
-      title: "Operation Failed",
-      description: errorMessage,
-      variant: "destructive",
-    });
-  } finally {
-    setIsLoading(false);
+    reportError("upload", error, "Operation Failed");
   }
 };
 

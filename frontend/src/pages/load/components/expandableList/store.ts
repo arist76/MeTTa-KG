@@ -4,6 +4,7 @@ import type { SpaceNode, ExploreResponse } from "~/lib/space";
 import { exploreSpace } from "~/lib/api";
 import { formatedNamespace } from "~/lib/state";
 import { showToast } from "~/components/ui/Toast";
+import { reportError } from "~/lib/errors";
 import { initNodesFromApiResponse } from "~/lib/space";
 
 export interface FlatNode {
@@ -274,11 +275,15 @@ export const treeStore = {
         setState("expandedNodes", (prev) => new Set(prev).add(nodePath));
       });
     } catch (error) {
-      const msg =
-        error instanceof Error && error.message === "noRootToken"
-          ? "Please set the token in the Tokens page."
-          : `Failed to expand node: ${error}`;
-      showToast({ title: "Error", description: msg, variant: "destructive" });
+      if (error instanceof Error && error.message === "noRootToken") {
+        showToast({
+          title: "Error",
+          description: "Please set the token in the Tokens page.",
+          variant: "destructive",
+        });
+      } else {
+        reportError("explore", error);
+      }
     }
     restoreScroll();
   },
@@ -418,11 +423,7 @@ export const treeStore = {
         }
       });
     } catch (e) {
-      showToast({
-        title: "Expansion Error",
-        description: `Failed to expand recursively.\n ${e}`,
-        variant: "destructive",
-      });
+      reportError("explore", e);
     } finally {
       setState("expandingNodeId", null);
       restoreScroll();

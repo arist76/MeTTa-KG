@@ -13,8 +13,39 @@ def jsonld_to_graph(f):
 
 
 def read_context(f):
-    #FIXME multiple contexts
-    return json.load(f)['@context']
+    return extract_contexts(json.load(f))
+
+
+def extract_contexts(node):
+    """
+    Collect all '@context' values present in a parsed JSON-LD document.
+    Returns a single context when only one is present, otherwise a list of
+    contexts (one for every object that defines its own '@context').
+    """
+    contexts = []
+
+    def collect(n):
+        if isinstance(n, dict):
+            if '@context' in n:
+                contexts.append(n['@context'])
+            for value in n.values():
+                collect(value)
+        elif isinstance(n, list):
+            for value in n:
+                collect(value)
+
+    collect(node)
+    return contexts[0] if len(contexts) == 1 else contexts
+
+
+def dict_to_str(d):
+    match d:
+        case dict():
+            return '(' + ' '.join([f'({dict_to_str(k)} {dict_to_str(v)})' for k, v in d.items()]) + ')'
+        case list():
+            return '(' + ' '.join([f'({dict_to_str(k)} {dict_to_str(v)})' for k, v in enumerate(d)]) + ')'
+        case _:
+            return str(d)
 
 
 def graph_to_mettastr(graph: rdflib.Graph, context=None) -> str:
@@ -47,41 +78,52 @@ def graph_to_mettastr(graph: rdflib.Graph, context=None) -> str:
             case x:
                 return f'({trans[type(x)]} {x})'
 
+    triples = '\n'.join(['(' + ' '.join([term_to_atom(t) for t in tup]) + ')' for tup in graph])
 
-    def dict_to_str(d):
-        match d:
-            case dict():
-                return '(' + ' '.join([f'({dict_to_str(k)} {dict_to_str(v)})' for k, v in d.items()]) + ')'
-            case _:
-                return str(d)
+    context_atoms = []
+    if context is not None:
+        contexts = context if isinstance(context, list) else [context]
+        context_atoms = [f'(context {dict_to_str(c)})' for c in contexts]
 
-    return '\n'.join(['(' + ' '.join([term_to_atom(t) for t in tup]) + ')' for tup in graph]) \
-        + ('\n' + f'(context {dict_to_str(context)})' if context else '')
+    parts = []
+    if triples:
+        parts.append(triples)
+    parts.extend(context_atoms)
+    return '\n'.join(parts)
 
 
-def metta_context_to_dict(c: hyperon.Atom) -> dict:
+def metta_context_to_dict(c: hyperon.Atom):
     # input is one context atom, e.g. ((name http://xmlns.com/foaf/0.1/name) (homepage ((@id http://xmlns.com/foaf/0.1/workplaceHomepage) (@type @id))) (Person http://xmlns.com/foaf/0.1/Person))
+    # or a single string context, e.g. "https://json-ld.org/contexts/person.jsonld"
     match c:
         case hyperon.ExpressionAtom():
-            return {child.get_children()[0].get_name(): metta_context_to_dict(child.get_children()[1]) for child in
+            return {atom_name(child.get_children()[0]): metta_context_to_dict(child.get_children()[1]) for child in
                     c.get_children()}
         case hyperon.SymbolAtom():
             return c.get_name()
+        case hyperon.GroundedAtom() as ga:
+            return ga.get_object().value
         case _:
             raise NotImplemented
 
 
+def atom_name(a: hyperon.Atom):
+    match a:
+        case hyperon.GroundedAtom() as ga:
+            return ga.get_object().value
+        case hyperon.SymbolAtom() as sa:
+            return sa.get_name()
+        case _:
+            raise NotImplementedError(type(a))
+
+
 def metta_to_graph(m: hyperon.MeTTa) -> tuple[rdflib.Graph, dict]:
     atoms = [r for r in m.space().get_atoms() if isinstance(r, hyperon.ExpressionAtom)]
-    context_full = m.run('!(match &self (context $c) (context $c))')[0]
-    if context_full:
-        atoms.remove(context_full[0])
-        context = context_full[0].get_children()[1]
-    else:
-        context = None
-    # assert len(context) < 2
-    # if len(context) == 0:
-    #     context = None
+    context_atoms = [a for a in atoms
+                     if a.get_children() and isinstance(a.get_children()[0], hyperon.SymbolAtom)
+                     and a.get_children()[0].get_name() == "context"]
+    if context_atoms:
+        atoms = [a for a in atoms if a not in context_atoms]
 
     def atom_to_term(r):
         match r.get_children()[0]:
@@ -114,5 +156,13 @@ def metta_to_graph(m: hyperon.MeTTa) -> tuple[rdflib.Graph, dict]:
         obj = a.get_children()[2]
         g.add((atom_to_term(subj), atom_to_term(prop), atom_to_term(obj)))
 
-    return g, (metta_context_to_dict(context) if context else None)
+    contexts = [metta_context_to_dict(a.get_children()[1]) for a in context_atoms]
+    if len(contexts) == 1:
+        context = contexts[0]
+    elif contexts:
+        context = contexts
+    else:
+        context = None
+
+    return g, context
 

@@ -1,17 +1,18 @@
 import { createMemo, createSignal, createRoot } from "solid-js";
+import { safeGetItem, safeSetItem, safeRemoveItem } from "./utils";
 
 const [rootToken, _setRootToken] = createSignal<string | null>(
-  localStorage.getItem("rootToken")
+  safeGetItem("rootToken")
 );
-
 export interface NamespaceTab {
   id: string;
   namespace: string[];
   label: string;
 }
 
-const storedNamespace = localStorage.getItem("tokenNamespace");
-const initialNamespace = storedNamespace ? JSON.parse(storedNamespace) : [""];
+const initialNamespace = safeGetItem("tokenNamespace")
+  ? JSON.parse(safeGetItem("tokenNamespace")!)
+  : [""];
 
 const [tokenRootNamespace, setTokenRootNamespace] =
   createSignal<string[]>(initialNamespace);
@@ -57,11 +58,11 @@ export {
 };
 
 export const setRootToken = (token: string | null) => {
-  localStorage.setItem("rootToken", token ?? "");
+  safeSetItem("rootToken", token ?? "");
   _setRootToken(token);
 
   if (!token) {
-    localStorage.removeItem("tokenNamespace");
+    safeRemoveItem("tokenNamespace");
     setTokenRootNamespace([""]);
     setTabs([
       {

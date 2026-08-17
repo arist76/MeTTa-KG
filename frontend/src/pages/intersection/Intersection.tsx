@@ -16,7 +16,17 @@ import {
 import { getAllTokens } from "~/lib/api";
 import { rootToken, tokenRootNamespace } from "~/lib/state";
 import { Copy, Check } from "lucide-solid";
-import { isLoading, isPolling, executeIntersection, stopPolling } from "./lib";
+import X from "lucide-solid/icons/x";
+
+import {
+  isLoading,
+  isPolling,
+  executeIntersection,
+  stopPolling,
+  isAppBusy,
+  error,
+  setError,
+} from "./lib";
 
 const IntersectionPage: Component = () => {
   const [state, setState] = createStore({
@@ -175,7 +185,7 @@ const IntersectionPage: Component = () => {
           </div>
           <Button
             class="w-full mt-4"
-            disabled={!canSubmit() || isLoading() || isPolling()}
+            disabled={!canSubmit() || isLoading() || isPolling() || isAppBusy()}
             onClick={handleIntersection}
           >
             <Show when={isLoading() || isPolling()}>
@@ -205,6 +215,25 @@ const IntersectionPage: Component = () => {
               Processing...
             </Show>
           </Button>
+
+          <Show when={error()}>
+            <div class="mt-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+              <div class="flex items-start justify-between">
+                <div class="flex-1">
+                  <h4 class="text-sm font-semibold text-destructive">
+                    Operation Failed
+                  </h4>
+                  <p class="text-sm mt-1 text-destructive/80">{error()}</p>
+                </div>
+                <button
+                  onClick={() => setError(null)}
+                  class="ml-4 flex-shrink-0 rounded-md p-1 text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                >
+                  <X class="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </Show>
         </div>
       </CommandCard>
     </div>

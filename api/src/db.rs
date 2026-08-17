@@ -1,11 +1,33 @@
 use diesel::pg::PgConnection;
+use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::Connection;
 use std::env;
 
-pub fn establish_connection() -> PgConnection {
+pub type DbPool = Pool<ConnectionManager<PgConnection>>;
+
+pub fn create_pool() -> DbPool {
     let user = env::var("POSTGRES_USER").expect("POSTGRES_USER must be set");
     let password = env::var("POSTGRES_PASSWORD").expect("POSTGRES_PASSWORD must be set");
     let db_name = env::var("POSTGRES_DB").expect("POSTGRES_DB must be set");
+    let host = env::var("POSTGRES_HOST").unwrap_or_else(|_| "db".to_string());
+    let port = env::var("POSTGRES_PORT").unwrap_or_else(|_| "5432".to_string());
+    let ssl_mode = env::var("POSTGRES_SSLMODE").unwrap_or_else(|_| "prefer".to_string());
+    let database_url = format!(
+        "postgresql://{}:{}@{}:{}/{}?sslmode={}",
+        user, password, host, port, db_name, ssl_mode
+    );
+    let manager = ConnectionManager::<PgConnection>::new(&database_url);
+    Pool::builder()
+        .max_size(10)
+        .build(manager)
+        .expect("Failed to create database pool")
+}
+
+pub fn establish_connection() -> Result<PgConnection, String> {
+    let user = env::var("POSTGRES_USER").map_err(|_| "POSTGRES_USER must be set".to_string())?;
+    let password =
+        env::var("POSTGRES_PASSWORD").map_err(|_| "POSTGRES_PASSWORD must be set".to_string())?;
+    let db_name = env::var("POSTGRES_DB").map_err(|_| "POSTGRES_DB must be set".to_string())?;
     let host = env::var("POSTGRES_HOST").unwrap_or_else(|_| "db".to_string());
     let port = env::var("POSTGRES_PORT").unwrap_or_else(|_| "5432".to_string());
 
@@ -16,6 +38,5 @@ pub fn establish_connection() -> PgConnection {
         user, password, host, port, db_name, ssl_mode
     );
 
-    PgConnection::establish(&database_url)
-        .unwrap_or_else(|e| panic!("Error connecting to {database_url} {e}"))
+    PgConnection::establish(&database_url).map_err(|e| format!("Error connecting to database: {e}"))
 }

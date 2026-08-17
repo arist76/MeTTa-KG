@@ -9,18 +9,22 @@ import {
   CardDescription,
   CardContent,
 } from "~/components/ui/Card";
-import { formatedNamespace } from "~/lib/state";
 import { getAllTokens } from "~/lib/api";
 import { rootToken, tokenRootNamespace } from "~/lib/state";
 import {
   isLoading,
+  isAppBusy,
   isPolling,
   executeComposition,
   stopPolling,
   setOperationInput,
+  error,
+  setError,
 } from "./lib";
 import Copy from "lucide-solid/icons/copy";
 import Check from "lucide-solid/icons/check";
+import X from "lucide-solid/icons/x";
+
 import {
   Item,
   CompositionInput as CompositionInputComponent,
@@ -80,7 +84,7 @@ const CompositionPage: Component = () => {
   const handleComposition = () => {
     const compositionQueryInput: setOperationInput =
       buildCompositionSetInput(state);
-    executeComposition(compositionQueryInput, formatedNamespace());
+    executeComposition(compositionQueryInput);
   };
 
   const addSource = () => {
@@ -203,7 +207,7 @@ const CompositionPage: Component = () => {
 
         <Button
           onClick={handleComposition}
-          disabled={isLoading() || isPolling() || !canCompose()}
+          disabled={isAppBusy() || !canCompose()}
           class="inline-flex items-center justify-center w-[180px] h-10 mt-4"
         >
           <Show when={isLoading() || isPolling()}>
@@ -233,6 +237,25 @@ const CompositionPage: Component = () => {
             Performing Composition...
           </Show>
         </Button>
+
+        <Show when={error()}>
+          <div class="mt-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+            <div class="flex items-start justify-between">
+              <div class="flex-1">
+                <h4 class="text-sm font-semibold text-destructive">
+                  Operation Failed
+                </h4>
+                <p class="text-sm mt-1 text-destructive/80">{error()}</p>
+              </div>
+              <button
+                onClick={() => setError(null)}
+                class="ml-4 flex-shrink-0 rounded-md p-1 text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                <X class="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </Show>
       </CommandCard>
     </div>
   );

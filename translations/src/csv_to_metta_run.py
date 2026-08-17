@@ -7,7 +7,6 @@ if __name__ == '__main__':
     delimiter = sys.argv[3]
 
     matrix = csv_to_matrix(f"{filename}.csv", delimiter=delimiter)
-
     if direction == '1':
         metta = matrix_to_row_based_metta(matrix)
     elif direction == '2':

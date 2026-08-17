@@ -41,7 +41,7 @@ async fn test_upload_success() {
 
     assert_eq!(response.status(), Status::Ok);
     let body = response.into_string().await.expect("response body");
-    assert_eq!(body, "\"Upload successful\"");
+    assert_eq!(body, "true");
 
     common::teardown_database();
 }
@@ -107,7 +107,7 @@ async fn test_existing_empty_namespace() {
 
     assert_eq!(response.status(), Status::Ok);
     let body = response.into_string().await.expect("response body");
-    assert_eq!(body, "\"Upload successful\"");
+    assert_eq!(body, "true");
 
     common::teardown_database();
 }
@@ -144,7 +144,7 @@ async fn test_non_empty_namespace() {
 
     assert_eq!(response.status(), Status::Ok);
     let body = response.into_string().await.expect("response body");
-    assert_eq!(body, "\"Upload successful\"");
+    assert_eq!(body, "true");
 
     common::teardown_database();
 }

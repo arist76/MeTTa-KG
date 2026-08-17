@@ -17,6 +17,30 @@ class MeTTaToJSON(unittest.TestCase):
     def test_basic(self):
         self.assertEqual(basic_dict, metta_to_dict(StringIO(basic_metta)))
 
+    def test_list(self):
+        out = StringIO()
+        ds = [{"a": 1, "b": "two"}, {"a": 3, "b": {"x": "y"}}]
+        dict_list_to_metta(out, ds)
+
+        self.assertEqual(ds, metta_to_dict_list(StringIO(out.getvalue())))
+
+    def test_list_nested(self):
+        out = StringIO()
+        ds = [{"outer": {"foo": {"a": 1, "b": [1, 2]}}}, {"c": "x", "d": {"e": "f"}}]
+        dict_list_to_metta(out, ds)
+
+        # arrays are encoded as integer-keyed dicts (see metta_to_dict)
+        expected = [{"outer": {"foo": {"a": 1, "b": {0: 1, 1: 2}}}},
+                    {"c": "x", "d": {"e": "f"}}]
+        self.assertEqual(expected, metta_to_dict_list(StringIO(out.getvalue())))
+
+    def test_list_empty(self):
+        self.assertEqual([], metta_to_dict_list(StringIO("")))
+
+    def test_list_requires_json_prefix(self):
+        self.assertRaises(NotImplementedError,
+                          metta_to_dict_list, StringIO('(a 1)'))
+
 
 class JSONToMeTTa(unittest.TestCase):
     def setUp(self):

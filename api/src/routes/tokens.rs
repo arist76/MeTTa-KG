@@ -4,14 +4,14 @@ use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use regex::Regex;
 use rocket::http::Status;
 use rocket::serde::json::Json;
-use rocket::{delete, get, post};
+use rocket::{delete, get, post, State};
 use uuid::Uuid;
 
-use crate::{db::establish_connection, model::Token, model::TokenInsert};
+use crate::{db::DbPool, model::Token, model::TokenInsert};
 
 #[get("/tokens")]
-pub fn get_all(token: Token) -> Result<Json<Vec<Token>>, Status> {
-    let conn = &mut establish_connection();
+pub fn get_all(token: Token, pool: &State<DbPool>) -> Result<Json<Vec<Token>>, Status> {
+    let mut conn = pool.get().map_err(|_| Status::InternalServerError)?;
 
     // get all tokens recursively
     // TODO: find a better way to do this
@@ -29,7 +29,7 @@ pub fn get_all(token: Token) -> Result<Json<Vec<Token>>, Status> {
         ) SELECT * FROM rectree;",
     )
     .bind::<Integer, _>(token.id)
-    .get_results::<Token>(conn);
+    .get_results::<Token>(&mut conn);
 
     /*
     let results = tokens
@@ -50,9 +50,13 @@ pub fn get(token: Token) -> Result<Json<Token>, Status> {
 }
 
 #[post("/tokens", data = "<new_token>")]
-pub fn create(token: Token, new_token: Json<Token>) -> Result<Json<Token>, Status> {
+pub fn create(
+    token: Token,
+    new_token: Json<Token>,
+    pool: &State<DbPool>,
+) -> Result<Json<Token>, Status> {
     use crate::schema::tokens::dsl::*;
-    let conn = &mut establish_connection();
+    let mut conn = pool.get().map_err(|_| Status::InternalServerError)?;
 
     // TODO: enforce constraints such as "tokens that have write permission should also have read
     // permission"
@@ -97,18 +101,31 @@ pub fn create(token: Token, new_token: Json<Token>) -> Result<Json<Token>, Statu
 
     let result = diesel::insert_into(tokens)
         .values(&to_insert)
-        .get_result(conn);
+        .get_result::<Token>(&mut conn);
 
     match result {
-        Ok(token) => Ok(Json(token)),
+        Ok(new_token) => {
+            tracing::info!(
+                target: "audit",
+                actor_token_id = token.id,
+                new_token_id = new_token.id,
+                namespace = %new_token.namespace,
+                "Created token"
+            );
+            Ok(Json(new_token))
+        }
         Err(_) => Err(Status::InternalServerError),
     }
 }
 
 #[delete("/tokens", data = "<token_ids>")]
-pub fn delete_batch(token: Token, token_ids: Json<Vec<i32>>) -> Result<Json<i32>, Status> {
+pub fn delete_batch(
+    token: Token,
+    token_ids: Json<Vec<i32>>,
+    pool: &State<DbPool>,
+) -> Result<Json<i32>, Status> {
     use crate::schema::tokens::dsl::*;
-    let conn = &mut establish_connection();
+    let mut conn = pool.get().map_err(|_| Status::InternalServerError)?;
 
     // filtering by parent ID prevents root token from being deleted
 
@@ -117,55 +134,91 @@ pub fn delete_batch(token: Token, token_ids: Json<Vec<i32>>) -> Result<Json<i32>
             .filter(id.eq_any(token_ids.iter()))
             .filter(parent.eq(&token.id)),
     )
-    .execute(conn);
+    .execute(&mut conn);
 
     match result {
-        Ok(rows_affected) => Ok(Json(rows_affected as i32)),
+        Ok(rows_affected) => {
+            tracing::info!(
+                target: "audit",
+                actor_token_id = token.id,
+                deleted_token_ids = ?token_ids.iter().collect::<Vec<_>>(),
+                rows_affected = rows_affected,
+                "Batch deleted tokens"
+            );
+            Ok(Json(rows_affected as i32))
+        }
         Err(_) => Err(Status::NotFound),
     }
 }
-
 #[post("/tokens/<token_id>")]
-pub fn update(token: Token, token_id: i32) -> Result<Json<Token>, Status> {
+pub fn update(token: Token, token_id: i32, pool: &State<DbPool>) -> Result<Json<Token>, Status> {
     use crate::schema::tokens::dsl::*;
-    let conn = &mut establish_connection();
+    let mut conn = pool.get().map_err(|_| Status::InternalServerError)?;
 
     let token_code = Uuid::new_v4();
 
     if token.id == token_id && token.permission_share_share {
         let result = diesel::update(tokens.filter(id.eq(token_id)))
             .set(code.eq(token_code.to_string()))
-            .get_result(conn);
+            .get_result(&mut conn);
 
         match result {
-            Ok(result) => Ok(Json(result)),
+            Ok(result) => {
+                tracing::info!(
+                    target: "audit",
+                    actor_token_id = token.id,
+                    target_token_id = token_id,
+                    self_update = token.id == token_id,
+                    "Rotated token code"
+                );
+                Ok(Json(result))
+            }
             Err(_) => Err(Status::NotFound),
         }
     } else {
         let result = diesel::update(tokens.filter(id.eq(token_id)).filter(parent.eq(&token.id)))
             .set(code.eq(token_code.to_string()))
-            .get_result(conn);
+            .get_result(&mut conn);
 
         match result {
-            Ok(result) => Ok(Json(result)),
+            Ok(result) => {
+                tracing::info!(
+                    target: "audit",
+                    actor_token_id = token.id,
+                    target_token_id = token_id,
+                    self_update = false,
+                    "Rotated child token code"
+                );
+                Ok(Json(result))
+            }
             Err(_) => Err(Status::NotFound),
         }
     }
 }
-
 /// delete child token
 #[delete("/tokens/<token_id>")]
-pub fn delete(token: Token, token_id: i32) -> Status {
+pub fn delete(token: Token, token_id: i32, pool: &State<DbPool>) -> Status {
     use crate::schema::tokens::dsl::*;
-    let conn = &mut establish_connection();
+    let mut conn = match pool.get() {
+        Ok(c) => c,
+        Err(_) => return Status::InternalServerError,
+    };
 
     // filtering by parent ID prevents root token from being deleted
 
-    let result =
-        diesel::delete(tokens.filter(id.eq(token_id)).filter(parent.eq(&token.id))).execute(conn);
+    let result = diesel::delete(tokens.filter(id.eq(token_id)).filter(parent.eq(&token.id)))
+        .execute(&mut conn);
 
     match result {
-        Ok(_) => Status::Ok,
+        Ok(_) => {
+            tracing::info!(
+                target: "audit",
+                actor_token_id = token.id,
+                deleted_token_id = token_id,
+                "Deleted token"
+            );
+            Status::Ok
+        }
         Err(_) => Status::NotFound,
     }
 }

@@ -9,12 +9,20 @@ import {
   CardDescription,
   CardContent,
 } from "~/components/ui/Card";
-import { formatedNamespace } from "~/lib/state";
 import { getAllTokens } from "~/lib/api";
 import { rootToken, tokenRootNamespace } from "~/lib/state";
-import { isLoading, isPolling, executeTransform, stopPolling } from "./lib";
+import {
+  isLoading,
+  isPolling,
+  executeTransform,
+  stopPolling,
+  isAppBusy,
+  error,
+  setError,
+} from "./lib";
 import Copy from "lucide-solid/icons/copy";
 import Check from "lucide-solid/icons/check";
+import X from "lucide-solid/icons/x";
 import { TransformInput as TransformInputComponent } from "./components/TransformInput";
 import { Item } from "~/lib/types";
 
@@ -34,7 +42,7 @@ const TransformPage: Component = () => {
   };
 
   const handleTransform = () => {
-    executeTransform(state.patterns, state.templates, formatedNamespace());
+    executeTransform(state.patterns, state.templates);
   };
 
   const addPattern = () => {
@@ -175,7 +183,7 @@ const TransformPage: Component = () => {
 
         <Button
           onClick={handleTransform}
-          disabled={isLoading() || isPolling() || !canTransform()}
+          disabled={isAppBusy() || isPolling() || !canTransform()}
           class="inline-flex items-center justify-center w-[180px] h-10 mt-4"
         >
           <Show when={isLoading() || isPolling()}>
@@ -205,6 +213,25 @@ const TransformPage: Component = () => {
             Transforming...
           </Show>
         </Button>
+
+        <Show when={error()}>
+          <div class="mt-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+            <div class="flex items-start justify-between">
+              <div class="flex-1">
+                <h4 class="text-sm font-semibold text-destructive">
+                  Operation Failed
+                </h4>
+                <p class="text-sm mt-1 text-destructive/80">{error()}</p>
+              </div>
+              <button
+                onClick={() => setError(null)}
+                class="ml-4 flex-shrink-0 rounded-md p-1 text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                <X class="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </Show>
       </CommandCard>
     </div>
   );

@@ -1,4 +1,4 @@
-import { createSignal, onMount, Show, For, JSX } from "solid-js";
+import { createSignal, onMount, Show, For, JSX, lazy } from "solid-js";
 import {
   CommandDialog,
   CommandInput,
@@ -12,12 +12,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/Dialog";
-import LoadPage from "~/pages/load/Load";
-import UploadPage from "~/pages/upload/Upload";
-import ExportPage from "~/pages/export/Export";
-import ClearPage from "~/pages/clear/Clear";
-import TransformPage from "~/pages/transform/Transform";
-import TokensPage from "~/pages/tokens/Tokens";
+const LoadPage = lazy(() => import("~/pages/load/Load"));
+const UploadPage = lazy(() => import("~/pages/upload/Upload"));
+const ExportPage = lazy(() => import("~/pages/export/Export"));
+const ClearPage = lazy(() => import("~/pages/clear/Clear"));
+const TransformPage = lazy(() => import("~/pages/transform/Transform"));
+const TokensPage = lazy(() => import("~/pages/tokens/Tokens"));
 
 import Database from "lucide-solid/icons/database";
 import Upload from "lucide-solid/icons/upload";
@@ -129,13 +129,39 @@ export default function CommandPalette() {
         e.preventDefault();
         setIsOpen(true);
       }
+
+      if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement;
+        if (
+          target.tagName !== "INPUT" &&
+          target.tagName !== "TEXTAREA" &&
+          !target.isContentEditable
+        ) {
+          e.preventDefault();
+          setIsOpen(true);
+        }
+      }
       if (e.key === "Escape") {
         if (selectedCommand()) closeComponentDialog();
         else if (isOpen()) closeCommandDialog();
       }
     };
+
+    // Listen for custom event from TopNavigation
+    const handleOpenCommandPalette = () => {
+      setIsOpen(true);
+    };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("open-command-palette", handleOpenCommandPalette);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener(
+        "open-command-palette",
+        handleOpenCommandPalette
+      );
+    };
   });
 
   return (

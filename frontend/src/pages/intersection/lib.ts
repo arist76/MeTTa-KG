@@ -1,42 +1,17 @@
 import { createSignal } from "solid-js";
-import { isPathClear, request } from "~/lib/api";
+import { request } from "~/lib/api";
 import { namespace } from "~/lib/state";
 import { showToast } from "~/components/ui/Toast";
-import { refreshSpace } from "../load/lib";
+import { reportError } from "~/lib/errors";
+import { isCommandActive, isAnyCommandActive } from "~/lib/sse";
 
-export const [isLoading, setIsLoading] = createSignal(false);
+export const isLoading = () => isCommandActive("INTERSECTION");
+export const isAppBusy = isAnyCommandActive;
 export const [isPolling, setIsPolling] = createSignal(false);
-
-let pollingIntervalId: NodeJS.Timeout | null = null;
+export const [error, setError] = createSignal<string | null>(null);
 
 export const stopPolling = () => {
-  if (pollingIntervalId) clearInterval(pollingIntervalId);
-  pollingIntervalId = null;
   setIsPolling(false);
-};
-
-export const startPolling = (spacePath: string) => {
-  setIsPolling(true);
-  pollingIntervalId = setInterval(async () => {
-    try {
-      const isClear = await isPathClear(spacePath);
-      if (isClear) {
-        stopPolling();
-        showToast({
-          title: "Intersection Completed",
-          description: "Results written to the target namespace.",
-        });
-        refreshSpace();
-      }
-    } catch {
-      showToast({
-        title: "Polling Error",
-        description: "Failed to fetch transformation status.",
-        variant: "destructive",
-      });
-      stopPolling();
-    }
-  }, 1000);
 };
 
 const toPath = (ns: string[]) => {
@@ -75,32 +50,17 @@ export const executeIntersection = async (
     return;
   }
 
-  setIsLoading(true);
-  stopPolling();
-
   try {
-    if (!(await isPathClear(tgt))) {
-      showToast({
-        title: "Space Busy",
-        description: "The target space is currently busy. Please wait.",
-        variant: "destructive",
-      });
-      setIsLoading(false);
-      return;
-    }
-
     const ok = await request<boolean>("/spaces/intersection", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ source: src, target: [tgt] }),
     });
-
     if (ok) {
       showToast({
         title: "Intersection Initiated",
         description: "Waiting for results...",
       });
-      startPolling(tgt);
     } else {
       showToast({
         title: "Intersection Failed",
@@ -109,14 +69,9 @@ export const executeIntersection = async (
       });
     }
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "An unexpected error occurred.";
-    showToast({
-      title: "Error",
-      description: errorMessage,
-      variant: "destructive",
-    });
-  } finally {
-    setIsLoading(false);
+    reportError("intersection", error);
+    setError(
+      error instanceof Error ? error.message : "An unexpected error occurred."
+    );
   }
 };
