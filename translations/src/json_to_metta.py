@@ -108,3 +108,30 @@ def metta_to_dict(f: IO[str]) -> dict:
             else: d_[k] = {}; d_ = d_[k]
         d_[path[-2]] = path[-1]
     return d
+
+
+def metta_to_dict_list(f: IO[str]) -> list[dict]:
+    # reverse of dict_list_to_metta: expects atoms of the form (json $index $path)
+    m = hyperon.MeTTa()
+    es = m.parse_all(f.read())
+    ds = {}
+    order = []
+    for e in es:
+        path = expr_to_path(e)
+        if not path or path[0] != "json":
+            raise NotImplementedError(
+                f"expected atoms of the form (json $index $path), got: {e}"
+            )
+        index = path[1]
+        if index not in ds:
+            ds[index] = {}
+            order.append(index)
+        d_ = ds[index]
+        for k in path[2:-2]:
+            if k in d_:
+                d_ = d_[k]
+            else:
+                d_[k] = {}
+                d_ = d_[k]
+        d_[path[-2]] = path[-1]
+    return [ds[i] for i in order]

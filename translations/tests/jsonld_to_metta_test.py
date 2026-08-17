@@ -36,6 +36,50 @@ class TranslateJSONLD(unittest.TestCase):
                              '(context ((name http://xmlns.com/foaf/0.1/name) (homepage ((@id http://xmlns.com/foaf/0.1/workplaceHomepage) (@type @id))) (Person http://xmlns.com/foaf/0.1/Person)))'},
                             set(graph_to_mettastr(g, c).split('\n')))
 
+    def test_read_context_multiple(self):
+        with open("test_files/jsonld_files/multiple_contexts.jsonld") as f:
+            c = read_context(f)
+
+        self.assertEqual(['https://json-ld.org/contexts/person.jsonld',
+                          'https://json-ld.org/contexts/place.jsonld'], c)
+
+    def test_graph_to_mettastr_multiple_contexts(self):
+        with open("test_files/jsonld_files/multiple_contexts.jsonld") as f:
+            g = jsonld_to_graph(f)
+        with open("test_files/jsonld_files/multiple_contexts.jsonld") as f:
+            c = read_context(f)
+
+        self.assertSetEqual({'(context https://json-ld.org/contexts/person.jsonld)',
+                             '(context https://json-ld.org/contexts/place.jsonld)'},
+                            set(graph_to_mettastr(g, c).split('\n')))
+
+    def test_metta_to_graph_multiple_contexts(self):
+        m = parse_metta('(context https://json-ld.org/contexts/person.jsonld)\n'
+                        '(context https://json-ld.org/contexts/place.jsonld)\n'
+                        '((uriref https://me.example.com) (uriref http://xmlns.com/foaf/0.1/name) ((literal (http://www.w3.org/2001/XMLSchema#string)) "John Smith"))')
+
+        g, c = metta_to_graph(m)
+
+        self.assertSetEqual({(rdflib.term.URIRef('https://me.example.com'),
+                              rdflib.term.URIRef('http://xmlns.com/foaf/0.1/name'),
+                              rdflib.term.Literal('John Smith'))},
+                            {(s, p, o) for s, p, o in g})
+        self.assertEqual(['https://json-ld.org/contexts/person.jsonld',
+                          'https://json-ld.org/contexts/place.jsonld'], c)
+
+    def test_multiple_contexts_back_forth(self):
+        with open("test_files/jsonld_files/multiple_contexts.jsonld") as f:
+            g = jsonld_to_graph(f)
+        with open("test_files/jsonld_files/multiple_contexts.jsonld") as f:
+            c = read_context(f)
+
+        g2, c2 = metta_to_graph(parse_metta(graph_to_mettastr(g, c)))
+
+        # the remote contexts cannot be dereferenced, so the graph contains no triples
+        self.assertSetEqual({(s, p, o) for s, p, o in g},
+                            {(s, p, o) for s, p, o in g2})
+        self.assertEqual(c, c2)
+
 
     def test_metta_to_graph(self):
         m = parse_metta('((uriref https://me.example.com) (uriref http://xmlns.com/foaf/0.1/workplaceHomepage) (uriref https://www.example.com/))\n'

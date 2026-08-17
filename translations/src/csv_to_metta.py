@@ -171,12 +171,12 @@ def matrix_from_cell_metta_unlabeled(metta: hyperon.MeTTa) -> list[list[str]]:
 
 # cell based labeled
 def matrix_to_cell_metta_labeled(matrix: list[list[str]]) -> str:
-    # assume labels are in row 0 and column 0
-    # TODO top-left corner of the matrix is not used
+    """Translate a matrix with row labels (first column) and column labels
+    (first row) to cell-based MeTTa atoms. The top-left corner cell is the
+    placeholder for the labels themselves and is not part of the translated
+    data; it is expected to be empty."""
     collabels = matrix[0][1:]
     rowlabels = [r[0] for r in matrix[1:]]
-    # print("rowlabels", rowlabels)
-
 
     return '\n'.join([f'(= (value ("{rowlabel}" "{collabel}")) "{value}")'
                       for rowlabel, row in zip(rowlabels, matrix[1:])
